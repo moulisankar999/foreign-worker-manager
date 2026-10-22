@@ -22,7 +22,8 @@ export const DEDUCTION_TYPES = ['Loan repayment', 'Advance', 'Penalty', 'Damage'
 export const LOAN_TYPES = ['Loan', 'Advance']
 export const EXIT_TYPES: WorkerStatus[] = ['Resigned', 'Terminated', 'Contract Ended', 'Repatriated', 'Absconded']
 
-export interface Attachment { name: string; type: string; dataUrl: string }
+/** dataUrl = copy on this device; path = file in the private cloud bucket */
+export interface Attachment { name: string; type: string; dataUrl?: string; path?: string }
 
 export interface DocRec { id: string; type: string; label?: string; number?: string; issueDate?: string; expiryDate?: string; remarks?: string; attachment?: Attachment }
 export interface FamilyRec { id: string; relation: string; name: string; dob?: string; phone?: string; address?: string; isEmergency?: boolean; isNextOfKin?: boolean }

@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { Btn, Card, Chip, FormModal, type FieldDef } from '../components/ui'
-import { clearAll, db, exportBackup, importBackup } from '../lib/db'
+import { db, exportBackup, importBackup } from '../lib/db'
+import { AccountCard, PhoneAlertsCard, UsersCard } from '../components/cloud'
+import { useAuth } from '../lib/auth'
+import { clearDeviceCopy, syncNow } from '../lib/sync'
 import { buildAlerts } from '../lib/calc'
 import { useJobs, useOutlets, useSettings, useWorkers } from '../lib/hooks'
 import { buildICS } from '../lib/ics'
@@ -19,6 +22,7 @@ export default function SettingsPage() {
   const jobs = useJobs()
   const workers = useWorkers()
   const loc = useLocation()
+  const { canWrite, isAdmin } = useAuth()
   const [policy, setPolicy] = useState(false)
   const [outlet, setOutlet] = useState<V | null>(null)
   const [job, setJob] = useState<V | null>(null)
@@ -55,7 +59,7 @@ export default function SettingsPage() {
   const doImport = async (f: File) => {
     try {
       const data = JSON.parse(await f.text())
-      const replace = confirm('Replace ALL current data with this backup?\n\nOK = Replace everything\nCancel = Merge (add/update records)')
+      const replace = confirm('Replace ALL current data (for everyone in the cloud) with this backup?\n\nOK = Replace everything\nCancel = Merge (add/update records)')
       await importBackup(data, replace ? 'replace' : 'merge')
       setMsg(`Imported ${data.workers.length} workers (${replace ? 'replaced' : 'merged'}).`)
     } catch (e) { setMsg('Import failed: ' + (e as Error).message) }
@@ -64,9 +68,13 @@ export default function SettingsPage() {
 
   return (
     <div className="page">
-      <div className="page-h"><div><h1>Settings</h1><p className="muted">Masters, policies, backup</p></div></div>
+      <div className="page-h"><div><h1>Settings</h1><p className="muted">Account, users, phone alerts, masters, backup</p></div></div>
 
-      <Card title="Company & policy" actions={<Btn small icon="edit" onClick={() => setPolicy(true)}>Edit</Btn>}>
+      <AccountCard />
+      <PhoneAlertsCard />
+      {isAdmin && <UsersCard />}
+
+      <Card title="Company & policy" actions={canWrite && <Btn small icon="edit" onClick={() => setPolicy(true)}>Edit</Btn>}>
         <dl className="kv">
           <div><dt>Company</dt><dd>{s.companyName}</dd></div>
           <div><dt>Alert lead times</dt><dd>{[...s.leadTimes].sort((a, b) => b - a).join(' / ')} days</dd></div>
@@ -76,7 +84,7 @@ export default function SettingsPage() {
         </dl>
       </Card>
 
-      <Card title={`Outlets / business units (${outlets.length})`} actions={<Btn kind="primary" small icon="plus" onClick={() => setOutlet({ type: 'Restaurant' })}>Add outlet</Btn>}>
+      <Card title={`Outlets / business units (${outlets.length})`} actions={canWrite && <Btn kind="primary" small icon="plus" onClick={() => setOutlet({ type: 'Restaurant' })}>Add outlet</Btn>}>
         {outlets.length === 0 ? <p className="muted">No outlets yet. Add your restaurants, shops, hotels…</p> : (
           <ul className="rows">
             {outlets.map((o) => (
@@ -99,15 +107,15 @@ export default function SettingsPage() {
                 {jobs.filter((j) => j.businessType === bt).sort((a, b) => a.name.localeCompare(b.name)).map((j) => (
                   <button key={j.id} className="chip-btn" onClick={() => setJob(j as unknown as V)}><Chip tone="teal">{j.name}</Chip></button>
                 ))}
-                <button className="chip-btn" onClick={() => setJob({ businessType: bt })}><Chip>+ add</Chip></button>
+                {canWrite && <button className="chip-btn" onClick={() => setJob({ businessType: bt })}><Chip>+ add</Chip></button>}
               </div>
             </div>
           ))}
         </div>
       </Card>
 
-      <Card title="Notifications & app">
-        <p className="small">Browser notifications: <strong>{notifySupported() ? Notification.permission : 'not supported'}</strong>. A daily summary of urgent items shows when you open the app.</p>
+      <Card title="Install & calendar">
+        <p className="small">In-app notifications: <strong>{notifySupported() ? Notification.permission : 'not supported'}</strong>. A summary of urgent items also shows when you open the app.</p>
         <div className="row gap-s wrap">
           {notifySupported() && Notification.permission !== 'granted' && <Btn icon="bell" onClick={async () => { await requestNotify(); setMsg('Notification permission: ' + Notification.permission) }}>Enable notifications</Btn>}
           {install && <Btn kind="primary" icon="download" onClick={() => install.prompt()}>Install app</Btn>}
@@ -118,14 +126,14 @@ export default function SettingsPage() {
 
       <div ref={backupRef} id="backup">
         <Card title="Backup & data">
-          <p className="small">⚠️ All data is stored <strong>only in this browser on this device</strong>. Clearing browser data or switching device loses it. Download a backup regularly and keep it safe (it contains personal data).</p>
+          <p className="small">Your data is stored in the cloud and shared with your team. A JSON backup is still a good extra safety copy (it contains personal data — keep it safe). Restoring a backup sends its records to the cloud for everyone.</p>
           <p className="small">Last backup: <strong>{lastBackup || 'never'}</strong> · Workers: {workers.length}</p>
           <div className="row gap-s wrap">
             <Btn kind="primary" icon="download" onClick={doExport}>Download backup (JSON)</Btn>
-            <Btn icon="upload" onClick={() => fileRef.current?.click()}>Restore / import backup</Btn>
+            {canWrite && <Btn icon="upload" onClick={() => fileRef.current?.click()}>Restore / import backup</Btn>}
             <input ref={fileRef} type="file" accept="application/json,.json" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) doImport(f); e.target.value = '' }} />
-            <Btn icon="users" onClick={async () => { if (confirm('Load sample (fake DEMO) workers and outlets? Existing data is kept.')) { await loadSampleData(); setMsg('Sample data loaded.') } }}>Load sample data</Btn>
-            <Btn kind="danger" icon="trash" onClick={async () => { if (confirm('Delete ALL workers, outlets and settings from this browser?') && prompt('Type DELETE to confirm') === 'DELETE') { await clearAll(); setMsg('All data cleared.') } }}>Clear all data</Btn>
+            {canWrite && <Btn icon="users" onClick={async () => { if (confirm('Load sample (fake DEMO) workers and outlets? Existing data is kept. Everyone on your team will see them.')) { await loadSampleData(); setMsg('Sample data loaded.') } }}>Load sample data</Btn>}
+            <Btn kind="ghost" icon="download" onClick={async () => { if (confirm('Remove the copy on this device and download everything again from the cloud? Cloud data is not affected.')) { await clearDeviceCopy(); await syncNow(); setMsg('Re-downloaded from the cloud.') } }}>Re-download from cloud</Btn>
           </div>
           {msg && <p className="ok" role="status">{msg}</p>}
         </Card>

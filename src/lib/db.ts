@@ -7,6 +7,7 @@ class FwmDB extends Dexie {
   outlets!: Table<Outlet, string>
   jobs!: Table<JobCategory, string>
   settings!: Table<Settings, string>
+  synced!: Table<{ key: string; ts: number }, string>
   constructor() {
     super('foreign-worker-manager')
     this.version(1).stores({
@@ -15,19 +16,25 @@ class FwmDB extends Dexie {
       jobs: 'id, name, businessType',
       settings: 'id',
     })
+    // v2: remembers which records (and which version) came from / went to the cloud
+    this.version(2).stores({ synced: 'key' })
   }
 }
 
 export const db = new FwmDB()
 
+/** Local defaults only (not pushed to the cloud). Job categories are seeded after the first cloud download. */
 export async function ensureSeed() {
   const s = await db.settings.get('app')
-  if (!s) await db.settings.put(DEFAULT_SETTINGS)
-  if ((await db.jobs.count()) === 0) {
-    const rows: JobCategory[] = []
-    for (const bt of BUSINESS_TYPES) for (const name of DEFAULT_JOBS[bt]) rows.push({ id: uid(), name, businessType: bt })
-    await db.jobs.bulkPut(rows)
-  }
+  if (!s) await db.transaction('rw', db.settings, async () => {
+    (Dexie.currentTransaction as unknown as { __remote?: boolean }).__remote = true
+    await db.settings.put(DEFAULT_SETTINGS)
+  })
+}
+export function defaultJobRows(): JobCategory[] {
+  const rows: JobCategory[] = []
+  for (const bt of BUSINESS_TYPES) for (const name of DEFAULT_JOBS[bt]) rows.push({ id: uid(), name, businessType: bt })
+  return rows
 }
 
 export async function saveWorker(w: Worker) {
@@ -67,9 +74,4 @@ export async function importBackup(data: unknown, mode: 'replace' | 'merge') {
   await ensureSeed()
 }
 
-export async function clearAll() {
-  await db.transaction('rw', db.workers, db.outlets, db.jobs, db.settings, async () => {
-    await Promise.all([db.workers.clear(), db.outlets.clear(), db.jobs.clear(), db.settings.clear()])
-  })
-  await ensureSeed()
-}
+

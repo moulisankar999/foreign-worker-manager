@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Btn, Card, Chip, D, Empty, FormModal, KV, Modal, docTone, type FieldDef } from './ui'
 import { Icon } from './Icon'
 import { updateWorker } from '../lib/db'
+import { openAttachment } from '../lib/sync'
 import { allowancesTotal, buildAlerts, currentBasic, docStatus, leaveBalances, loanBalance, loanLedger, minContractEnd, outstanding, proratedPenalty, sortedIncrements, ticketInfo } from '../lib/calc'
 import { buildICS } from '../lib/ics'
 import { defaultChecklist } from '../lib/memo'
@@ -54,7 +55,7 @@ export function DocumentsTab({ w, s }: P) {
                 </div>
                 <div className="r-act">
                   <Chip tone={docTone(st)}>{st}</Chip>
-                  {d.attachment && <a className="btn btn-ghost btn-s" href={d.attachment.dataUrl} download={d.attachment.name} title="Open attachment"><Icon name="doc" size={16} /></a>}
+                  {d.attachment && <button type="button" className="btn btn-ghost btn-s" title="Open attachment" aria-label="Open attachment" onClick={() => openAttachment(d.attachment!)}><Icon name="doc" size={16} /></button>}
                   {d.expiryDate && <Btn small kind="ghost" icon="cal" title="Add to calendar" onClick={() => ics(d)} />}
                   {d.expiryDate && <Btn small onClick={() => setEdit({ type: d.type, label: d.label, number: d.number })}>Renew</Btn>}
                   <Btn small kind="ghost" icon="edit" title="Edit" onClick={() => setEdit(d)} />
@@ -83,12 +84,12 @@ function AttachmentField({ v, set }: { v: V; set: (p: V) => void }) {
   const att = v.attachment as DocRec['attachment']
   return (
     <div className="field full">
-      <label>Attachment (optional, max 2 MB, stored in this browser)</label>
+      <label>Attachment (optional, max 5 MB, saved privately in the cloud)</label>
       <div className="row gap-s wrap">
         <input type="file" accept="image/*,application/pdf" aria-label="Attachment" onChange={async (e) => {
           const f = e.target.files?.[0]
           if (!f) return
-          if (f.size > 2 * 1024 * 1024) { alert('File too large (max 2 MB)'); return }
+          if (f.size > 5 * 1024 * 1024) { alert('File too large (max 5 MB)'); return }
           set({ attachment: { name: f.name, type: f.type, dataUrl: await readFileAsDataURL(f) } })
         }} />
         {att && <span className="small">📎 {att.name} <button type="button" className="link" onClick={() => set({ attachment: undefined })}>remove</button></span>}

@@ -11,6 +11,9 @@ import Alerts from './pages/Alerts'
 import Reports from './pages/Reports'
 import SettingsPage from './pages/Settings'
 import MemoPrint from './pages/MemoPrint'
+import Login, { Pending } from './pages/Login'
+import { useAuth } from './lib/auth'
+import { LocalDataBanner, SyncPill } from './components/cloud'
 
 const NAV = [
   { to: '/', label: 'Home', icon: 'home', end: true },
@@ -21,6 +24,15 @@ const NAV = [
 ]
 
 export default function App() {
+  const { session, profile, loading } = useAuth()
+  if (loading) return <div className="auth-wrap"><p className="muted">Loading…</p></div>
+  if (!session) return <Login />
+  if (!profile || profile.status !== 'active' || profile.id !== session.user.id) return <Pending />
+  return <MainApp />
+}
+
+function MainApp() {
+  const { canWrite, profile } = useAuth()
   const alerts = useAlerts()
   const settings = useSettings()
   const urgent = alerts.filter((a) => a.severity === 'critical' || a.severity === 'high').length
@@ -52,7 +64,7 @@ export default function App() {
             </NavLink>
           ))}
         </nav>
-        <button className="btn btn-primary side-add" onClick={() => nav('/workers/new')}><Icon name="plus" /> Add worker</button>
+        {canWrite && <button className="btn btn-primary side-add" onClick={() => nav('/workers/new')}><Icon name="plus" /> Add worker</button>}
       </aside>
       <div className="main">
         <header className="top">
@@ -60,12 +72,15 @@ export default function App() {
             <Icon name="search" size={18} />
             <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name, ID, passport, permit no…" aria-label="Global search" />
           </form>
+          <SyncPill />
           <NavLink to="/alerts" className="top-bell" aria-label={`Alerts (${urgent} urgent)`}>
             <Icon name="bell" />
             {urgent > 0 && <span className="badge">{urgent}</span>}
           </NavLink>
         </header>
         <main className="content">
+          {profile?.role === 'viewer' && <p className="banner small" style={{ marginBottom: 12 }}>You have <strong>view-only</strong> access. Ask an Admin for Manager access to add or edit.</p>}
+          {loc.pathname === '/' && <div style={{ marginBottom: 12 }}><LocalDataBanner compact /></div>}
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/workers" element={<Workers />} />
