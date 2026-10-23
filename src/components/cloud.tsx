@@ -16,6 +16,9 @@ import { scopeLabel } from '../lib/companies'
 import { useSignOut } from './userMenu'
 import { PendingItem, ScopePicker, byLine } from './userApprovals'
 import { StatusChip, UserActionButtons, at, statusLine, useUserPerms } from './userActions'
+import { setDirty, toast } from './toast'
+import { AddUserDialog } from './addUser'
+import type { Outlet } from '../lib/types'
 
 const LABEL = { synced: 'Synced', syncing: 'Syncing…', offline: 'Offline', error: 'Sync error', off: 'Not syncing' } as const
 
@@ -86,15 +89,16 @@ export function AccountCard() {
   )
 }
 
-const ROLE_TONE: Record<string, string> = { super_admin: 'purple', hr_admin: 'blue', hr_manager: 'teal', outlet_manager: 'amber', viewer: 'gray' }
+const ROLE_TONE: Record<string, string> = { super_admin: 'purple', general_manager: 'indigo', hr_admin: 'blue', hr_manager: 'teal', outlet_manager: 'amber', viewer: 'gray' }
 const roleName = (r?: string) => ROLE_LABEL[normRole(r) || ''] || '—'
 
 export function UsersCard() {
-  const { session, isSuper, myCompanies, myOutlets, canApproveUsers } = useAuth()
+  const { session, isSuper, isGm, myCompanies, myOutlets, canApproveUsers, creatableRoles } = useAuth()
+  const [adding, setAdding] = useState(false)
+  const [focus, setFocus] = useState('')
   const companies = useConfig().companies.items
   const [users, setUsers] = useState<Profile[]>([])
   const [err, setErr] = useState('')
-  const [open, setOpen] = useState<string | null>(null)
   const outlets = useLiveQuery(() => db.outlets.toArray(), [], [])
   const load = async () => {
     const { data, error } = await supabase.from('profiles').select('*').order('created_at')
@@ -105,24 +109,21 @@ export function UsersCard() {
     const ch = supabase.channel('users-card').on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => { void load() }).subscribe()
     return () => { void supabase.removeChannel(ch) }
   }, [])
-  const update = async (id: string, patch: Partial<Profile>) => {
-    const { error } = await supabase.from('profiles').update(patch).eq('id', id)
-    if (error) alert(/at least one active/i.test(error.message) ? 'You need at least one active Super Admin.' : error.message.replace(/^.*?ERROR:\s*/, ''))
-    await load()
-  }
   const pending = users.filter((u) => u.status === 'pending')
   const others = users.filter((u) => u.status !== 'pending' && u.status !== 'deleted')
   const deleted = users.filter((u) => u.status === 'deleted')
   const [showDel, setShowDel] = useState(false)
   const permsFor = useUserPerms(users)
   const counts = { active: others.filter((u) => u.status === 'active').length, paused: others.filter((u) => u.status === 'paused').length }
-  const roles = ROLES.filter((r) => isSuper || (r !== 'super_admin' && r !== 'hr_admin'))
+  // roles I may hand out: always below my own (CEO: never another CEO; GM: never CEO / GM; HR Admin: never CEO / GM / HR Admin)
+  const roles = ROLES.filter((r) => r !== 'super_admin' && (isSuper || (r !== 'general_manager' && (isGm || r !== 'hr_admin'))))
   // what a company-limited HR Admin may hand out: only his own companies
-  const allowed: string[] | '*' = isSuper || (!myCompanies.length && !myOutlets.length) ? '*' : myCompanies
+  const allowed: string[] | '*' = isSuper || isGm || (!myCompanies.length && !myOutlets.length) ? '*' : myCompanies
   return (
-    <Card title={`Users (${users.length})`} actions={<Btn small kind="ghost" icon="upload" title="Refresh" onClick={load} />}>
-      <p className="muted small">Staff create their own account on the sign-in page (“Create account”) and can pick their company / outlet there. New sign-ups appear on the dashboard under <strong>Needs my action</strong> and here — approve them, pick their role and the companies / outlets they work for.</p>
-      <ul className="small muted role-help">{ROLES.map((r) => <li key={r}><strong>{ROLE_LABEL[r]}</strong>: {ROLE_HELP[r]}</li>)}</ul>
+    <Card title={`Users (${users.length})`} actions={<>{creatableRoles.length > 0 && <Btn small kind="primary" icon="plus" onClick={() => setAdding(true)}>Add user</Btn>}<Btn small kind="ghost" icon="upload" title="Refresh" onClick={load} /></>}>
+      <p className="muted small">Staff can create their own account on the sign-in page (“Create account”) and wait for approval{creatableRoles.length > 0 ? <> — or press <strong>Add user</strong> to add someone directly (active at once, with a temporary password)</> : ''}. New sign-ups appear on the dashboard under <strong>Needs my action</strong> and here — approve them, pick their role and the companies / outlets they work for.</p>
+      {adding && <AddUserDialog onClose={() => { setAdding(false); void load() }} onEditExisting={(id) => { setAdding(false); setFocus(id); setTimeout(() => document.getElementById('user-' + id)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 150) }} />}
+      <ul className="small muted role-help">{ROLES.filter((r) => isSuper || r !== 'general_manager').map((r) => <li key={r}><strong>{ROLE_LABEL[r]}</strong>: {ROLE_HELP[r]}</li>)}</ul>
       {err && <p className="err">{err}</p>}
       <div className="row gap-s wrap small"><Chip tone="green">Active {counts.active}</Chip><Chip tone="amber">Paused {counts.paused}</Chip><Chip tone="blue">Pending {pending.length}</Chip>{deleted.length > 0 && <Chip tone="red">Deleted {deleted.length}</Chip>}</div>
       {pending.length > 0 && <>
@@ -130,48 +131,7 @@ export function UsersCard() {
         {canApproveUsers && <ul className="rows users">{pending.map((u) => <PendingItem key={u.id} u={u} companies={companies} outlets={outlets} />)}</ul>}
       </>}
       <ul className="rows users">
-        {others.map((u) => {
-          const role = normRole(u.role) || 'viewer'
-          const locked = !isSuper && (role === 'super_admin' || role === 'hr_admin')
-          const outs = u.outlet_ids || []
-          const cos = u.company_ids || []
-          const scoped = outs.length + cos.length > 0
-          const by = byLine(u)
-          const sl = statusLine(u)
-          const may = permsFor(u)
-          return (
-            <li key={u.id} className="user-row">
-              <div className="r-main">
-                <strong>{u.full_name || u.email}{u.id === session?.user.id ? ' (you)' : ''}</strong>
-                <small>{u.email} · <StatusChip u={u} /> <Chip tone={ROLE_TONE[role]}>{ROLE_LABEL[role]}</Chip></small>
-                {role !== 'super_admin' && (
-                  <small className={role === 'outlet_manager' && !scoped ? 'warn' : 'muted'}>
-                    {role === 'outlet_manager' ? 'Outlets: ' : 'Sees: '}
-                    {scoped ? scopeLabel(companies, outlets, cos, outs) : role === 'outlet_manager' ? 'none yet — he will see no workers' : 'all companies'}
-                  </small>
-                )}
-                {by && <small className="muted">{by}</small>}
-                {sl && <small className={u.status === 'paused' ? 'warn' : 'muted'}>{sl}</small>}
-                {may.lastSuper && u.id !== session?.user.id && <small className="muted">Last active Super Admin — cannot be paused or deleted.</small>}
-              </div>
-              <div className="r-act">
-                <select aria-label={`Role for ${u.email}`} value={role} disabled={locked} onChange={(e) => update(u.id, { role: e.target.value as Role })}>
-                  {(locked ? ROLES : roles).map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
-                </select>
-                {role !== 'super_admin' && !locked && u.id !== session?.user.id && <Btn small kind="ghost" icon="store" onClick={() => setOpen(open === u.id ? null : u.id)}>{role === 'outlet_manager' ? 'Outlets' : 'Companies'}</Btn>}
-                <UserActionButtons u={u} may={may} onDone={load} />
-              </div>
-              {open === u.id && (
-                <div className="outlet-pick">
-                  {outlets.length === 0 && <p className="muted small">Add outlets first (Settings → Companies & Outlets).</p>}
-                  <p className="muted small">{role === 'outlet_manager' ? 'Tick his outlets.' : 'Tick a whole company or single outlets.'} {role !== 'outlet_manager' && (isSuper ? 'Nothing ticked = all companies.' : 'You can only give your own companies.')}</p>
-                  <ScopePicker companies={companies} outlets={outlets} allowed={allowed} outletsOnly={role === 'outlet_manager'}
-                    value={{ companies: cos, outlets: outs }} onChange={(v) => update(u.id, { company_ids: v.companies, outlet_ids: v.outlets })} />
-                </div>
-              )}
-            </li>
-          )
-        })}
+        {others.map((u) => <UserRow key={u.id} focus={focus === u.id} u={u} me={session?.user.id} roles={roles} allowed={allowed} companies={companies} outlets={outlets} may={permsFor(u)} onSaved={load} />)}
       </ul>
       {deleted.length > 0 && <>
         <button type="button" className="link small" onClick={() => setShowDel(!showDel)}>{showDel ? 'Hide deleted users' : `Deleted users (${deleted.length})`}</button>
@@ -180,6 +140,110 @@ export function UsersCard() {
         ))}</ul>}
       </>}
     </Card>
+  )
+}
+
+const LEGACY: Record<string, string> = { admin: 'Admin (old role)', manager: 'Manager (old role)' }
+const sameSet = (a: string[], b: string[]) => a.length === b.length && a.every((x) => b.includes(x))
+
+/** One user in Settings → Users: edit role / companies / outlets, then press "Update" (nothing saves on change). */
+function UserRow({ u, me, roles, allowed, companies, outlets, may, onSaved, focus }: {
+  focus?: boolean; u: Profile; me?: string; roles: Role[]; allowed: string[] | '*'; companies: ReturnType<typeof useConfig>['companies']['items']
+  outlets: Outlet[]; may: ReturnType<ReturnType<typeof useUserPerms>>; onSaved: () => Promise<void> | void
+}) {
+  const { isSuper, isGm, can } = useAuth()
+  const saved = { role: (normRole(u.role) || 'viewer') as Role, companies: u.company_ids || [], outlets: u.outlet_ids || [] }
+  const legacy = LEGACY[u.role as string]
+  const [d, setD] = useState(saved)
+  const [open, setOpen] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
+  const key = `${u.id}|${u.role}|${saved.companies.join(',')}|${saved.outlets.join(',')}`
+  useEffect(() => { setD(saved) }, [key]) // eslint-disable-line react-hooks/exhaustive-deps
+  const changed = d.role !== saved.role || !sameSet(d.companies, saved.companies) || !sameSet(d.outlets, saved.outlets)
+  const dirty = changed || !!legacy
+  const name = u.full_name || u.email || 'user'
+  useEffect(() => { setDirty('user:' + u.id, changed, name, '#/settings/users'); return () => setDirty('user:' + u.id, false) }, [changed, name, u.id])
+  const self = u.id === me
+  // the CEO's row is only "name + CEO" for everyone else; GM rows are CEO-only
+  const target = saved.role
+  if (!isSuper && target === 'super_admin') {
+    return <li className="user-row"><div className="r-main"><strong>{name}</strong><small><Chip tone="purple">CEO</Chip></small></div></li>
+  }
+  const locked = self || (isGm && !can('users.roles')) || (!isSuper && (target === 'general_manager' || (!isGm && target === 'hr_admin')))
+  const scoped = d.outlets.length + d.companies.length > 0
+  const by = byLine(u)
+  const sl = statusLine(u)
+  const save = async () => {
+    setBusy(true); setMsg(null)
+    const patch: Partial<Profile> = {}
+    if (d.role !== saved.role || legacy) patch.role = d.role
+    if (!sameSet(d.companies, saved.companies) || !sameSet(d.outlets, saved.outlets) || d.role === 'super_admin' || d.role === 'general_manager') {
+      patch.company_ids = d.role === 'super_admin' || d.role === 'general_manager' ? [] : d.companies
+      patch.outlet_ids = d.role === 'super_admin' || d.role === 'general_manager' ? [] : d.outlets
+    }
+    if ((d.role === 'super_admin' || d.role === 'general_manager') && d.role !== saved.role &&
+        !confirm(`Make ${name} ${d.role === 'super_admin' ? 'a CEO (full access to everything)' : 'General Manager (final approvals, with the powers you allow)'}?`)) { setBusy(false); return }
+    const { data, error } = await supabase.from('profiles').update(patch).eq('id', u.id).select('role, company_ids, outlet_ids').maybeSingle()
+    setBusy(false)
+    if (error || !data) {
+      const t = !error ? 'Not saved — you are not allowed to change this user.' : /at least one active/i.test(error.message) ? 'Not saved — you need at least one active CEO.' : 'Not saved — ' + error.message.replace(/^.*?ERROR:\s*/, '')
+      setMsg({ ok: false, text: t }); toast(t, 'err'); return
+    }
+    const nowRole = ROLE_LABEL[normRole((data as Profile).role) || ''] || (data as Profile).role
+    const scopeTxt = d.role === 'super_admin' || d.role === 'general_manager' ? '' : ` · ${scoped ? scopeLabel(companies, outlets, d.companies, d.outlets) : d.role === 'outlet_manager' ? 'no outlets yet' : 'all companies'}`
+    const t = `Updated ✓ — ${name} is now ${nowRole}${scopeTxt}`
+    setMsg({ ok: true, text: t }); toast(t)
+    setDirty('user:' + u.id, false)
+    setOpen(false)
+    await onSaved()
+  }
+  return (
+    <li id={'user-' + u.id} className={`user-row${changed ? ' is-dirty' : ''}${focus ? ' is-focus' : ''}`} data-testid={`user-${u.email}`}>
+      <div className="r-main">
+        <strong>{name}{self ? ' (you)' : ''}</strong>
+        <small>{u.email} · <StatusChip u={u} /> <Chip tone={ROLE_TONE[saved.role]}>{ROLE_LABEL[saved.role]}</Chip>{legacy && <> <Chip tone="amber">{legacy}</Chip></>}</small>
+        {saved.role !== 'super_admin' && saved.role !== 'general_manager' && (
+          <small className={saved.role === 'outlet_manager' && !(saved.outlets.length + saved.companies.length) ? 'warn' : 'muted'}>
+            {saved.role === 'outlet_manager' ? 'Outlets: ' : 'Sees: '}
+            {saved.outlets.length + saved.companies.length ? scopeLabel(companies, outlets, saved.companies, saved.outlets) : saved.role === 'outlet_manager' ? 'none yet — he will see no workers' : 'all companies'}
+          </small>
+        )}
+        {by && <small className="muted">{by}</small>}
+        {sl && <small className={u.status === 'paused' ? 'warn' : 'muted'}>{sl}</small>}
+        {may.lastSuper && !self && <small className="muted">Last active CEO — cannot be paused or deleted.</small>}
+      </div>
+      <div className="r-act">
+        <UserActionButtons u={u} may={may} onDone={onSaved} />
+      </div>
+      {!locked && (
+        <div className="user-edit">
+          <label className="small">Role{' '}
+            <select aria-label={`Role for ${u.email}`} value={d.role} disabled={busy} onChange={(e) => { setMsg(null); setD({ ...d, role: e.target.value as Role }) }}>
+              {(roles.includes(saved.role) ? roles : [saved.role, ...roles]).map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
+            </select>
+          </label>
+          {d.role !== 'super_admin' && d.role !== 'general_manager' && <Btn small kind="ghost" icon="store" onClick={() => setOpen(!open)}>{d.role === 'outlet_manager' ? 'Outlets' : 'Companies'}{scoped ? ` (${d.companies.length + d.outlets.length})` : ''}</Btn>}
+        </div>
+      )}
+      {!locked && open && d.role !== 'super_admin' && d.role !== 'general_manager' && (
+        <div className="outlet-pick">
+          {outlets.length === 0 && <p className="muted small">Add outlets first (Settings → Companies & Outlets).</p>}
+          <p className="muted small">{d.role === 'outlet_manager' ? 'Tick his outlets.' : 'Tick a whole company or single outlets.'} {d.role !== 'outlet_manager' && (allowed === '*' ? 'Nothing ticked = all companies.' : 'You can only give your own companies.')}</p>
+          <ScopePicker companies={companies} outlets={outlets} allowed={allowed} outletsOnly={d.role === 'outlet_manager'}
+            value={{ companies: d.companies, outlets: d.outlets }} onChange={(v) => { setMsg(null); setD({ ...d, companies: v.companies, outlets: v.outlets }) }} />
+        </div>
+      )}
+      {!locked && (
+        <div className="user-save">
+          <Btn small kind="primary" icon="check" disabled={!dirty || busy} onClick={() => void save()}>{busy ? 'Updating…' : 'Update'}</Btn>
+          <Btn small kind="ghost" disabled={!changed || busy} onClick={() => { setD(saved); setMsg(null); setOpen(false) }}>Cancel</Btn>
+          {changed && !msg && <span className="small dirty-note">Unsaved changes — press Update to save</span>}
+          {!changed && legacy && !msg && <span className="small dirty-note">Old role “{legacy}” — press Update to save it as {ROLE_LABEL[saved.role]}</span>}
+          {msg && <span className={`small ${msg.ok ? 'saved-tick' : 'err'}`} role="status">{msg.ok ? '✓ ' : ''}{msg.text}</span>}
+        </div>
+      )}
+    </li>
   )
 }
 

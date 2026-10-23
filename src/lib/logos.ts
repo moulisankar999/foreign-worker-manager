@@ -1,5 +1,5 @@
 /* Company / outlet logos. Private storage bucket 'logos' (only signed-in users of that company / outlet can
- * read; Super Admin, HR Admin and HR Manager within their scope can change — enforced by storage policies).
+ * read; CEO, HR Admin and HR Manager within their scope can change — enforced by storage policies).
  * Object names carry a version (company/<id>/<time>.png) so a downloaded logo never changes: it is cached on
  * the device (Cache Storage) and shows offline and in the Android app. */
 import { useEffect, useState } from 'react'

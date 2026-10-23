@@ -1,4 +1,4 @@
-// wa-admin (Super Admin only): submit our WhatsApp utility templates to Meta and refresh their approval status.
+// wa-admin (CEO only): submit our WhatsApp utility templates to Meta and refresh their approval status.
 //   POST {action:'status'}  → GET  /{WABA_ID}/message_templates  → app_config 'wa_templates'
 //   POST {action:'submit'}  → POST /{WABA_ID}/message_templates for every template not yet on the account
 // Secrets: WA_BUSINESS_ACCOUNT_ID, WA_ACCESS_TOKEN [, WA_GRAPH_VERSION, WA_GRAPH_URL]
@@ -18,7 +18,9 @@ Deno.serve(async (req) => {
   const { data: u } = token ? await db.auth.getUser(token) : { data: null }
   if (!u?.user) return json({ error: 'Not allowed' }, 401)
   const { data: p } = await db.from('profiles').select('role,status').eq('id', u.user.id).maybeSingle()
-  if (p?.status !== 'active' || !['super_admin', 'admin'].includes(p?.role)) return json({ error: 'Super Admin only' }, 403)
+  // CEO, or a General Manager the CEO allowed to manage notification settings
+    const gmOk = p?.status === 'active' && p?.role === 'general_manager' && !!(await db.rpc('power_of', { p_uid: u.user.id, p_power: 'notifications.settings' })).data
+    if (!gmOk && (p?.status !== 'active' || !['super_admin', 'admin'].includes(p?.role))) return json({ error: 'CEO only' }, 403)
   if (!env('WA_BUSINESS_ACCOUNT_ID') || !env('WA_ACCESS_TOKEN')) return json({ error: 'WhatsApp not configured: set WA_BUSINESS_ACCOUNT_ID and WA_ACCESS_TOKEN' }, 400)
   const { action } = await req.json().catch(() => ({ action: 'status' }))
 

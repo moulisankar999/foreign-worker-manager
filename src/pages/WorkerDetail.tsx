@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { VaultPanel } from '../components/vault'
+import { CheckStatusPanel } from '../components/agencies'
 import { PassportPanel, RemarksPanel, WorkerRequests } from '../components/workerExtras'
 import { useAuth } from '../lib/auth'
 import { CONSENT_LABEL, CONSENT_TONE, consentOf, overdueDays } from '../lib/passport'
@@ -19,7 +20,7 @@ import { STATUSES, type MemoRec, type WorkerStatus } from '../lib/types'
 import { missingLanguage, otherLanguagesText, primaryLangName } from '../lib/languages'
 import { age, download, fmtDate, rm, serviceText, todayISO } from '../lib/util'
 
-type Tab = 'overview' | 'vault' | 'requests' | 'passport' | 'remarks' | 'docs' | 'remit' | 'family' | 'contract' | 'pay' | 'loans' | 'leave' | 'memos' | 'notes'
+type Tab = 'overview' | 'checks' | 'vault' | 'requests' | 'passport' | 'remarks' | 'docs' | 'remit' | 'family' | 'contract' | 'pay' | 'loans' | 'leave' | 'memos' | 'notes'
 
 export default function WorkerDetail() {
   const { id } = useParams()
@@ -48,6 +49,7 @@ export default function WorkerDetail() {
     { id: 'vault', label: 'Vault' },
     { id: 'passport', label: 'Passport', badge: (consent === 'pending' || consent === 'uploaded' ? 1 : 0) + (overdueDays(w) > 0 ? 1 : 0) },
     { id: 'remarks', label: 'Remarks' },
+    ...(isHr ? [{ id: 'checks' as Tab, label: 'Check status' }] : []),
     { id: 'docs', label: 'Expiry docs', badge: docs.filter((d) => docStatus(d, s) !== 'Valid' && docStatus(d, s) !== 'No expiry').length },
     { id: 'leave', label: 'Leave & ticket' },
     { id: 'contract', label: 'Contract & exit' },
@@ -59,7 +61,7 @@ export default function WorkerDetail() {
     { id: 'notes', label: 'Timeline' },
   ]
   // outlet managers / viewers: read-only, no pay data
-  const tabs = canWrite ? allTabs : allTabs.filter((x) => ['overview', 'requests', 'vault', 'passport', 'remarks', 'notes'].includes(x.id))
+  const tabs = canWrite ? allTabs : allTabs.filter((x) => ['overview', 'requests', 'vault', 'passport', 'remarks', 'checks', 'notes'].includes(x.id))
   const p = { w, s }
   return (
     <div className="page">
@@ -149,6 +151,7 @@ export default function WorkerDetail() {
       {tab === 'vault' && <VaultPanel workerId={w.id} />}
       {tab === 'passport' && <PassportPanel w={w} />}
       {tab === 'remarks' && <RemarksPanel w={w} />}
+      {isHr && tab === 'checks' && <CheckStatusPanel w={w} />}
       {canWrite && tab === 'docs' && <DocumentsTab {...p} />}
       {canWrite && tab === 'family' && <FamilyTab {...p} />}
       {isHr && tab === 'remit' && <RemittanceTab w={w} />}

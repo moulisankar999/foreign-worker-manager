@@ -97,7 +97,7 @@ export function Pending() {
           <div><h1>{paused ? 'Access paused' : inactive ? 'Account switched off' : 'Waiting for approval'}</h1><p className="muted">{session?.user.email}</p></div>
         </div>
         {paused && <p>Your access was paused{profile?.paused_by_name ? <> by <strong>{profile.paused_by_name}</strong></> : ''}{profile?.paused_at ? ` on ${at(profile.paused_at)}` : ''}.{profile?.pause_reason ? ` Reason: ${profile.pause_reason}.` : ''} Contact your admin to resume it.</p>}
-        {!paused && <p>{inactive ? 'An admin has deactivated this account. Contact your admin if this is a mistake.' : profile ? 'Your account is created. Your Super Admin (or your company’s HR Admin) has been notified and will approve you from the app. Then tap “Check again”.' : 'Could not load your account. Check your internet connection.'}</p>}
+        {!paused && <p>{inactive ? 'An admin has deactivated this account. Contact your admin if this is a mistake.' : profile ? 'Your account is created. Your CEO (or your company’s HR Admin) has been notified and will approve you from the app. Then tap “Check again”.' : 'Could not load your account. Check your internet connection.'}</p>}
         <div className="row gap-s wrap">
           <Btn kind="primary" icon="check" onClick={() => refreshProfile()}>Check again</Btn>
           <Btn kind="ghost" icon="exit" onClick={() => signOut(true)}>Sign out</Btn>

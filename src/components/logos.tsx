@@ -17,12 +17,12 @@ export function LogoImg({ path, size = 40, fallback = true, title }: { path?: st
   )
 }
 
-/** Super Admin anywhere; HR Admin / HR Manager only inside their companies / outlets (the server checks again) */
+/** CEO anywhere; HR Admin / HR Manager only inside their companies / outlets (the server checks again) */
 export function useCanEditLogo() {
-  const { isSuper, role, myCompanies, myOutlets } = useAuth()
+  const { isSuper, isGm, can, role, myCompanies, myOutlets } = useAuth()
   const outlets = useOutlets()
   return (kind: 'company' | 'outlet', id: string) => {
-    if (isSuper) return true
+    if (isSuper || (isGm && can('org.logos'))) return true
     if (role !== 'hr_admin' && role !== 'hr_manager') return false
     if (!myCompanies.length && !myOutlets.length) return true
     return kind === 'company' ? myCompanies.includes(id) : inScope(role, myCompanies, myOutlets, id, outlets)

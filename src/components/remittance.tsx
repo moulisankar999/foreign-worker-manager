@@ -1,6 +1,6 @@
 /* Worker remittance accounts (Merchantrade, Western Union, ...). No money moves through this app:
    HR records where the worker sends money, and "Open provider" goes to the provider's official site/app.
-   PDPA: the whole `remittance` key is only sent to Super Admin / HR Admin / HR Manager (server strips it for others,
+   PDPA: the whole `remittance` key is only sent to CEO / HR Admin / HR Manager (server strips it for others,
    migration 009); account numbers are masked in lists. */
 import { useState } from 'react'
 import { Btn, Card, Chip, Empty, FormModal, type FieldDef } from './ui'
@@ -38,7 +38,7 @@ export const REMIT_FIELDS: FieldDef[] = [
   { key: 'relationship', label: 'Relationship', type: 'select', options: RELATIONS },
   { key: 'country', label: 'Beneficiary country', type: 'select', options: REMIT_COUNTRIES },
   { key: 'bankOrWallet', label: 'Beneficiary bank / wallet', placeholder: 'e.g. Nabil Bank, bKash, eSewa, BCA' },
-  { key: 'accountNo', label: 'Beneficiary account / wallet no.', hint: 'Shown masked in lists; visible only to HR and Super Admin' },
+  { key: 'accountNo', label: 'Beneficiary account / wallet no.', hint: 'Shown masked in lists; visible only to HR and CEO' },
   { key: 'isPrimary', label: 'Main account the worker uses', type: 'checkbox' },
   { key: 'notes', label: 'Notes', type: 'textarea' },
 ]
@@ -81,7 +81,7 @@ export function RemitList({ list, onEdit }: { list: RemitRec[]; onEdit?: (r: Rem
   )
 }
 
-/** worker detail tab (HR / Super Admin only) */
+/** worker detail tab (HR / CEO only) */
 export function RemittanceTab({ w }: { w: Worker }) {
   const [edit, setEdit] = useState<Partial<RemitRec> | null>(null)
   const list = w.remittance || []
@@ -98,7 +98,7 @@ export function RemittanceTab({ w }: { w: Worker }) {
     <Card title="💸 Remittance" actions={<Btn kind="primary" small icon="plus" onClick={() => setEdit({ provider: 'Merchantrade', country: w.nationality, isPrimary: !list.length })}>Add</Btn>}>
       <p className="banner blue small" role="note">ℹ️ {PAY_NOTE}</p>
       <RemitList list={list} onEdit={setEdit} />
-      <p className="muted small">🔒 Visible only to Super Admin, HR Admin and HR Manager (personal data, PDPA). Outlet managers never receive these details.</p>
+      <p className="muted small">🔒 Visible only to CEO, HR Admin and HR Manager (personal data, PDPA). Outlet managers never receive these details.</p>
       {edit && (
         <FormModal title={edit.id ? 'Edit remittance account' : 'Add remittance account'} fields={REMIT_FIELDS} initial={edit as Record<string, unknown>}
           onClose={() => setEdit(null)} onDelete={edit.id ? () => save(null, edit.id) : undefined}

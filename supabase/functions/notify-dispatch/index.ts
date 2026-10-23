@@ -170,12 +170,14 @@ Deno.serve(async (req) => {
   const db = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } })
   const isCron = !!CRON_SECRET && req.headers.get('x-cron-secret') === CRON_SECRET
   if (!isCron) {
-    // a signed-in Super Admin may trigger a run (e.g. right after "Send test")
+    // a signed-in CEO may trigger a run (e.g. right after "Send test")
     const token = (req.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '')
     const { data: u } = token ? await db.auth.getUser(token) : { data: null }
     if (!u?.user) return json({ error: 'Not allowed' }, 401)
     const { data: p } = await db.from('profiles').select('role,status').eq('id', u.user.id).maybeSingle()
-    if (p?.status !== 'active' || !['super_admin', 'admin'].includes(p?.role)) return json({ error: 'Super Admin only' }, 403)
+    // CEO, or a General Manager the CEO allowed to manage notification settings
+    const gmOk = p?.status === 'active' && p?.role === 'general_manager' && !!(await db.rpc('power_of', { p_uid: u.user.id, p_power: 'notifications.settings' })).data
+    if (!gmOk && (p?.status !== 'active' || !['super_admin', 'admin'].includes(p?.role))) return json({ error: 'CEO only' }, 403)
   }
 
   const { data: cfgRow } = await db.from('app_config').select('value').eq('key', 'notifications').maybeSingle()
@@ -265,7 +267,8 @@ Deno.serve(async (req) => {
         for (const s of subs) {
           try {
             await webpush.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
-              JSON.stringify({ title: d.title, body: d.body, tag: 'fwm-' + d.event + '-' + d.id, path }), { TTL: 60 * 60 * 24 })
+              JSON.stringify({ title: d.title, body: d.body, tag: 'fwm-' + d.event + '-' + d.id, path,
+                ...(d.event === 'ceo_review' ? { actions: [{ action: 'overrule', title: 'Overrule' }, { action: 'view', title: 'View' }], overrulePath: path + (path.includes('?') ? '&' : '?') + 'overrule=1' } : {}) }), { TTL: 60 * 60 * 24 })
             ok++
           } catch (e) {
             const code = (e as { statusCode?: number }).statusCode

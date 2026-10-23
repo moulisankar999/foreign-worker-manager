@@ -1,20 +1,21 @@
 /* Roles, request types and the approval workflow (shared by the app and the daily-alerts function).
  * The database enforces the same rules (supabase/migrations/003_roles_requests_vault.sql). */
 
-export const ROLES = ['super_admin', 'hr_admin', 'hr_manager', 'outlet_manager', 'viewer'] as const
+export const ROLES = ['super_admin', 'general_manager', 'hr_admin', 'hr_manager', 'outlet_manager', 'viewer'] as const
 export type Role = (typeof ROLES)[number]
 export const ROLE_LABEL: Record<string, string> = {
-  super_admin: 'Super Admin', hr_admin: 'HR Admin', hr_manager: 'HR Manager', outlet_manager: 'Outlet Manager', viewer: 'Viewer (read only)',
+  super_admin: 'CEO', general_manager: 'General Manager', hr_admin: 'HR Admin', hr_manager: 'HR Manager', outlet_manager: 'Outlet Manager', viewer: 'Viewer (read only)',
 }
 export const ROLE_HELP: Record<string, string> = {
-  super_admin: 'Everything: users, approval rules, final approvals',
+  super_admin: 'Owner: everything, reviews and can overrule any decision (only one person should have this)',
+  general_manager: 'Final approvals and day-to-day admin, with the powers the CEO allows',
   hr_admin: 'Approves requests within limits; can manage users (if allowed)',
   hr_manager: 'Keeps worker records, reviews requests, applies approved requests',
   outlet_manager: 'Sees only workers of his outlets; raises requests, adds remarks & documents',
   viewer: 'Read only (no salary details)',
 }
 /** approval authority: higher number can approve more */
-export const RANK: Record<string, number> = { hr_manager: 1, hr_admin: 2, super_admin: 3 }
+export const RANK: Record<string, number> = { hr_manager: 1, hr_admin: 2, general_manager: 3, super_admin: 3 }
 
 export type Level = 'hr_manager' | 'hr_admin' | 'super_admin'
 export type Effect = 'passport' | 'leave' | 'increment' | 'advance' | 'loan' | 'deduction' | 'penalty' | 'memo' | 'transfer' | 'exit' | 'absconded' | 'details' | 'letter' | 'note'
@@ -26,7 +27,7 @@ export interface ReqField {
 }
 export interface RequestType {
   key: string; label: string; icon: string; group: string
-  level: Level; limit?: number | null // default approver; limit = max RM an HR Admin may approve (above → Super Admin)
+  level: Level; limit?: number | null // default approver; limit = max RM an HR Admin may approve (above → General Manager / CEO)
   amountKey?: string // which field is the RM amount used for limits
   effect: Effect; fields: ReqField[]; docHint?: string; mcCategory?: string
   requiredDoc?: string // a file of this vault category must be attached (checked again by the server before approval)
@@ -95,7 +96,7 @@ export function requiredLevel(rules: ApprovalRules | undefined, type: string, am
 
 export type ReqStatus = 'submitted' | 'returned' | 'recommended' | 'escalated' | 'approved' | 'rejected' | 'completed' | 'cancelled'
 export const STATUS_LABEL: Record<ReqStatus, string> = {
-  submitted: 'Waiting HR review', returned: 'Returned for info', recommended: 'Waiting HR Admin', escalated: 'Waiting Super Admin',
+  submitted: 'Waiting HR review', returned: 'Returned for info', recommended: 'Waiting HR Admin', escalated: 'Waiting General Manager',
   approved: 'Approved – to apply', rejected: 'Rejected', completed: 'Done', cancelled: 'Cancelled',
 }
 export const STATUS_TONE: Record<ReqStatus, string> = {
@@ -108,52 +109,85 @@ export interface RequestRow {
   id: string; ref_no: number; type: string; worker_id: string | null; outlet_id: string | null; title: string
   data: Record<string, unknown>; amount: number | null; priority: 'low' | 'normal' | 'high' | 'urgent'; status: ReqStatus
   required_level: Level; created_by: string; created_by_name: string | null; created_at: string; updated_at: string
-  decided_by_name?: string | null; decided_at?: string | null; applied_by_name?: string | null; applied_at?: string | null; result?: Record<string, unknown> | null
+  decided_by_name?: string | null; decided_by_role?: string | null; decided_at?: string | null; ceo_locked?: boolean; ceo_updated_at?: string | null; applied_by_name?: string | null; applied_at?: string | null; result?: Record<string, unknown> | null
 }
 
+/** Who takes the final ("top") decision: the General Manager if one is active with the matching power, otherwise the CEO. */
+export interface ApprovalRoute { gmFinal?: boolean; gmLoans?: boolean; gmIncrements?: boolean }
+export const requestPower = (type: string) => (type === 'loan' || type === 'salary_advance' ? 'requests.loans' : type === 'salary_increment' ? 'requests.increments' : 'requests.final')
+export function gmDecides(route: ApprovalRoute | null | undefined, type: string): boolean {
+  const p = requestPower(type)
+  return !!(p === 'requests.loans' ? route?.gmLoans : p === 'requests.increments' ? route?.gmIncrements : route?.gmFinal)
+}
+export interface ActCtx { role: string; userId: string; can?: (p: string) => boolean; route?: ApprovalRoute | null }
+/** may this user take the top-level decision for this type (same as can_top_decide in the database) */
+export function canTop(type: string, c: ActCtx): boolean {
+  if (c.role === 'super_admin') return true
+  return c.role === 'general_manager' && !!c.can?.(requestPower(type))
+}
+const rankFor = (type: string, c: ActCtx) => (canTop(type, c) ? 3 : c.role === 'general_manager' ? 0 : RANK[c.role] || 0)
+
 /** Is this request waiting for ME to do something? (drives badges and the daily alert) */
-export function needsMyAction(r: Pick<RequestRow, 'status' | 'created_by' | 'required_level'>, role: string, userId: string): boolean {
-  const rank = RANK[role] || 0
+export function needsMyAction(r: Pick<RequestRow, 'status' | 'created_by' | 'required_level' | 'type' | 'ceo_locked'>, role: string, userId: string, c?: Partial<ActCtx>): boolean {
+  const ctx: ActCtx = { role, userId, ...c }
   if (r.status === 'returned') return r.created_by === userId
-  if (r.status === 'approved') return role === 'hr_manager' || (role === 'super_admin' && false)
+  if (r.status === 'approved') return role === 'hr_manager'
+  if (r.ceo_locked && role !== 'super_admin') return false
+  if (r.ceo_locked && r.status === 'escalated') return true // recalled by the CEO: his own decision
   const stage = STAGE_RANK[r.status]
+  const rank = rankFor(r.type, ctx)
   if (!stage || !rank) return false
   if (r.created_by === userId && role !== 'super_admin') return false
-  if (role === 'super_admin') return r.status === 'escalated' || r.status === 'recommended' || (r.status === 'submitted' && RANK[r.required_level] >= 3)
+  if (rank === 3) {
+    // the final decider: escalated requests (and those that need the top level). The CEO only when the GM does not decide this type.
+    if (role === 'super_admin' && gmDecides(ctx.route, r.type)) return false
+    return r.status === 'escalated' || r.status === 'recommended' || (r.status === 'submitted' && RANK[r.required_level] >= 3)
+  }
   return rank === stage || (rank > stage && RANK[r.required_level] <= rank && r.status !== 'submitted')
 }
 
 /** Buttons the current user should see (the server re-checks everything). */
-export function availableActions(r: RequestRow, role: string, userId: string): string[] {
+export function availableActions(r: RequestRow, role: string, userId: string, c?: Partial<ActCtx>): string[] {
+  const ctx: ActCtx = { role, userId, ...c }
   const out: string[] = []
-  const rank = RANK[role] || 0
+  const rank = rankFor(r.type, ctx)
+  const top = rank === 3
   const mine = r.created_by === userId
+  const ceo = role === 'super_admin'
   const open = OPEN_STATUSES.includes(r.status)
   const stage = STAGE_RANK[r.status]
-  // chain: HR manager reviews → HR admin → Super Admin; Super Admin may act at any stage
-  if (stage && (role === 'super_admin' || rank === stage)) {
-    if (!mine || role === 'super_admin') {
+  if (r.ceo_locked && !ceo) {
+    if (r.status === 'approved' && (RANK[role] || 0) >= 1) out.push('apply')
+    out.push('comment')
+    return out
+  }
+  // chain: HR manager reviews → HR admin → General Manager (final; CEO if none). GM / CEO may act at any stage.
+  if (stage && (top || rank === stage)) {
+    if (!mine || ceo) {
       if (rank >= RANK[r.required_level]) out.push('approve')
       else out.push('forward')
     }
     out.push('return', 'reject')
   }
-  if (r.status === 'approved' && rank >= 1) out.push('apply')
+  if (r.status === 'approved' && (RANK[role] || 0) >= 1) out.push('apply')
   if (r.status === 'returned' && mine) out.push('resubmit')
-  if (open && r.status !== 'approved' && (mine || role === 'super_admin') && !['completed'].includes(r.status)) out.push('cancel')
+  if (open && r.status !== 'approved' && (mine || ceo || (role === 'general_manager' && ctx.can?.('requests.cancel')))) out.push('cancel')
   out.push('comment')
   return out
 }
+/** history line, e.g. "Approved by General Manager Aisyah" */
+export const decidedLine = (r: Pick<RequestRow, 'status' | 'decided_by_name' | 'decided_by_role'>) =>
+  `${r.status === 'rejected' ? 'Rejected' : 'Approved'} by ${r.decided_by_role ? (ROLE_LABEL[r.decided_by_role] || r.decided_by_role) + ' ' : ''}${r.decided_by_name || ''}`.trim()
 export const ACTION_LABEL: Record<string, string> = {
   approve: 'Approve', forward: 'Recommend & send up', return: 'Return for info', reject: 'Reject', apply: 'Apply to worker record & close',
-  resubmit: 'Resubmit', cancel: 'Cancel request', comment: 'Add comment',
+  resubmit: 'Resubmit', cancel: 'Cancel request', comment: 'Add comment', ceo_overrule: 'Overruled by CEO', ceo_recall: 'Recalled by CEO', ceo_reviewed: 'Reviewed by CEO',
 }
 
 export const VAULT_CATEGORIES = ['Photo', 'Passport (bio page)', 'Passport (full copy)', 'PLKS / Visa', 'FOMEMA / Medical', 'Insurance', 'SOCSO / PERKESO', 'Contract / Offer letter', 'Checkout memo', 'Return memo', 'Exit clearance memo', 'Warning letter', 'MC', 'Payslip', 'Bank', 'IC / i-Kad', 'Police report', 'Flight ticket', 'Passport safekeeping consent', 'Passport release slip', 'Emergency leave proof', 'Other']
 export interface VaultConfig { maxImageKB: number; maxPdfKB: number; restricted: string[]; extraCategories: string[] }
 export const DEFAULT_VAULT: VaultConfig = { maxImageKB: 1024, maxPdfKB: 5120, restricted: ['Payslip', 'Bank'], extraCategories: [] }
 
-/* ---------- Emergency leave: qualifying reasons (Super Admin can edit the list in Settings) ---------- */
+/* ---------- Emergency leave: qualifying reasons (CEO can edit the list in Settings) ---------- */
 export interface EmergencyReason {
   key: string; label: string
   relationship: boolean // ask which family member

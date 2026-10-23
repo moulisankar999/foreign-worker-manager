@@ -57,7 +57,8 @@ try {
     W('W1', 'O1'), W('W2', 'O2')] })
   for (const k of ['s2', 'hra', 'hrb', 'om', 'v2']) await mk(k)
   const ap = (k, role, cos = [], outs = []) => S.c.rpc('approve_user', { p_id: U[k].id, p_role: role, p_company_ids: cos, p_outlet_ids: outs })
-  await ap('s2', 'super_admin'); await ap('hra', 'hr_admin', ['main']); await ap('hrb', 'hr_admin', ['c2']); await ap('om', 'outlet_manager', [], ['O1']); await ap('v2', 'viewer', ['c2'])
+  await ap('s2', 'hr_admin'); await admin.from('profiles').update({ role: 'super_admin', company_ids: [] }).eq('id', U.s2.id); // CEO role only by the service role (never from the app)
+  await ap('hra', 'hr_admin', ['main']); await ap('hrb', 'hr_admin', ['c2']); await ap('om', 'outlet_manager', [], ['O1']); await ap('v2', 'viewer', ['c2'])
   check('setup: om sees W1', (await pullIds(U.om.c)) === 'W1')
 
   // ---------- who may call ----------
@@ -71,7 +72,7 @@ try {
 
   // ---------- pause / resume ----------
   r = await fn('hra', 'pause', 'super')
-  check('HR admin cannot pause a Super Admin', r.status === 403 && /Super Admin/.test(r.error), JSON.stringify(r))
+  check('HR admin cannot pause a CEO', r.status === 403 && /CEO/.test(r.error), JSON.stringify(r))
   r = await fn('hra', 'pause', 'hrb')
   check('HR admin cannot pause another HR Admin', r.status === 403, JSON.stringify(r))
   r = await fn('hra', 'pause', 'v2')
@@ -117,7 +118,7 @@ try {
   r = await fn('hra', 'reset_password', 'super')
   check('HR admin cannot reset a Super Admin', r.status === 403, JSON.stringify(r))
   r = await fn('s2', 'reset_password', 'super')
-  check('another Super Admin cannot reset a Super Admin', r.status === 403 && /Only that Super Admin/.test(r.error), JSON.stringify(r))
+  check('another Super Admin cannot reset a CEO', r.status === 403 && /Only that CEO/.test(r.error), JSON.stringify(r))
   r = await fn('hra', 'reset_password', 'om')
   const tmp = r.tempPassword
   check('HR admin (allowed) resets an in-scope user → temporary password', r.ok && typeof tmp === 'string' && tmp.length >= 10, JSON.stringify({ ...r, tempPassword: tmp ? '***' : tmp }))

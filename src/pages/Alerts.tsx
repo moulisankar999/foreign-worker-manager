@@ -13,7 +13,7 @@ export default function Alerts() {
   const outlets = useOutlets()
   const s = useSettings()
   const [sp, setSp] = useSearchParams()
-  const [cat, setCat] = useState('')
+  const [cat, setCat] = useState(sp.get('cat') || '')
   const [outlet, setOutlet] = useState('')
   const [type, setType] = useState('')
   const sev = sp.get('sev') || ''

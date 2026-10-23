@@ -1,10 +1,11 @@
-/* Company-wide configuration kept in the cloud table app_config (Super Admin edits, everyone reads).
+/* Company-wide configuration kept in the cloud table app_config (CEO edits, everyone reads).
  * Cached on the device so the app still works offline. Live-updated through realtime. */
 import { useSyncExternalStore } from 'react'
 import { supabase } from './supabase'
 import { DEFAULT_EMERGENCY_REASONS, DEFAULT_HR_FLAGS, DEFAULT_VAULT, defaultRules, type ApprovalRules, type EmergencyReason, type HrAdminFlags, type VaultConfig } from './workflow'
 import { DEFAULT_NOTIFY, type NotifyConfig } from './notifyEvents'
 import { DEFAULT_CONSENT_TRANSLATIONS, type ConsentTranslationsConfig } from './consentText'
+import { DEFAULT_AGENCIES, mergeAgencies, type AgenciesConfig } from './agencies'
 import { DEFAULT_COMPANIES, DEFAULT_USER_APPROVALS, type CompaniesConfig, type UserApprovalsConfig } from './companies'
 
 export interface PassportConfig { turnaroundHours: number; overdueGraceDays: number; logo?: string; companyShort?: string; witnessTitle?: string }
@@ -21,11 +22,13 @@ export interface AppConfig {
   companies: CompaniesConfig
   user_approvals: UserApprovalsConfig
   consent_translations: ConsentTranslationsConfig
+  agencies: AgenciesConfig
 }
 const DEFAULTS: AppConfig = {
   approval_rules: defaultRules(), hr_admin: DEFAULT_HR_FLAGS, vault: DEFAULT_VAULT, emergency_reasons: DEFAULT_EMERGENCY_REASONS,
   notifications: DEFAULT_NOTIFY, passport: DEFAULT_PASSPORT, wa_templates: { items: {}, syncedAt: null },
   companies: DEFAULT_COMPANIES, user_approvals: DEFAULT_USER_APPROVALS, consent_translations: DEFAULT_CONSENT_TRANSLATIONS,
+  agencies: DEFAULT_AGENCIES,
 }
 const CACHE = 'fwm-config'
 let cfg: AppConfig = load()
@@ -46,6 +49,7 @@ function merge(raw: Partial<Record<keyof AppConfig, unknown>>): AppConfig {
   if (!Array.isArray(c.items) || !c.items.length) out.companies = DEFAULT_COMPANIES
   const ct = out.consent_translations as ConsentTranslationsConfig
   if (!ct.items || typeof ct.items !== 'object') out.consent_translations = DEFAULT_CONSENT_TRANSLATIONS
+  out.agencies = mergeAgencies(raw.agencies)
   return out as unknown as AppConfig
 }
 function load(): AppConfig {
@@ -77,10 +81,10 @@ export function startConfig() {
 export function stopConfig() {
   if (channel) { void supabase.removeChannel(channel); channel = null }
 }
-/** Super Admin only (the database refuses everyone else). */
+/** CEO only (the database refuses everyone else). */
 export async function saveConfig<K extends keyof AppConfig>(key: K, value: AppConfig[K]) {
   const { error } = await supabase.from('app_config').upsert({ key, value })
-  if (error) throw new Error(error.message.includes('row-level') ? 'Only a Super Admin can change this setting' : error.message)
+  if (error) throw new Error(error.message.includes('row-level') ? 'Only the CEO (or a General Manager allowed to) can change this setting' : error.message)
   set({ ...raw, [key]: value })
 }
 export const getConfig = () => cfg
@@ -89,10 +93,13 @@ export function useConfig(): AppConfig {
 }
 export const allVaultCategories = (v: VaultConfig, base: string[]) => [...base.filter((c) => c !== 'Other'), ...v.extraCategories.filter((c) => !base.includes(c)), 'Other']
 
-/** Super Admin or HR Admin: correct the consent-form translation for one language (server function, audited).
+/** CEO or HR Admin: correct the consent-form translation for one language (server function, audited).
  *  Pass null to go back to the built-in translation. */
+/** after the server saved the agency list (set_agencies) */
+export function setAgenciesLocal(v: AgenciesConfig) { set({ ...raw, agencies: v }) }
+
 export async function saveConsentTranslation(lang: string, entry: import('./consentText').ConsentOverride | null) {
   const { data, error } = await supabase.rpc('set_consent_translation', { p_lang: lang, p_text: entry })
-  if (error) throw new Error(/permission|not allowed|denied/i.test(error.message) ? 'Only a Super Admin or HR Admin can change translations' : error.message)
+  if (error) throw new Error(/permission|not allowed|denied/i.test(error.message) ? 'Only the CEO, General Manager or HR Admin can change translations' : error.message)
   set({ ...raw, consent_translations: data ?? raw.consent_translations })
 }

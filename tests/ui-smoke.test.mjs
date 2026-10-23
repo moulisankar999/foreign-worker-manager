@@ -60,7 +60,7 @@ const go = async (p, h) => { await p.goto(process.env.UI_URL + '#' + h); await p
   check('super admin logs in (dashboard shown)', !(await body(p)).includes('Password'), (await body(p)).slice(0, 300))
   // Settings tabs (deep links #/settings/<tab>)
   await go(p, '/settings'); const tabs = await p.locator('.set-tabs [role=tab]').allInnerTexts()
-  check('super sees all 9 settings tabs', tabs.length === 9 && /Users & Access/.test(tabs.join('|')) && /About/.test(tabs.join('|')), tabs.join('|'))
+  check('CEO sees all 10 settings tabs (incl. Agencies & Integrations)', tabs.length === 10 && /Agencies/.test(tabs.join('|')) && /Users & Access/.test(tabs.join('|')) && /About/.test(tabs.join('|')), tabs.join('|'))
   check('Users & Access tab has a pending badge', /Users & Access\s*\d+/.test(tabs.join('|')), tabs.join('|'))
   check('default tab is Account (change password + sign out)', /Change password/.test(await body(p)) && /Switch user \/ Sign out/.test(await body(p)))
   await go(p, '/settings/notifications'); const t = await body(p)
@@ -130,7 +130,7 @@ const go = async (p, h) => { await p.goto(process.env.UI_URL + '#' + h); await p
   // another person signs in on the same browser
   await p.fill('#em', sup); await p.fill('#pw', pw); await p.locator('form button[type=submit]').first().click(); await p.waitForTimeout(6000)
   await p.locator('header.top button.avatar').click(); await p.waitForTimeout(400)
-  check('next user signs in on the same device', /Super Admin/.test(await p.locator('.umenu-pop').innerText().catch(() => '')))
+  check('next user signs in on the same device', /CEO/.test(await p.locator('.umenu-pop').innerText().catch(() => '')))
   await p.setViewportSize({ width: 1280, height: 800 }); await p.waitForTimeout(300)
   check('avatar button visible on desktop too', await p.locator('header.top button.avatar').isVisible())
   check('no page errors (OM)', errs.length === 0, errs.join(' | '))

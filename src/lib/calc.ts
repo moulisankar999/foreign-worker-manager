@@ -1,4 +1,6 @@
 import { EXITED_STATUSES, LEAVE_STATUSES, REQUIRED_DOCS, type DocRec, type Outlet, type Settings, type Worker } from './types'
+import { daysSinceCheck, lastCheck, type Agency } from './agencies'
+import { getConfig } from './config'
 import { addMonths, daysUntil, fmtDate, monthsBetween, parseISO, rm, todayISO } from './util'
 
 export type DocStatus = 'Valid' | 'Expiring soon' | 'Expired' | 'No expiry'
@@ -146,7 +148,8 @@ export function severityFor(days: number | null, s: Settings): Severity {
 
 const dueText = (days: number) => (days < 0 ? `${Math.abs(days)} day(s) overdue` : days === 0 ? 'due today' : `in ${days} day(s)`)
 
-export function buildAlerts(workers: Worker[], s: Settings): Alert[] {
+export function buildAlerts(workers: Worker[], s: Settings, agencies: Agency[] = getConfig().agencies.items): Alert[] {
+  const remind = agencies.filter((a) => a.enabled && a.remindDays > 0)
   const out: Alert[] = []
   const maxLead = Math.max(...s.leadTimes, 0)
   for (const w of workers) {
@@ -208,6 +211,14 @@ export function buildAlerts(workers: Worker[], s: Settings): Alert[] {
       const rel = [...(ps?.moves || [])].reverse().find((m) => m.kind === 'release')
       const n = daysUntil(rel?.expectedReturn)
       if (n !== null && n < 0 && consent === 'signed') push({ id: `ppoverdue-${w.id}`, category: 'Passport return', title: 'Passport not returned to safe', detail: `Expected back ${fmtDate(rel?.expectedReturn)} (${dueText(n)}) — worker keeps it unless he returns it voluntarily`, date: rel?.expectedReturn, days: n, severity: 'high' })
+    }
+    // government portal status checks (e.g. FOMEMA status not checked in 30 days)
+    for (const a of remind) {
+      const since = daysSinceCheck(w, a.id)
+      if (since === null || since > a.remindDays) {
+        const lc = lastCheck(w, a.id)
+        push({ id: `check-${a.id}-${w.id}`, category: 'Status check', title: `${a.short} not checked in ${a.remindDays} days`, detail: lc ? `Last checked ${fmtDate(lc.date)} by ${lc.by || '—'}: ${lc.status}` : 'Never checked — open the worker → Check status', days: null, severity: 'low' })
+      }
     }
     const bal = outstanding(w)
     if (bal > 0) push({ id: `loan-${w.id}`, category: 'Loan / advance', title: 'Outstanding loan / advance', detail: `${rm(bal)} balance`, days: null, severity: 'info' })

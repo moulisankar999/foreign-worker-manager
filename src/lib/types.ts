@@ -32,7 +32,7 @@ export const EXIT_TYPES: WorkerStatus[] = ['Resigned', 'Terminated', 'Contract E
 export interface Attachment { name: string; type: string; dataUrl?: string; path?: string }
 
 export interface DocRec { id: string; type: string; label?: string; number?: string; issueDate?: string; expiryDate?: string; issuePlace?: string; stage?: string; remarks?: string; attachment?: Attachment }
-/** remittance account the worker uses (HR / Super Admin only; stripped server-side for other roles) */
+/** remittance account the worker uses (HR / CEO only; stripped server-side for other roles) */
 export interface RemitRec { id: string; provider: string; providerOther?: string; memberId?: string; beneficiaryName?: string; relationship?: string; country?: string; bankOrWallet?: string; accountNo?: string; isPrimary?: boolean; notes?: string }
 export interface FamilyRec { id: string; relation: string; name: string; dob?: string; phone?: string; address?: string; isEmergency?: boolean; isNextOfKin?: boolean }
 export interface IncrementRec { id: string; date: string; oldPay: number; newPay: number; reason?: string }
@@ -107,6 +107,8 @@ export interface Worker {
   notes: NoteRec[]
   exitDate?: string
   passportSafe?: PassportSafe
+  /** manual status checks on government portals (FOMEMA, Immigration, …) */
+  agencyChecks?: import('./agencies').AgencyCheck[]
   waOptIn?: boolean // worker agreed to WhatsApp messages (consent form / onboarding)
   waOptInAt?: string
   waOptOutVia?: string

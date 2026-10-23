@@ -5,6 +5,7 @@ import { Btn, Chip, Modal } from './ui'
 import { normRole, useAuth } from '../lib/auth'
 import { useConfig } from '../lib/config'
 import { userAdmin } from '../lib/userAdmin'
+import { toast } from './toast'
 import { fmtDate } from '../lib/util'
 import type { Profile } from '../lib/supabase'
 
@@ -30,7 +31,7 @@ export function statusLine(u: Profile) {
 
 /** what the signed-in person may do to this user (same rules as the server) */
 export function useUserPerms(users: Profile[]) {
-  const { session, isSuper, isHrAdmin, myCompanies, myOutlets } = useAuth()
+  const { session, isSuper, isGm, can, isHrAdmin, myCompanies, myOutlets } = useAuth()
   const flags = useConfig().hr_admin
   const me = session?.user.id
   const activeSupers = users.filter((x) => normRole(x.role) === 'super_admin' && x.status === 'active').length
@@ -44,14 +45,17 @@ export function useUserPerms(users: Profile[]) {
   return (u: Profile) => {
     const tr = normRole(u.role)
     const self = u.id === me
-    const highRank = tr === 'super_admin' || tr === 'hr_admin'
+    const top = tr === 'super_admin' || tr === 'general_manager' // only the CEO touches CEO / GM accounts
+    const highRank = top || tr === 'hr_admin'
     const hrOk = isHrAdmin && flags.manageUsers && !highRank && inScope(u)
-    const manage = !self && u.status !== 'deleted' && u.status !== 'pending' && (isSuper || hrOk)
+    const gmOk = isGm && can('users.manage') && !top
+    const manage = !self && u.status !== 'deleted' && u.status !== 'pending' && (isSuper || gmOk || hrOk)
     const lastSuper = tr === 'super_admin' && u.status === 'active' && activeSupers <= 1
     return {
       pause: manage && u.status === 'active' && !lastSuper,
       resume: manage && (u.status === 'paused' || u.status === 'inactive'),
-      reset: !self && u.status !== 'deleted' && u.status !== 'pending' && tr !== 'super_admin' && (isSuper || (isHrAdmin && flags.resetPasswords && tr !== 'hr_admin' && inScope(u))),
+      reset: !self && u.status !== 'deleted' && u.status !== 'pending' && tr !== 'super_admin' &&
+        (isSuper || (isGm && can('users.reset') && !top) || (isHrAdmin && flags.resetPasswords && !highRank && inScope(u))),
       del: manage && !lastSuper,
       lastSuper,
     }
@@ -82,23 +86,51 @@ export function UserActionButtons({ u, may, onDone }: { u: Profile; may: ReturnT
   )
 }
 
+/** strong enough for a temporary password: 10+ characters with letters and digits */
+export const tempPwIssue = (p: string) => p.length < 10 ? 'At least 10 characters' : !/[A-Za-z]/.test(p) || !/\d/.test(p) ? 'Use letters and numbers' : /\s/.test(p) ? 'No spaces' : p.length > 64 ? 'At most 64 characters' : ''
+export function genTempPassword() {
+  const A = 'ABCDEFGHJKMNPQRSTUVWXYZ', a = 'abcdefghijkmnpqrstuvwxyz', d = '23456789', all = A + a + d
+  const r = crypto.getRandomValues(new Uint32Array(12))
+  const ch = Array.from(r, (x, i) => { const set = i === 0 ? A : i === 1 ? a : i === 2 ? d : all; return set[x % set.length] })
+  for (let i = ch.length - 1; i > 0; i--) { const j = crypto.getRandomValues(new Uint32Array(1))[0] % (i + 1); [ch[i], ch[j]] = [ch[j], ch[i]] }
+  return ch.slice(0, 4).join('') + '-' + ch.slice(4, 8).join('') + '-' + ch.slice(8).join('')
+}
+
 function ResetDialog({ u, onClose }: { u: Profile; onClose: () => void }) {
   const [email, setEmail] = useState(false)
+  const [mode, setMode] = useState<'generate' | 'choose'>('generate')
+  const [typed, setTyped] = useState('')
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
   const [res, setRes] = useState<{ pw: string; emailed?: boolean } | null>(null)
   const [copied, setCopied] = useState(false)
+  const issue = mode === 'choose' ? tempPwIssue(typed) : ''
   const go = async () => {
+    if (issue) { setErr(issue); return }
     setBusy(true); setErr('')
-    try { const r = await userAdmin('reset_password', u.id, { sendEmail: email }); setRes({ pw: r.tempPassword || '', emailed: r.emailed }) } catch (e) { setErr((e as Error).message) } finally { setBusy(false) }
+    try {
+      const r = await userAdmin('reset_password', u.id, { sendEmail: email, tempPassword: mode === 'choose' ? typed : undefined })
+      setRes({ pw: r.tempPassword || '', emailed: r.emailed }); setTyped('')
+      toast(`Password reset ✓ — ${nameOf(u)} must choose a new one at next sign-in`)
+    } catch (e) { setErr((e as Error).message) } finally { setBusy(false) }
   }
   return (
     <Modal title={`Reset password — ${nameOf(u)}`} onClose={onClose}
-      footer={res ? <Btn kind="primary" icon="check" onClick={onClose}>Done — I noted it</Btn> : <><Btn kind="ghost" onClick={onClose} disabled={busy}>Cancel</Btn><Btn kind="primary" icon="lock" onClick={go} disabled={busy}>{busy ? 'Resetting…' : 'Reset password'}</Btn></>}>
+      footer={res ? <Btn kind="primary" icon="check" onClick={onClose}>Done — I noted it</Btn> : <><Btn kind="ghost" onClick={onClose} disabled={busy}>Cancel</Btn><Btn kind="primary" icon="lock" onClick={go} disabled={busy || !!issue}>{busy ? 'Resetting…' : 'Reset password'}</Btn></>}>
       {!res ? (
         <>
           <p className="small">This gives <strong>{u.email}</strong> a new <strong>temporary password</strong> and signs them out everywhere. They must choose their own password the next time they sign in.</p>
-          <label className="check small"><input type="checkbox" checked={email} onChange={(e) => setEmail(e.target.checked)} /> Also email them a “reset your password” link (the free mailer sends only a few emails per hour)</label>
+          <div className="pw-choice" role="radiogroup" aria-label="Temporary password">
+            <label className="check small"><input type="radio" name="pwmode" checked={mode === 'generate'} onChange={() => setMode('generate')} /> Generate a strong temporary password for me</label>
+            <label className="check small"><input type="radio" name="pwmode" checked={mode === 'choose'} onChange={() => setMode('choose')} /> I’ll type a temporary password</label>
+            {mode === 'choose' && <>
+              <input type="text" autoComplete="off" spellCheck={false} aria-label="Temporary password" placeholder="e.g. Sunrise-2026-temp" value={typed} onChange={(e) => { setTyped(e.target.value); setErr('') }} />
+              <small className={typed && issue ? 'err' : 'muted'}>{typed && issue ? issue : 'At least 10 characters, letters and numbers. They will be asked to change it.'}</small>
+              <Btn small kind="ghost" onClick={() => setTyped(genTempPassword())}>Suggest one</Btn>
+            </>}
+          </div>
+          <label className="check small"><input type="checkbox" checked={email} onChange={(e) => setEmail(e.target.checked)} /> Also send a “reset your password” email link (the free mailer sends only a few emails per hour)</label>
+          <p className="muted small pw-info">🔒 For security, passwords can’t be viewed — reset gives a new temporary one.</p>
           {err && <p className="err small">{err}</p>}
         </>
       ) : (
@@ -106,6 +138,7 @@ function ResetDialog({ u, onClose }: { u: Profile; onClose: () => void }) {
           <p className="small">Temporary password for <strong>{u.email}</strong> — <strong>shown only this once</strong>. Give it to them in person or by phone:</p>
           <div className="temp-pw" data-testid="temp-pw"><code>{res.pw}</code>
             <Btn small kind="ghost" onClick={() => { void navigator.clipboard?.writeText(res.pw).then(() => setCopied(true)) }}>{copied ? 'Copied ✓' : 'Copy'}</Btn></div>
+          <p className="small muted">They must change it at their next sign-in. The reset is in the audit log (the password itself is never stored or logged).</p>
           {email && <p className="small muted">{res.emailed ? 'A reset link was also emailed.' : 'The reset email could not be sent (mail limit?) — use the temporary password.'}</p>}
         </>
       )}

@@ -1,4 +1,4 @@
-/* Notification events: who gets what, on which channel. Super Admin edits this in Settings → Notifications
+/* Notification events: who gets what, on which channel. CEO edits this in Settings → Notifications
  * (stored in app_config 'notifications'). The server (SQL) resolves recipients and queues deliveries;
  * the 'notify-dispatch' Edge Function sends them through the configured providers. */
 export type Channel = 'in_app' | 'push' | 'email' | 'sms' | 'whatsapp'
@@ -8,7 +8,7 @@ export const CHANNEL_ENABLED: Record<Channel, boolean> = { in_app: true, push: t
 /** recipient tokens: roles (scoped by the worker's outlet for outlet_manager), the requester, the next approver, user admins */
 export type Recipient = 'super_admin' | 'hr_admin' | 'hr_manager' | 'outlet_manager' | 'requester' | 'approver' | 'user_admins' | 'participants'
 export const RECIPIENT_LABEL: Record<Recipient, string> = {
-  super_admin: 'Super Admin', hr_admin: 'HR Admins', hr_manager: 'HR Managers', outlet_manager: "Worker's outlet manager",
+  super_admin: 'CEO', hr_admin: 'HR Admins', hr_manager: 'HR Managers', outlet_manager: "Worker's outlet manager",
   requester: 'Requester', approver: 'Next approver', user_admins: 'User admins', participants: 'Everyone on the request',
 }
 export interface EventRule {
@@ -24,9 +24,10 @@ export interface EventRule {
   email?: string
   wa?: string // approved WhatsApp template name (see supabase/functions/_shared/wa-templates.json)
   workerWa?: string // template for the worker himself
+  body?: string // push / in-app body text (optional)
 }
 export interface NotifyConfig {
-  /** master switch per channel (Super Admin). Outbound providers stay OFF until their keys are set. */
+  /** master switch per channel (CEO). Outbound providers stay OFF until their keys are set. */
   enabled: Record<Channel, boolean>
   appUrl: string
   smsSender: string // short company name after the mandatory 'RM0 ' prefix (Malaysian carrier rule)
@@ -65,7 +66,7 @@ export const DEFAULT_NOTIFY: NotifyConfig = {
     request_submitted: R('Request submitted', 'Requests', ['hr_manager'], iae, '{{ref}} {{type}} for {{worker}}', 'New {{type}} request {{ref}} for worker {{workerNo}}. Please open FW Manager app.', { wa: 'fwm_request_submitted' }),
     request_returned: R('Returned for more info', 'Requests', ['requester'], iae, '{{ref}} returned: more info needed', 'Request {{ref}} returned for more info. Please open FW Manager app.', { wa: 'fwm_request_needs_info' }),
     request_recommended: R('Recommended (waiting HR Admin)', 'Requests', ['hr_admin'], iae, '{{ref}} {{type}} waiting for your approval', 'Request {{ref}} ({{type}}) waiting for your approval. Please open FW Manager app.', { wa: 'fwm_approval_pending' }),
-    request_escalated: R('Escalated to Super Admin', 'Requests', ['super_admin'], iae, '{{ref}} {{type}} escalated to you', 'Request {{ref}} ({{type}}) escalated for your approval. Please open FW Manager app.', { wa: 'fwm_approval_pending' }),
+    request_escalated: R('Escalated to final approver (GM / CEO)', 'Requests', ['approver'], iae, '{{ref}} {{type}} escalated to you', 'Request {{ref}} ({{type}}) escalated for your approval. Please open FW Manager app.', { wa: 'fwm_approval_pending' }),
     request_approved: R('Approved', 'Requests', ['requester', 'hr_manager'], iae, '{{ref}} {{type}} approved', 'Request {{ref}} ({{type}}) approved. Please open FW Manager app.', { wa: 'fwm_request_approved' }),
     request_rejected: R('Rejected', 'Requests', ['requester', 'hr_manager'], iae, '{{ref}} {{type}} rejected', 'Request {{ref}} ({{type}}) rejected. Please open FW Manager app.', { wa: 'fwm_request_rejected' }),
     request_completed: R('Applied / closed', 'Requests', ['requester'], iae, '{{ref}} {{type}} completed', 'Request {{ref}} ({{type}}) completed. Please open FW Manager app.', { wa: 'fwm_request_completed' }),
@@ -87,6 +88,9 @@ export const DEFAULT_NOTIFY: NotifyConfig = {
     remark_added: R('Remark added by outlet manager', 'Workers', ['hr_manager'], { in_app: true, whatsapp: true }, 'New remark on {{worker}}', 'New remark on worker {{workerNo}}. Please open FW Manager app.', { wa: 'fwm_remark_added' }),
     user_awaiting_approval: R('New user awaiting approval', 'Users', ['user_admins'], iae, '{{title}} is waiting for access', 'A new user is waiting for access. Please open FW Manager app.', { wa: 'fwm_user_waiting' }),
     user_approved_by_hr: R('New user approved by an HR Admin', 'Users', ['super_admin'], ia, '{{title}}', ''),
+    ceo_review: R('Decision to review (CEO)', 'Requests', ['super_admin'], ia, '{{byRole}} {{by}} {{decision}} {{ref}} {{type}} — {{worker}}', '', { body: '{{comment}} Tap to review or overrule.', email: '{{byRole}} {{by}} {{decision}} {{ref}} {{type}} for {{worker}} ({{outlet}}). {{comment}} Review: {{link}}' }),
+    ceo_overruled: R('Updated by the CEO (final)', 'Requests', ['participants', 'hr_admin'], ia, '{{ref}} {{type}} updated by the CEO — now {{status}}', '', { body: '{{worker}}: the CEO made the final decision. {{comment}}' }),
+    hr_task_created: R('HR follow-up after a CEO decision', 'Requests', ['hr_manager', 'hr_admin'], ia, 'HR follow-up needed: {{ref}} {{type}} — {{worker}}', '', { body: '{{count}} follow-up task(s) after the CEO\'s decision. Open Requests → Follow-ups.' }),
     daily_digest: R('Daily digest', 'Digest', [], { email: true }, '{{company}} daily summary', '', { wa: 'fwm_daily_digest' }),
   },
 }

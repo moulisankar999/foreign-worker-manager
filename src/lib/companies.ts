@@ -1,5 +1,5 @@
 /* Companies (Mouli runs several businesses): every outlet belongs to one company; staff can be scoped to
- * companies and/or outlets. The list lives in app_config 'companies' (Super Admin edits). The server enforces
+ * companies and/or outlets. The list lives in app_config 'companies' (CEO edits). The server enforces
  * the scope (migration 007); these helpers only mirror it for the screens. */
 import type { Outlet } from './types'
 import type { Role } from './supabase'
@@ -19,7 +19,7 @@ export const ruleFor = (cfg: UserApprovalsConfig, uid: string): HrApprovalRule =
 export const outletCompany = (o?: Pick<Outlet, 'companyId'> | null) => o?.companyId || DEFAULT_COMPANY_ID
 export const companyName = (items: Company[], id?: string | null) => (id ? items.find((c) => c.id === id)?.name || id : '')
 
-/** same rule as SQL scope_ok(): Super Admin everything; HR/viewer with no scope everything; else his outlets + his companies' outlets */
+/** same rule as SQL scope_ok(): CEO everything; HR/viewer with no scope everything; else his outlets + his companies' outlets */
 export function inScope(role: Role | null, companies: string[], outlets: string[], outletId: string | undefined, all: Outlet[]): boolean {
   if (!role) return false
   if (role === 'super_admin') return true

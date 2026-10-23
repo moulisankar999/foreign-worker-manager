@@ -28,12 +28,15 @@ self.addEventListener('push', (e) => {
     icon: SCOPE + 'icon-192.png',
     badge: SCOPE + 'icon-192.png',
     tag: d.tag || 'fwm-daily',
-    data: { url: SCOPE + (d.path || '#/alerts') },
+    data: { url: SCOPE + (d.path || '#/alerts'), overrule: d.overrulePath ? SCOPE + d.overrulePath : null },
+    actions: Array.isArray(d.actions) ? d.actions.slice(0, 2) : [],
   }));
 });
 self.addEventListener('notificationclick', (e) => {
   e.notification.close();
-  const url = (e.notification.data && e.notification.data.url) || SCOPE + '#/alerts';
+  const nd = e.notification.data || {};
+  // "Overrule" opens the request with the CEO dialog; "View" (or a tap) just opens it
+  const url = (e.action === 'overrule' && nd.overrule) || nd.url || SCOPE + '#/alerts';
   e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((cl) => {
     const c = cl.find((x) => x.url.startsWith(SCOPE));
     if (c) { c.navigate(url).catch(() => {}); return c.focus(); }

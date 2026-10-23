@@ -14,7 +14,7 @@ interface Preview {
 }
 type Result = Record<'workers' | 'outlets' | 'remarks' | 'documents' | 'requestsCancelled' | 'notificationsSkipped' | 'usersMoved', number>
 
-/** Settings → Data & Backup: Super Admin removes the fake DEMO workers/outlets (soft delete, synced to every device). */
+/** Settings → Data & Backup: CEO removes the fake DEMO workers/outlets (soft delete, synced to every device). */
 export function RemoveDemoCard() {
   const [open, setOpen] = useState(false)
   const [done, setDone] = useState<Result | null>(null)

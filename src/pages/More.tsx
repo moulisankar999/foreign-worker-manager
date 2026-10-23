@@ -3,15 +3,18 @@ import { Card } from '../components/ui'
 import { Icon } from '../components/Icon'
 import { useAuth } from '../lib/auth'
 import { SignOutRow } from '../components/userMenu'
+import { useCeoBadge } from './CeoReview'
 
 export default function More() {
-  const { canWrite, isSuper, isHr } = useAuth()
+  const { canWrite, isSuper, isGm, isHr } = useAuth()
+  const ceoN = useCeoBadge()
   const items: [string, string, string, string][] = [
+    ...(isSuper ? [['/ceo-review', 'lock', `CEO review${ceoN ? ` (${ceoN})` : ''}`, 'GM decisions & rejections — overrule, recall, mark reviewed'] as [string, string, string, string]] : []),
     ['/documents', 'doc', 'Document library', 'All scanned documents & expiries'],
     ['/alerts', 'bell', 'Alerts', 'Expiries, overdue passports, proof pending'],
     ['/reports', 'chart', 'Reports', 'Headcount, leave, emergency leave, passport register'],
     ['/inbox', 'bell', 'Notifications', 'Request updates'],
-    ['/settings', 'gear', 'Settings', isSuper ? 'Users, approval rules, notifications…' : 'Account & app'],
+    ['/settings', 'gear', 'Settings', isSuper || isGm ? 'Users, approval rules, notifications…' : 'Account & app'],
   ]
   void canWrite; void isHr
   return (

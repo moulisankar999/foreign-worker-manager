@@ -72,11 +72,11 @@ Deno.serve(async (req) => {
   }
   const day = todayISO()
   // alerts are scoped per user (same rule as the database's scope_ok): an outlet manager only hears about his
-  // outlets; staff limited to companies / outlets only about those; Super Admin and unlimited staff about everyone
+  // outlets; staff limited to companies / outlets only about those; CEO and unlimited staff about everyone
   const cache = new Map<string, { urgent: ReturnType<typeof buildAlerts>; digest: string; msg: ReturnType<typeof summary> }>()
   const forUser = async (role: string, outlets: string[] | null, companies: string[] | null) => {
     const os = outlets || [], cs = companies || []
-    const all = role === 'super_admin' || role === 'admin' || (['hr_admin', 'hr_manager', 'viewer', 'manager'].includes(role) && !os.length && !cs.length)
+    const all = role === 'super_admin' || role === 'admin' || role === 'general_manager' || (['hr_admin', 'hr_manager', 'viewer', 'manager'].includes(role) && !os.length && !cs.length)
     const key = all ? 'all' : 's:' + [...os].sort().join(',') + '|' + [...cs].sort().join(',')
     let c = cache.get(key)
     if (!c) {

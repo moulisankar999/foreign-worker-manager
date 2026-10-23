@@ -16,7 +16,8 @@ import type { Outlet } from '../lib/types'
 
 const when = (s?: string | null) => (s ? `${fmtDate(s.slice(0, 10))} ${new Date(s).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : '')
 export const byLine = (u: Profile) =>
-  u.approved_at && u.status !== 'pending' && !u.rejected_at
+  u.added_at && !u.rejected_at ? `Added by ${ROLE_LABEL[u.added_by_role || ''] || u.added_by_role || '—'} ${u.added_by_name || '—'} · ${when(u.added_at)}`
+  : u.approved_at && u.status !== 'pending' && !u.rejected_at
     ? `Approved by ${u.approved_by_name || '—'} (${ROLE_LABEL[u.approved_by_role || ''] || u.approved_by_role || '—'}) · ${when(u.approved_at)}`
     : u.rejected_at ? `Rejected by ${u.rejected_by_name || '—'} (${ROLE_LABEL[u.rejected_by_role || ''] || u.rejected_by_role || '—'}) · ${when(u.rejected_at)}${u.reject_reason ? ` — ${u.reject_reason}` : ''}` : ''
 
@@ -51,10 +52,12 @@ export function ScopePicker({ companies, outlets, value, onChange, allowed, outl
 }
 
 export function PendingItem({ u, companies, outlets }: { u: Profile; companies: Company[]; outlets: Outlet[] }) {
-  const { isSuper, session } = useAuth()
+  const { isSuper: ceo, isGm, can, session } = useAuth()
+  const isSuper = ceo || (isGm && can('users.approve')) // CEO, or a General Manager with this power
   const cfg = useConfig()
   const rule = ruleFor(cfg.user_approvals, session?.user.id || '')
-  const roles: Role[] = isSuper ? [...ROLES] : ROLES.filter((r) => rule.roles.includes(r))
+  // always below the approver: CEO never another CEO; GM never CEO / GM
+  const roles: Role[] = ceo ? ROLES.filter((r) => r !== 'super_admin') : isGm ? ROLES.filter((r) => r !== 'super_admin' && r !== 'general_manager') : ROLES.filter((r) => rule.roles.includes(r) && r !== 'super_admin' && r !== 'general_manager')
   const allowed: string[] | '*' = isSuper || rule.companies.includes('*') ? '*' : rule.companies
   const reqOutlet = outlets.find((o) => o.id === u.requested_outlet_id)
   const reqCompany = u.requested_company_id || (reqOutlet ? outletCompany(reqOutlet) : '')
@@ -71,7 +74,7 @@ export function PendingItem({ u, companies, outlets }: { u: Profile; companies: 
   const run = async (fn: () => Promise<void>) => { setBusy(true); setErr(''); try { await fn() } catch (e) { setErr((e as Error).message) } finally { setBusy(false) } }
   const approve = () => {
     if (needsScope && empty && (!isSuper || omScope)) { setOpen(true); setErr(omScope ? 'Choose the outlet(s) for this outlet manager.' : 'Choose the company / outlets this person works for.'); return }
-    if (role === 'super_admin' && !confirm(`Make ${u.full_name || u.email} a Super Admin (full access to everything)?`)) return
+    if (role === 'super_admin' && !confirm(`Make ${u.full_name || u.email} the CEO (full access to everything)?`)) return
     void run(() => approveUser(u.id, role, role === 'super_admin' ? [] : effective.companies, role === 'super_admin' ? [] : effective.outlets))
   }
   const reject = () => {
@@ -110,7 +113,7 @@ export function PendingItem({ u, companies, outlets }: { u: Profile; companies: 
   )
 }
 
-/** shown at the top of the dashboard for the Super Admin and for HR Admins allowed to approve sign-ups */
+/** shown at the top of the dashboard for the CEO and for HR Admins allowed to approve sign-ups */
 export function PendingUsersPanel() {
   const { canApproveUsers } = useAuth()
   const cfg = useConfig()

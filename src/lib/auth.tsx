@@ -7,12 +7,22 @@ import { ruleFor } from './companies'
 import { disablePush } from './push'
 import { isNative } from './platform'
 import { cancelNativeAlerts } from './localNotify'
+import { withDefaults, type PowerMap } from './powers'
+import type { ApprovalRoute } from './workflow'
 
 export interface Perms {
   role: Role | null
-  isSuper: boolean // Super Admin
+  isSuper: boolean // CEO (internal role key super_admin)
+  isCeo: boolean // same as isSuper
+  isGm: boolean // General Manager
+  /** CEO, or a General Manager the CEO allowed this power (see lib/powers.ts). Always false for other roles. */
+  can: (power: string) => boolean
+  /** CEO or General Manager with this power: the "top" admin checks that used to be Super-Admin-only */
+  top: (power: string) => boolean
+  powers: PowerMap
+  route: ApprovalRoute | null
   isHrAdmin: boolean
-  isHr: boolean // HR Manager, HR Admin or Super Admin (staff who keep worker records)
+  isHr: boolean // HR Manager, HR Admin or CEO (staff who keep worker records)
   isOM: boolean // Outlet Manager (only his outlets)
   canWrite: boolean // edit worker master data, outlets, settings
   isAdmin: boolean // manage users
@@ -22,8 +32,10 @@ export interface Perms {
   canSeeAudit: boolean
   myOutlets: string[]
   myCompanies: string[]
-  /** Super Admin, or an HR Admin the Super Admin allowed to approve new sign-ups */
+  /** CEO, or an HR Admin the CEO allowed to approve new sign-ups */
   canApproveUsers: boolean
+  /** roles I may add with "Add user" (always below my own; the server re-checks) */
+  creatableRoles: Role[]
 }
 interface AuthCtx extends Perms {
   session: Session | null
@@ -36,7 +48,7 @@ const Ctx = createContext<AuthCtx>(null as unknown as AuthCtx)
 export const useAuth = () => useContext(Ctx)
 const PROFILE_CACHE = 'fwm-profile'
 /** per-user caches on this device (removed on sign-out so the next person starts clean) */
-const USER_CACHES = ['fwm-config', 'fwm-requests', 'fwm-sync-user', 'fwm-native-alerts', 'fwm-last-notified', 'fwm-dirty', 'fwm-cursor']
+const USER_CACHES = ['fwm-powers', 'fwm-config', 'fwm-requests', 'fwm-sync-user', 'fwm-native-alerts', 'fwm-last-notified', 'fwm-dirty', 'fwm-cursor']
 /** accounts created before roles existed */
 export const normRole = (r?: string | null): Role | null => (r === 'admin' ? 'super_admin' : r === 'manager' ? 'hr_manager' : (r as Role) || null)
 
@@ -109,22 +121,46 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // start fresh at the login screen: drops every in-memory copy of the previous user's data
     if (wipe) window.location.replace(window.location.pathname + window.location.search + '#/')
   }
+  // GM powers (my_powers) and who gives final approval (approval_route); refreshed live when the CEO changes them
+  const [pw, setPw] = useState<{ powers: PowerMap; route: ApprovalRoute | null }>(() => { try { return JSON.parse(localStorage.getItem('fwm-powers') || 'null') || { powers: {}, route: null } } catch { return { powers: {}, route: null } } })
+  const loadPowers = useCallback(async () => {
+    const [a, b] = await Promise.all([supabase.rpc('my_powers'), supabase.rpc('approval_route')])
+    if (a.error || b.error) return
+    const v = { powers: (a.data || {}) as PowerMap, route: (b.data || null) as ApprovalRoute | null }
+    setPw(v); localStorage.setItem('fwm-powers', JSON.stringify(v))
+  }, [])
+  const topRole = role === 'super_admin' || role === 'general_manager'
+  useEffect(() => {
+    if (!active || !topRole) return
+    void loadPowers()
+    const ch = supabase.channel('my-powers').on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => { void loadPowers() }).subscribe()
+    const t = window.setInterval(() => { void loadPowers() }, 60000)
+    const onFocus = () => { void loadPowers() }
+    window.addEventListener('focus', onFocus)
+    return () => { void supabase.removeChannel(ch); window.clearInterval(t); window.removeEventListener('focus', onFocus) }
+  }, [active, topRole, role, loadPowers])
   const flags = cfg.hr_admin
   const isSuper = role === 'super_admin'
+  const isGm = role === 'general_manager'
   const isHrAdmin = role === 'hr_admin'
+  const gmPowers = withDefaults(isGm ? pw.powers : {})
+  const can = (p: string) => isSuper || (isGm && gmPowers[p] !== false)
   const perms: Perms = {
-    role, isSuper, isHrAdmin,
-    isHr: isSuper || isHrAdmin || role === 'hr_manager',
+    role, isSuper, isCeo: isSuper, isGm, can, top: can, powers: gmPowers, route: topRole ? pw.route : null, isHrAdmin,
+    isHr: isSuper || isGm || isHrAdmin || role === 'hr_manager',
     isOM: role === 'outlet_manager',
-    canWrite: isSuper || isHrAdmin || role === 'hr_manager',
-    isAdmin: isSuper || (isHrAdmin && flags.manageUsers),
-    canSeeSalary: isSuper || role === 'hr_manager' || (isHrAdmin && flags.viewSalary),
-    canDeleteWorkers: isSuper || (isHrAdmin && flags.deleteWorkers),
-    canRequest: isSuper || isHrAdmin || role === 'hr_manager' || role === 'outlet_manager',
-    canSeeAudit: isSuper || (isHrAdmin && flags.viewAudit),
+    canWrite: isSuper || isHrAdmin || role === 'hr_manager' || (isGm && (can('workers.edit') || can('org.outlets'))),
+    isAdmin: isSuper || (isGm && (can('users.roles') || can('users.approve'))) || (isHrAdmin && flags.manageUsers),
+    canSeeSalary: isSuper || role === 'hr_manager' || (isGm && can('workers.salary')) || (isHrAdmin && flags.viewSalary),
+    canDeleteWorkers: isSuper || (isGm && can('workers.delete')) || (isHrAdmin && flags.deleteWorkers),
+    canRequest: isSuper || isGm || isHrAdmin || role === 'hr_manager' || role === 'outlet_manager',
+    canSeeAudit: isSuper || (isGm && can('users.audit')) || (isHrAdmin && flags.viewAudit),
     myOutlets: profile?.outlet_ids || [],
     myCompanies: profile?.company_ids || [],
-    canApproveUsers: isSuper || (isHrAdmin && !!session && ruleFor(cfg.user_approvals, session.user.id).enabled),
+    canApproveUsers: isSuper || (isGm && can('users.approve')) || (isHrAdmin && !!session && ruleFor(cfg.user_approvals, session.user.id).enabled),
+    creatableRoles: isSuper ? ['general_manager', 'hr_admin', 'hr_manager', 'outlet_manager', 'viewer']
+      : isGm ? (can('users.create') ? ['hr_admin', 'hr_manager', 'outlet_manager', 'viewer'] : [])
+      : isHrAdmin ? ['hr_manager', 'outlet_manager', 'viewer'] : role === 'hr_manager' ? ['outlet_manager'] : [],
   }
   return (
     <Ctx.Provider value={{ session, profile, loading, ...perms, refreshProfile: () => loadProfile(session), signOut }}>

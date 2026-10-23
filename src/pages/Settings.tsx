@@ -8,6 +8,9 @@ import { SetPasswordForm } from './SetPassword'
 import { PendingUsersPanel } from '../components/userApprovals'
 import { usePendingUsers } from '../lib/userApprovals'
 import { AccountCard, PhoneAlertsCard, UsersCard } from '../components/cloud'
+import { AddUserCard } from '../components/addUser'
+import { AgenciesCard } from '../components/agencies'
+import { GmPowersCard } from '../components/gmPowers'
 import { ConsentTranslationsCard } from '../components/consentTranslations'
 import { ApprovalRulesCard, AuditCard, EmergencyReasonsCard, HrFlagsCard, MyAlertsCard, NotificationsCard, PassportSettingsCard, VaultSettingsCard } from '../components/adminSettings'
 import { useAuth } from '../lib/auth'
@@ -31,10 +34,11 @@ type V = Record<string, unknown>
 interface BIPEvent extends Event { prompt: () => Promise<void> }
 
 /* Settings is split into tabs (deep links: #/settings/<tab>). Each tab shows only for roles that can use it. */
-export type SettingsTab = 'account' | 'users' | 'org' | 'workers' | 'passport' | 'requests' | 'notifications' | 'data' | 'about'
+export type SettingsTab = 'account' | 'users' | 'agencies' | 'org' | 'workers' | 'passport' | 'requests' | 'notifications' | 'data' | 'about'
 const TABS: { id: SettingsTab; label: string; icon: string; sub: string }[] = [
   { id: 'account', label: 'Account', icon: 'users', sub: 'My profile, password, sign out' },
-  { id: 'users', label: 'Users & Access', icon: 'lock', sub: 'Users, sign-ups, roles, HR Admin permissions, audit log' },
+  { id: 'users', label: 'Users & Access', icon: 'lock', sub: 'Users, sign-ups, roles, General Manager powers, HR Admin permissions, audit log' },
+  { id: 'agencies', label: 'Agencies & Integrations', icon: 'store', sub: 'Government sites for status checks, notes, future API' },
   { id: 'org', label: 'Companies & Outlets', icon: 'store', sub: 'Companies, outlets, logos' },
   { id: 'workers', label: 'Workers & Documents', icon: 'doc', sub: 'Leave / ticket / contract policy, job categories, document vault' },
   { id: 'passport', label: 'Passport & Consent', icon: 'plane', sub: 'Safekeeping, release reasons, consent translations' },
@@ -44,16 +48,19 @@ const TABS: { id: SettingsTab; label: string; icon: string; sub: string }[] = [
   { id: 'about', label: 'About', icon: 'more', sub: 'Version, install the app' },
 ]
 /** searchable settings: [tab, section id, words] */
-const TITLES: Record<string, string> = {"s-demo": "Remove sample (DEMO) data", "s-account": "Account & cloud sync", "s-password": "Change password", "s-signout": "Sign out", "s-pending": "New users waiting for approval", "s-users": "Users", "s-approvers": "Who may approve new users", "s-hrflags": "HR Admin permissions", "s-audit": "Audit log", "s-companies": "Companies", "s-outlets": "Outlets", "s-policy": "Company & policy", "s-jobs": "Job categories", "s-vault": "Document vault", "s-passport": "Passport safekeeping", "s-reasons": "Emergency release reasons", "s-consent": "Consent form translations", "s-rules": "Approval rules", "s-phone": "Phone alerts", "s-myalerts": "My alerts", "s-notify": "WhatsApp / SMS / email notifications", "s-backup": "Backup & data", "s-calendar": "Calendar & in-app notifications", "s-about": "About"}
+const TITLES: Record<string, string> = {"s-demo": "Remove sample (DEMO) data", "s-account": "Account & cloud sync", "s-password": "Change password", "s-signout": "Sign out", "s-pending": "New users waiting for approval", "s-users": "Users", "s-approvers": "Who may approve new users", "s-hrflags": "HR Admin permissions", "s-audit": "Audit log", "s-gmpowers": "General Manager powers", "s-agencies": "Agencies & Integrations", "s-adduser": "Add user", "s-companies": "Companies", "s-outlets": "Outlets", "s-policy": "Company & policy", "s-jobs": "Job categories", "s-vault": "Document vault", "s-passport": "Passport safekeeping", "s-reasons": "Emergency release reasons", "s-consent": "Consent form translations", "s-rules": "Approval rules", "s-phone": "Phone alerts", "s-myalerts": "My alerts", "s-notify": "WhatsApp / SMS / email notifications", "s-backup": "Backup & data", "s-calendar": "Calendar & in-app notifications", "s-about": "About"}
 const INDEX: [SettingsTab, string, string][] = [
   ['account', 's-account', 'Account & cloud sync signed in role access sync now'],
   ['account', 's-password', 'Change password'],
   ['account', 's-signout', 'Sign out switch user'],
   ['users', 's-pending', 'New users waiting for approval sign-ups approve reject'],
-  ['users', 's-users', 'Users pause resume reset password delete user roles outlets companies'],
+  ['users', 's-users', 'Users pause resume reset password delete user roles outlets companies add user create'],
+  ['users', 's-adduser', 'Add user create new user login details WhatsApp'],
   ['users', 's-approvers', 'Who may approve new users HR Admin approvals'],
   ['users', 's-hrflags', 'HR Admin permissions salary delete workers audit reset passwords'],
   ['users', 's-audit', 'Audit log history'],
+  ['users', 's-gmpowers', 'General Manager powers GM permissions select all'],
+  ['agencies', 's-agencies', 'Agencies integrations JTKSM FWCMS ePPAx immigration MyEG KDN PERKESO EPF links status check'],
   ['org', 's-companies', 'Companies logos'],
   ['org', 's-outlets', 'Outlets business units outlet logo manager address'],
   ['workers', 's-policy', 'Company & policy alert lead times annual leave carry-forward flight ticket contract penalty grace days'],
@@ -85,14 +92,15 @@ export default function SettingsPage() {
   const hasDemoNow = workers.some((w) => isDemoName(w.fullName)) || outlets.some((o) => isDemoName(o.name))
   const [hasDemo, setHasDemo] = useState(false) // sticky: keep the card (and its result) after the removal syncs
   useEffect(() => { if (hasDemoNow) setHasDemo(true) }, [hasDemoNow])
-  const { canWrite, isAdmin, isHr, isSuper, myCompanies, canApproveUsers, canSeeAudit } = useAuth()
+  const { canWrite, isAdmin, isHr, isSuper, myCompanies, canApproveUsers, canSeeAudit, creatableRoles, isHrAdmin, isGm, can, top } = useAuth()
+  const canAgencies = isSuper || isHrAdmin || (isGm && can('agencies.edit'))
   const { pending: newUsers } = usePendingUsers()
   const nav = useNavigate()
   const params = useParams<{ tab?: string }>()
   const visible = useMemo(() => TABS.filter((t) => ({
-    account: true, users: isAdmin || canApproveUsers || isSuper || canSeeAudit, org: isHr, workers: isHr, passport: isHr, requests: isHr,
+    account: true, users: isAdmin || canApproveUsers || isSuper || canSeeAudit || creatableRoles.length > 0, agencies: canAgencies, org: isHr, workers: isHr, passport: isHr, requests: isHr,
     notifications: true, data: true, about: true,
-  } as Record<SettingsTab, boolean>)[t.id]), [isAdmin, canApproveUsers, isSuper, canSeeAudit, isHr])
+  } as Record<SettingsTab, boolean>)[t.id]), [isAdmin, canApproveUsers, isSuper, canSeeAudit, isHr, creatableRoles.length, canAgencies])
   const legacy = window.location.hash.includes('backup') ? 'data' : ''
   const tab: SettingsTab = (visible.find((t) => t.id === (params.tab || legacy))?.id) || 'account'
   const badges: Partial<Record<SettingsTab, number>> = { users: newUsers.length }
@@ -105,8 +113,8 @@ export default function SettingsPage() {
     else window.scrollTo({ top: 0 })
   }
   const companies = useConfig().companies.items
-  // a company-limited HR person can only add outlets to his own companies; only the Super Admin moves outlets between companies
-  const coOptions = companies.filter((c) => isSuper || !myCompanies.length || myCompanies.includes(c.id)).map((c) => ({ value: c.id, label: c.name }))
+  // a company-limited HR person can only add outlets to his own companies; only the CEO moves outlets between companies
+  const coOptions = companies.filter((c) => top('org.companies') || !myCompanies.length || myCompanies.includes(c.id)).map((c) => ({ value: c.id, label: c.name }))
   const [policy, setPolicy] = useState(false)
   const [outlet, setOutlet] = useState<V | null>(null)
   const [job, setJob] = useState<V | null>(null)
@@ -182,10 +190,14 @@ export default function SettingsPage() {
       {tab === 'users' && <>
         {canApproveUsers && !isAdmin && <Sec id="s-pending"><PendingUsersPanel /></Sec>}
         {isAdmin && <Sec id="s-users"><UsersCard /></Sec>}
-        {isSuper && <Sec id="s-approvers"><UserApprovalRulesCard /></Sec>}
-        {isSuper && <Sec id="s-hrflags"><HrFlagsCard /></Sec>}
-        <Sec id="s-audit"><AuditCard /></Sec>
+        {!isAdmin && creatableRoles.length > 0 && <Sec id="s-adduser"><AddUserCard /></Sec>}
+        {isSuper && <Sec id="s-gmpowers"><GmPowersCard /></Sec>}
+        {top('hr.approvers') && <Sec id="s-approvers"><UserApprovalRulesCard /></Sec>}
+        {top('hr.flags') && <Sec id="s-hrflags"><HrFlagsCard /></Sec>}
+        {canSeeAudit && <Sec id="s-audit"><AuditCard /></Sec>}
       </>}
+
+      {tab === 'agencies' && <Sec id="s-agencies"><AgenciesCard /></Sec>}
 
       {tab === 'org' && <>
         <Sec id="s-companies"><CompaniesCard /></Sec>
@@ -250,7 +262,7 @@ export default function SettingsPage() {
       {tab === 'notifications' && <>
         <Sec id="s-phone"><PhoneAlertsCard /></Sec>
         <Sec id="s-myalerts"><MyAlertsCard /></Sec>
-        {isSuper ? <Sec id="s-notify"><NotificationsCard /></Sec> : <p className="muted small">WhatsApp / SMS / email delivery is set up by the Super Admin (off by default).</p>}
+        {top('notifications.settings') ? <Sec id="s-notify"><NotificationsCard /></Sec> : <p className="muted small">WhatsApp / SMS / email delivery is set up by the CEO (off by default).</p>}
       </>}
 
       {tab === 'data' && <>
@@ -273,7 +285,7 @@ export default function SettingsPage() {
           {msg && <p className="ok" role="status">{msg}</p>}
         </Card>
       </div>
-      {isSuper && hasDemo && <Sec id="s-demo"><RemoveDemoCard /></Sec>}
+      {top('data.demo') && hasDemo && <Sec id="s-demo"><RemoveDemoCard /></Sec>}
         <Sec id="s-calendar">
       <Card title="Calendar & in-app notifications">
         {!isNative() && <p className="small">In-app notifications: <strong>{notifySupported() ? Notification.permission : 'not supported'}</strong>. A summary of urgent items also shows when you open the app.</p>}
@@ -312,7 +324,7 @@ export default function SettingsPage() {
       {outlet && (
         <FormModal title={outlet.id ? 'Edit outlet' : 'Add outlet'} initial={{ ...outlet, companyId: outlet.companyId || DEFAULT_COMPANY_ID }} onClose={() => setOutlet(null)}
           fields={[{ key: 'name', label: 'Outlet name', required: true, full: true },
-            ...(isSuper || !outlet.id ? [{ key: 'companyId', label: 'Company', type: 'select' as const, options: coOptions, required: true }] : []), { key: 'type', label: 'Business type', type: 'select', options: [...BUSINESS_TYPES], required: true }, { key: 'manager', label: 'Manager / PIC' }, { key: 'address', label: 'Address', type: 'textarea' }]}
+            ...(top('org.companies') || !outlet.id ? [{ key: 'companyId', label: 'Company', type: 'select' as const, options: coOptions, required: true }] : []), { key: 'type', label: 'Business type', type: 'select', options: [...BUSINESS_TYPES], required: true }, { key: 'manager', label: 'Manager / PIC' }, { key: 'address', label: 'Address', type: 'textarea' }]}
           onDelete={outlet.id ? () => { if (workers.some((w) => w.outletId === outlet.id)) alert('Workers are assigned to this outlet; they will show “—”.'); db.outlets.delete(String(outlet.id)) } : undefined}
           onSave={(v) => db.outlets.put({ id: (outlet.id as string) || uid(), name: String(v.name), type: v.type as BusinessType, manager: v.manager as string, address: v.address as string, companyId: String(v.companyId || outlet.companyId || DEFAULT_COMPANY_ID), ...(outlet.logo ? { logo: String(outlet.logo) } : {}) }).then(() => {})} />
       )}

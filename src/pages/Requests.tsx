@@ -17,8 +17,11 @@ import {
 } from '../lib/workflow'
 import { fmtDate, rm, todayISO } from '../lib/util'
 import { isExited } from '../lib/calc'
+import { hrTaskDone, useHrTasks, type HrTask } from '../lib/ceoReview'
+import { OverruleDialog, decidedLine } from './CeoReview'
+import { toast } from '../components/toast'
 
-const LEVEL_PATH: Record<string, string> = { hr_manager: 'HR Manager', hr_admin: 'HR Manager → HR Admin', super_admin: 'HR Manager → HR Admin → Super Admin' }
+const LEVEL_PATH: Record<string, string> = { hr_manager: 'HR Manager', hr_admin: 'HR Manager → HR Admin', super_admin: 'HR Manager → HR Admin → General Manager (final; CEO if no GM)' }
 const ago = (iso: string) => {
   const h = Math.floor((Date.now() - new Date(iso).getTime()) / 3600000)
   return h < 1 ? 'just now' : h < 24 ? `${h} h ago` : `${Math.floor(h / 24)} d ago`
@@ -26,9 +29,11 @@ const ago = (iso: string) => {
 const err = (e: unknown) => alert((e as Error).message)
 
 /* ======================= list ======================= */
-type ListTab = 'mine_action' | 'open' | 'done' | 'all'
+type ListTab = 'mine_action' | 'open' | 'done' | 'all' | 'tasks'
 export default function RequestsPage() {
-  const { session, role, canRequest } = useAuth()
+  const { session, role, canRequest, can, route, isHr } = useAuth()
+  const tasks = useHrTasks(isHr)
+  const openTasks = tasks.filter((x) => x.status === 'open')
   const uidMe = session?.user.id || ''
   const { rows, loading, error } = useRequests()
   const workers = useWorkers()
@@ -38,7 +43,7 @@ export default function RequestsPage() {
   const [tab, setTab] = useState<ListTab>((sp.get('tab') as ListTab) || 'mine_action')
   const [type, setType] = useState(sp.get('type') || '')
   const [outlet, setOutlet] = useState('')
-  const mine = rows.filter((r) => needsMyAction(r, role || '', uidMe))
+  const mine = rows.filter((r) => needsMyAction(r, role || '', uidMe, { can, route }))
   const shown = rows.filter((r) => (tab === 'mine_action' ? mine.includes(r) : tab === 'open' ? OPEN_STATUSES.includes(r.status) : tab === 'done' ? !OPEN_STATUSES.includes(r.status) : true)
     && (!type || r.type === type) && (!outlet || r.outlet_id === outlet))
   const wName = (id: string | null) => workers.find((w) => w.id === id)?.fullName || '—'
@@ -48,13 +53,13 @@ export default function RequestsPage() {
         <div><h1>Requests</h1><p className="muted">{rows.filter((r) => OPEN_STATUSES.includes(r.status)).length} open · {mine.length} waiting for you</p></div>
         {canRequest && <Btn kind="primary" icon="plus" onClick={() => nav('/requests/new')}>New request</Btn>}
       </div>
-      <Tabs tabs={[{ id: 'mine_action', label: 'Needs my action', badge: mine.length }, { id: 'open', label: 'Open' }, { id: 'done', label: 'Closed' }, { id: 'all', label: 'All' }]} value={tab} onChange={(t) => { setTab(t); setSp({ tab: t }, { replace: true }) }} />
+      <Tabs tabs={[{ id: 'mine_action', label: 'Needs my action', badge: mine.length }, { id: 'open', label: 'Open' }, { id: 'done', label: 'Closed' }, { id: 'all', label: 'All' }, ...(isHr ? [{ id: 'tasks' as ListTab, label: 'HR follow-ups', badge: openTasks.length }] : [])]} value={tab} onChange={(t) => { setTab(t); setSp({ tab: t }, { replace: true }) }} />
       <Toolbar>
         <SelectFilter label="Type" value={type} onChange={setType} options={[{ value: '', label: 'All types' }, ...REQUEST_TYPES.map((t) => ({ value: t.key, label: `${t.icon} ${t.label}` }))]} />
         {outlets.length > 1 && <SelectFilter label="Outlet" value={outlet} onChange={setOutlet} options={[{ value: '', label: 'All outlets' }, ...outlets.map((o) => ({ value: o.id, label: o.name }))]} />}
       </Toolbar>
       {error && <p className="warn small">{error}</p>}
-      <Card>
+      {tab === 'tasks' ? <HrTasksCard tasks={tasks} /> : <Card>
         {loading && !rows.length ? <p className="muted">Loading…</p> : shown.length === 0 ? <Empty icon="check" title={tab === 'mine_action' ? 'Nothing waiting for you 🎉' : 'No requests'} /> : (
           <ul className="rows req-list">
             {shown.map((r) => {
@@ -79,8 +84,36 @@ export default function RequestsPage() {
             })}
           </ul>
         )}
-      </Card>
+      </Card>}
     </div>
+  )
+}
+
+export function HrTasksCard({ tasks, title = 'HR follow-up tasks' }: { tasks: HrTask[]; title?: string }) {
+  const [busy, setBusy] = useState('')
+  const done = async (t: HrTask) => {
+    const note = prompt(`Done: ${t.title}\n\nNote (optional, e.g. ticket cancelled, refund ref):`)
+    if (note === null) return
+    setBusy(t.id)
+    try { await hrTaskDone(t.id, note); toast('Follow-up marked done ✓') } catch (e) { err(e) } finally { setBusy('') }
+  }
+  return (
+    <Card title={title}>
+      {tasks.length === 0 ? <p className="muted small">No follow-up tasks.</p> : (
+        <ul className="rows">
+          {tasks.map((t) => (
+            <li key={t.id}>
+              <div className="r-main">
+                <strong>{t.status === 'done' ? '✅ ' : '🟠 '}{t.title}</strong>
+                <small>{t.details} · created by {t.created_by_name} · {new Date(t.created_at).toLocaleString()}{t.request_id && <> · <Link to={`/requests/${t.request_id}`}>open request</Link></>}</small>
+                {t.status === 'done' && <small className="muted">Done by {t.done_by_name} · {t.done_at ? new Date(t.done_at).toLocaleString() : ''}{t.done_note ? ` — ${t.done_note}` : ''}</small>}
+              </div>
+              {t.status === 'open' && <div className="r-act"><Btn small kind="primary" icon="check" disabled={busy === t.id} onClick={() => done(t)}>Mark done</Btn></div>}
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
   )
 }
 
@@ -216,8 +249,11 @@ export function NewRequest() {
 export function RequestDetail() {
   const { id } = useParams()
   const nav = useNavigate()
-  const { session, role, canWrite, isHr } = useAuth()
+  const { session, role, canWrite, isHr, can, route, isSuper } = useAuth()
   const { req: r, events, loading, error } = useRequest(id)
+  const reqTasks = useHrTasks(isHr && !!id, id)
+  const [detailSp] = useSearchParams()
+  const [ceoOpen, setCeoOpen] = useState(() => detailSp.get('overrule') === '1') // push action "Overrule"
   const { docs } = useDocs({ requestId: id })
   const workers = useWorkers()
   const outlets = useOutlets()
@@ -231,7 +267,7 @@ export function RequestDetail() {
   const uidMe = session?.user.id || ''
   const w = workers.find((x) => x.id === r?.worker_id)
   const t = r ? REQUEST_TYPE[r.type] : undefined
-  const actions = useMemo(() => (r ? availableActions(r, role || '', uidMe).filter((a) => a !== 'apply' || canWrite) : []), [r, role, uidMe, canWrite])
+  const actions = useMemo(() => (r ? availableActions(r, role || '', uidMe, { can, route }).filter((a) => a !== 'apply' || canWrite) : []), [r, role, uidMe, canWrite, can, route])
   if (loading) return <div className="page"><p className="muted">Loading…</p></div>
   if (!r) return <div className="page"><Empty title="Request not found">{error && <p className="muted">{error}</p>}<Btn onClick={() => nav('/requests')}>Back</Btn></Empty></div>
 
@@ -281,11 +317,21 @@ export function RequestDetail() {
           ...(r.amount ? [['Amount', rm(r.amount)] as [string, string]] : []),
           ...(r.type === 'emergency_leave' ? [['Emergency', String(r.data.reasonLabel || r.data.reasonKey)] as [string, string], ...(r.data.relationship ? [['Family member', String(r.data.relationship)] as [string, string]] : []), ...(r.data.reasonDetail ? [['Details', String(r.data.reasonDetail)] as [string, string]] : [])] : []),
           ...fields.map((f) => [f.label, show(f)] as [string, string]),
-          ...(r.decided_by_name ? [['Decided by', `${r.decided_by_name} · ${r.decided_at ? new Date(r.decided_at).toLocaleString() : ''}`] as [string, string]] : []),
+          ...(r.decided_by_name ? [['Decision', decidedLine(r)] as [string, string]] : []),
           ...(r.applied_by_name ? [['Applied by', `${r.applied_by_name}${r.result?.summary ? ' — ' + r.result.summary : ''}`] as [string, string]] : []),
           ...(r.result?.ticketDecision ? [['Ticket decision', String(r.result.ticketDecision).replace('_', ' ')] as [string, string]] : []),
         ]} />
+        {r.ceo_locked && !isSuper && <p className="callout small mt-s">🔒 Updated by CEO{r.ceo_updated_at ? ` · ${new Date(r.ceo_updated_at).toLocaleString()}` : ''}. This decision is final — only the CEO can change it.</p>}
+        {r.ceo_locked && isSuper && <p className="callout small mt-s">🔒 Your decision is final and locks this request for everyone else.</p>}
       </Card>
+
+      {isSuper && (
+        <Card title="CEO" className="card-ceo">
+          <p className="muted small">Overrule, amend, recall or mark reviewed. Your decision is final and locks the request.</p>
+          <Btn kind="primary" onClick={() => setCeoOpen(true)}>Overrule / recall…</Btn>
+        </Card>
+      )}
+      {isHr && reqTasks.length > 0 && <HrTasksCard tasks={reqTasks} />}
 
       {(r.type === 'home_leave' || r.type === 'emergency_leave' || ticketBooked) && (
         <Card title="✈️ Flight ticket" className={ticketBooked ? 'card-ok' : ''}>
@@ -346,8 +392,8 @@ export function RequestDetail() {
             <li key={e.id}>
               <span className="tl-dot" />
               <div>
-                <strong>{ACTION_LABEL[e.action] || (e.action === 'submit' ? 'Submitted' : e.action === 'update' ? 'Updated' : e.action)}</strong>
-                {e.to_status && e.action !== 'submit' && <> → <Chip tone={STATUS_TONE[e.to_status as keyof typeof STATUS_TONE] || 'gray'}>{STATUS_LABEL[e.to_status as keyof typeof STATUS_LABEL] || e.to_status}</Chip></>}
+                <strong>{e.action === 'ceo_overrule' || e.action === 'ceo_recall' ? `${ACTION_LABEL[e.action]} ${e.by_name}: ${STATUS_LABEL[e.from_status as keyof typeof STATUS_LABEL] || e.from_status} → ${STATUS_LABEL[e.to_status as keyof typeof STATUS_LABEL] || e.to_status}` : ACTION_LABEL[e.action] || (e.action === 'submit' ? 'Submitted' : e.action === 'update' ? 'Updated' : e.action)}</strong>
+                {e.to_status && e.action !== 'submit' && !e.action.startsWith('ceo_') && <> → <Chip tone={STATUS_TONE[e.to_status as keyof typeof STATUS_TONE] || 'gray'}>{STATUS_LABEL[e.to_status as keyof typeof STATUS_LABEL] || e.to_status}</Chip></>}
                 <small className="muted"> · {e.by_name} ({ROLE_LABEL[e.by_role || ''] || e.by_role}) · {new Date(e.at).toLocaleString()}</small>
                 {e.comment && <p className="tl-c">{e.comment}</p>}
               </div>
@@ -358,6 +404,7 @@ export function RequestDetail() {
 
       {up && w && <UploadDoc workerId={w.id} requestId={r.id} category={up.category} lockCategory={up.category !== 'Other'} title={up.title} onClose={() => setUp(null)}
         onDone={async (d) => { try { if (d.category === 'Flight ticket') await onTicketUploaded(d); if (d.category === EMERGENCY_PROOF_CATEGORY) await noteRequest(r.id, { proofReceived: true }, 'Proof uploaded') } catch (e) { err(e) } }} />}
+      {ceoOpen && isSuper && <OverruleDialog r={r} workerName={w?.fullName} onClose={() => setCeoOpen(false)} />}
       {applyOpen && <ApplyModal r={r} ticketDocId={tickets[0]?.id} company={s.companyName} onClose={() => setApplyOpen(false)} />}
     </div>
   )

@@ -1,4 +1,4 @@
-/* Super Admin: the list of companies, and which HR Admins may approve new sign-ups (companies + roles). */
+/* CEO: the list of companies, and which HR Admins may approve new sign-ups (companies + roles). */
 import { useEffect, useState } from 'react'
 import { Btn, Card, Chip } from './ui'
 import { saveConfig, useConfig } from '../lib/config'
@@ -12,7 +12,8 @@ import { LogoEdit } from './logos'
 export function CompaniesCard() {
   const cfg = useConfig()
   const outlets = useOutlets()
-  const { isSuper, myCompanies, myOutlets } = useAuth()
+  const { top, myCompanies, myOutlets } = useAuth()
+  const isSuper = top('org.companies') // CEO, or a General Manager with this power
   const all = cfg.companies.items
   const items = isSuper || (!myCompanies.length && !myOutlets.length) ? all
     : all.filter((c) => myCompanies.includes(c.id) || outlets.some((o) => myOutlets.includes(o.id) && outletCompany(o) === c.id))
@@ -77,9 +78,10 @@ export function UserApprovalRulesCard() {
     } catch (e) { setMsg('⚠️ ' + (e as Error).message) }
   }
   const tog = (list: string[], v: string, on: boolean) => (on ? [...new Set([...list, v])] : list.filter((x) => x !== v))
+  const isGmView = useAuth().isGm
   return (
     <Card title="New-user approvals">
-      <p className="small">You (Super Admin) always see and can approve <strong>every</strong> new sign-up — they appear on your dashboard under “Needs my action”. You can also let an HR Admin approve sign-ups for some companies. Sign-ups that chose no company (“unassigned”) are for you only.</p>
+      <p className="small">The CEO{isGmView ? ' and you (General Manager, with the approve power)' : ' (you)'} always see and can approve <strong>every</strong> new sign-up — they appear on your dashboard under “Needs my action”. You can also let an HR Admin approve sign-ups for some companies. Sign-ups that chose no company (“unassigned”) are for you only.</p>
       {admins.length === 0 && <p className="muted small">No active HR Admins yet. Give someone the HR Admin role in Users first.</p>}
       <ul className="rows">
         {admins.filter((a) => normRole(a.role) === 'hr_admin').map((a) => {
@@ -109,7 +111,7 @@ export function UserApprovalRulesCard() {
           )
         })}
       </ul>
-      <p className="muted small">Super Admin is never grantable by an HR Admin. Every approval is recorded (who / when) in the user list, the dashboard history and the audit log, and you get a notification “User X approved by HR Admin Y”.</p>
+      <p className="muted small">CEO is never grantable by an HR Admin. Every approval is recorded (who / when) in the user list, the dashboard history and the audit log, and you get a notification “User X approved by HR Admin Y”.</p>
       {msg && <p className="small" role="status">{msg}</p>}
     </Card>
   )

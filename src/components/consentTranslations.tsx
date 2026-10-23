@@ -1,4 +1,4 @@
-/* Settings → Passport safekeeping → Consent form translations (Super Admin / HR Admin).
+/* Settings → Passport safekeeping → Consent form translations (CEO / HR Admin).
  * Every language can be corrected field by field; blank = use the built-in text. Saved server-side (audited). */
 import { useState } from 'react'
 import { Btn, Card, Chip, Modal } from './ui'
@@ -10,10 +10,10 @@ import { LANGUAGES, langDef } from '../lib/languages'
 const EDITABLE = LANGUAGES.filter((l) => l.code !== 'en' && l.code !== 'other')
 
 export function ConsentTranslationsCard() {
-  const { isSuper, isHrAdmin, profile } = useAuth()
+  const { isSuper, isHrAdmin, profile, top } = useAuth()
   const items = useConfig().consent_translations?.items || {}
   const [edit, setEdit] = useState<string | null>(null)
-  if (!isSuper && !isHrAdmin) return null
+  if (!isSuper && !isHrAdmin && !top('passport.consent')) return null
   return (
     <Card title="Consent form translations">
       <p className="muted small">The passport-safekeeping consent form prints in <b>English + the worker’s primary language</b> (English + Bahasa Malaysia when the language is not recorded or has no translation).

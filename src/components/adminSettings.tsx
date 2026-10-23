@@ -1,4 +1,4 @@
-/* Super Admin / HR configuration cards shown in Settings:
+/* CEO / HR configuration cards shown in Settings:
  * approval rules, HR Admin powers, document vault, emergency leave reasons, passport safekeeping,
  * notifications (outbound channels OFF until the provider keys are added), my alerts, and the audit log. */
 import { useEffect, useState } from 'react'
@@ -18,7 +18,8 @@ const err = (e: unknown) => alert((e as Error).message)
 
 /* ---------------- Approval rules ---------------- */
 export function ApprovalRulesCard() {
-  const { isSuper } = useAuth()
+  const { top } = useAuth()
+  const isSuper = top('requests.rules') // CEO, or a General Manager with this power
   const cfg = useConfig()
   const [edit, setEdit] = useState<ApprovalRules | null>(null)
   const rules = edit || cfg.approval_rules
@@ -28,9 +29,9 @@ export function ApprovalRulesCard() {
     <Card title="Approval rules" actions={isSuper && (edit
       ? <><Btn small onClick={() => setEdit(null)}>Cancel</Btn> <Btn small kind="primary" onClick={() => saveConfig('approval_rules', edit).then(() => setEdit(null), err)}>Save rules</Btn></>
       : <Btn small icon="edit" onClick={() => setEdit(structuredClone(cfg.approval_rules))}>Edit</Btn>)}>
-      <p className="muted small">Flow: Outlet manager → HR Manager (return / reject / recommend) → final approver below → HR Manager applies → closed. HR Admin escalates to Super Admin when a request is above the RM limit. Loans and salary increments always go to the Super Admin. The database enforces these rules{isSuper ? '' : ' (only the Super Admin can change them)'}.</p>
+      <p className="muted small">Flow: Outlet manager → HR Manager (return / reject / recommend) → final approver below → HR Manager applies → closed. HR Admin escalates to CEO when a request is above the RM limit. Loans and salary increments always go to the CEO. The database enforces these rules{isSuper ? '' : ' (only the CEO can change them)'}.</p>
       <div className="tbl-wrap"><table className="tbl">
-        <thead><tr><th>Request</th><th>On</th><th>Final approver</th><th className="num">Super Admin above (RM)</th></tr></thead>
+        <thead><tr><th>Request</th><th>On</th><th>Final approver</th><th className="num">CEO above (RM)</th></tr></thead>
         <tbody>{groups.map((g) => [
           <tr key={g} className="grp"><td colSpan={4}><strong>{g}</strong></td></tr>,
           ...REQUEST_TYPES.filter((t) => t.group === g).map((t) => {
@@ -50,13 +51,14 @@ export function ApprovalRulesCard() {
 }
 
 /* ---------------- HR Admin powers ---------------- */
-const FLAG_LABEL: Record<keyof HrAdminFlags, string> = { manageUsers: 'Approve users & set roles/outlets (except Super Admin)', deleteWorkers: 'Delete worker records', viewSalary: 'See salaries, loans & payroll', viewAudit: 'See the audit log', resetPasswords: 'Reset passwords of users in their companies (never Super Admin / HR Admin)' }
+const FLAG_LABEL: Record<keyof HrAdminFlags, string> = { manageUsers: 'Approve users & set roles/outlets (except CEO)', deleteWorkers: 'Delete worker records', viewSalary: 'See salaries, loans & payroll', viewAudit: 'See the audit log', resetPasswords: 'Reset passwords of users in their companies (never CEO / HR Admin)' }
 export function HrFlagsCard() {
-  const { isSuper } = useAuth()
+  const { top } = useAuth()
+  const isSuper = top('hr.flags') // CEO, or a General Manager with this power
   const f = useConfig().hr_admin
   return (
     <Card title="HR Admin permissions">
-      <p className="muted small">What HR Admins may do in addition to approving requests. {isSuper ? 'Changes apply immediately for everyone.' : 'Set by the Super Admin.'}</p>
+      <p className="muted small">What HR Admins may do in addition to approving requests. {isSuper ? 'Changes apply immediately for everyone.' : 'Set by the CEO.'}</p>
       {(Object.keys(FLAG_LABEL) as (keyof HrAdminFlags)[]).map((k) => (
         <label key={k} className="check"><input type="checkbox" checked={!!f[k]} disabled={!isSuper} onChange={(e) => saveConfig('hr_admin', { ...f, [k]: e.target.checked }).catch(err)} /> {FLAG_LABEL[k]}</label>
       ))}
@@ -66,7 +68,8 @@ export function HrFlagsCard() {
 
 /* ---------------- Document vault ---------------- */
 export function VaultSettingsCard() {
-  const { isSuper } = useAuth()
+  const { top } = useAuth()
+  const isSuper = top('workers.vault') // CEO, or a General Manager with this power
   const v = useConfig().vault
   const [open, setOpen] = useState(false)
   const cats = allVaultCategories(v, VAULT_CATEGORIES)
@@ -90,7 +93,8 @@ export function VaultSettingsCard() {
 
 /* ---------------- Emergency leave reasons ---------------- */
 export function EmergencyReasonsCard() {
-  const { isSuper } = useAuth()
+  const { top } = useAuth()
+  const isSuper = top('requests.emergency') // CEO, or a General Manager with this power
   const list = useConfig().emergency_reasons
   const [ed, setEd] = useState<{ i: number; v: V } | null>(null)
   const fields: FieldDef[] = [
@@ -120,7 +124,8 @@ export function EmergencyReasonsCard() {
 
 /* ---------------- Passport safekeeping ---------------- */
 export function PassportSettingsCard() {
-  const { isSuper } = useAuth()
+  const { top } = useAuth()
+  const isSuper = top('passport.settings') // CEO, or a General Manager with this power
   const p = useConfig().passport
   const [open, setOpen] = useState(false)
   const fields: FieldDef[] = [
@@ -150,7 +155,7 @@ export function PassportSettingsCard() {
   )
 }
 
-/* ---------------- Notifications (Super Admin) ---------------- */
+/* ---------------- Notifications (CEO) ---------------- */
 const GUIDE: Record<'whatsapp' | 'sms' | 'email', { title: string; cost: string; steps: string[]; secrets: [string, string][] }> = {
   whatsapp: {
     title: 'WhatsApp — Meta WhatsApp Cloud API', cost: 'about RM0.0564 per utility message (Malaysia)',
@@ -189,7 +194,8 @@ const GUIDE: Record<'whatsapp' | 'sms' | 'email', { title: string; cost: string;
 interface Delivery { id: number; created_at: string; event: string; channel: Channel; recipient: string | null; address: string | null; title: string | null; status: string; attempts: number; last_error: string | null; cost: number | null }
 
 export function NotificationsCard() {
-  const { isSuper } = useAuth()
+  const { top } = useAuth()
+  const isSuper = top('notifications.settings') // CEO, or a General Manager with this power
   const n = useConfig().notifications
   const [guide, setGuide] = useState<keyof typeof GUIDE | null>(null)
   const [matrix, setMatrix] = useState(false)

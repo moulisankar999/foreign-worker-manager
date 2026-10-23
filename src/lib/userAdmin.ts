@@ -12,7 +12,20 @@ export function resetRedirect(): string {
   return isNative() ? 'https://fw.sunrisebayumas.com/' : window.location.origin + window.location.pathname
 }
 
-export async function userAdmin(action: UserAdminAction, userId: string, opts: { note?: string; sendEmail?: boolean } = {}): Promise<UserAdminResult> {
+export interface NewUser { email: string; fullName: string; phone?: string; role: string; companyIds: string[]; outletIds: string[]; tempPassword?: string; sendEmail: boolean; channels: string[] }
+export interface CreateResult { ok?: boolean; userId?: string; tempPassword?: string; emailed?: boolean; emailNote?: string; error?: string; duplicate?: string; editable?: boolean }
+/** "Add user": the server decides who may add which role (user_create_check) and returns the temporary password once */
+export async function createUser(u: NewUser): Promise<CreateResult> {
+  const { data, error } = await supabase.functions.invoke('user-admin', { body: { action: 'create_user', ...u, redirectTo: resetRedirect() } })
+  if (error) {
+    const ctx = (error as { context?: Response }).context
+    if (ctx && typeof ctx.json === 'function') { try { const j = await ctx.json(); if (j?.error) return j as CreateResult } catch { /* fall through */ } }
+    return { error: /failed to send|fetch/i.test(error.message) ? 'No internet connection. Please try again.' : error.message }
+  }
+  return data as CreateResult
+}
+
+export async function userAdmin(action: UserAdminAction, userId: string, opts: { note?: string; sendEmail?: boolean; tempPassword?: string } = {}): Promise<UserAdminResult> {
   const { data, error } = await supabase.functions.invoke('user-admin', { body: { action, userId, ...opts, redirectTo: resetRedirect() } })
   if (error) {
     let msg = error.message

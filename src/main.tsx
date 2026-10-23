@@ -4,11 +4,14 @@ import { HashRouter } from 'react-router-dom'
 import App from './App'
 import { AuthProvider } from './lib/auth'
 import './styles.css'
+import { applyTheme } from './lib/theme'
 import { ensureSeed } from './lib/db'
 import { isNative, shareFile } from './lib/platform'
 import { setNativeSaver } from './lib/util'
 import { listenForTaps } from './lib/localNotify'
 import { supabase } from './lib/supabase'
+
+applyTheme()
 
 /* Password-reset email links land on "<site>/#access_token=…&type=recovery" (or "#error=…").
  * With the hash router that hash is not a page, so read it here, start the session, and open the reset screen. */

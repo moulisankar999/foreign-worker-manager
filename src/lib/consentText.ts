@@ -1,5 +1,5 @@
 /* Passport safekeeping consent — the text in each language. English is the reference text.
- * Translations were prepared carefully but have NOT yet been checked by native speakers: Super Admin / HR Admin can
+ * Translations were prepared carefully but have NOT yet been checked by native speakers: CEO / HR Admin can
  * correct any of them in Settings → Passport safekeeping → Consent form translations (saved as app_config
  * 'consent_translations'). Legal meaning to keep in every language: voluntary consent; the passport stays the worker's
  * (and his government's) property; returned on request within the turnaround time; no fee/deposit/deduction; consent can

@@ -65,7 +65,7 @@ function EditDoc({ d, onClose }: { d: DocRow; onClose: () => void }) {
   const set = (k: keyof typeof v) => (e: { target: { value: string } }) => setV({ ...v, [k]: e.target.value })
   return (
     <Modal title="Document details" onClose={onClose} footer={<>
-      <Btn kind="danger" icon="trash" onClick={() => { if (confirm('Remove this document? (kept in the audit log; Super Admin can restore)')) void run(async () => { await updateDoc(d.id, { deleted: true }); onClose() }) }}>Remove</Btn>
+      <Btn kind="danger" icon="trash" onClick={() => { if (confirm('Remove this document? (kept in the audit log; CEO can restore)')) void run(async () => { await updateDoc(d.id, { deleted: true }); onClose() }) }}>Remove</Btn>
       <span className="grow" />
       <Btn onClick={onClose}>Cancel</Btn>
       <Btn kind="primary" onClick={() => run(async () => { await updateDoc(d.id, { ...v, doc_no: v.doc_no || null, issue_date: v.issue_date || null, expiry_date: v.expiry_date || null, notes: v.notes || null }); onClose() })}>Save</Btn>

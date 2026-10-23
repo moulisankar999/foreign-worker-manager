@@ -10,6 +10,17 @@ import { getSyncStatus } from '../lib/sync'
 import { Icon } from './Icon'
 import { Modal } from './ui'
 import { SetPasswordForm } from '../pages/SetPassword'
+import { setTheme, useTheme, type ThemePref } from '../lib/theme'
+
+export function ThemeSwitch() {
+  const t = useTheme()
+  const opts: [ThemePref, string][] = [['light', '☀️ Light'], ['dark', '🌙 Dark'], ['system', '📱 Auto']]
+  return (
+    <div className="theme-sw" role="radiogroup" aria-label="Theme">
+      {opts.map(([v, l]) => <button key={v} type="button" role="radio" aria-checked={t === v} className={t === v ? 'on' : ''} onClick={() => setTheme(v)}>{l}</button>)}
+    </div>
+  )
+}
 
 export const initialsOf = (name?: string | null, email?: string | null) => {
   const src = (name || '').trim() || (email || '').split('@')[0] || '?'
@@ -73,6 +84,7 @@ export function UserMenu() {
               <small className="muted">{me.scope}</small>
             </div>
           </div>
+          <ThemeSwitch />
           <Link role="menuitem" to="/settings/account" className="umenu-item" onClick={() => setOpen(false)}><Icon name="gear" size={18} /> Account &amp; settings</Link>
           <button role="menuitem" type="button" className="umenu-item" onClick={() => { setOpen(false); setPwDone(false); setPwOpen(true) }}><Icon name="lock" size={18} /> Change password</button>
           <button role="menuitem" type="button" className="umenu-item danger" disabled={busy} onClick={() => { void run() }}>

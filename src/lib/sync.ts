@@ -329,7 +329,7 @@ const onVisible = () => { if (document.visibilityState === 'visible') void syncN
 
 export async function startSync(userId: string, role: string, outlets = '') {
   if (active) stopSync()
-  canWrite = ['super_admin', 'hr_admin', 'hr_manager', 'admin', 'manager'].includes(role)
+  canWrite = ['super_admin', 'general_manager', 'hr_admin', 'hr_manager', 'admin', 'manager'].includes(role)
   canRemark = canWrite || role === 'outlet_manager'
   const scope = `${userId}|${role}|${outlets}`
   const prev = localStorage.getItem(SYNC_USER)

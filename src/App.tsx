@@ -1,3 +1,4 @@
+import { Toaster } from './components/toast'
 import { useEffect, useState } from 'react'
 import { NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { Icon } from './components/Icon'
@@ -30,6 +31,7 @@ import { needsMyAction } from './lib/workflow'
 import { usePendingUsers } from './lib/userApprovals'
 import { IS_TEST_BUILD } from './lib/supabase'
 import { UserMenu } from './components/userMenu'
+import CeoReviewPage, { useCeoBadge } from './pages/CeoReview'
 
 const NAV = [
   { to: '/', label: 'Home', icon: 'home', end: true },
@@ -38,6 +40,7 @@ const NAV = [
   { to: '/documents', label: 'Documents', icon: 'doc', desk: true },
   { to: '/alerts', label: 'Alerts', icon: 'alert' },
   { to: '/reports', label: 'Reports', icon: 'chart', desk: true },
+  { to: '/ceo-review', label: 'CEO review', icon: 'lock', desk: true, ceo: true },
   { to: '/settings', label: 'Settings', icon: 'gear', desk: true },
   { to: '/more', label: 'More', icon: 'more', mobile: true },
 ]
@@ -53,15 +56,16 @@ export default function App() {
 }
 
 function MainApp() {
-  const { canWrite, role, session, myCompanies, myOutlets } = useAuth()
+  const { canWrite, role, session, myCompanies, myOutlets, can, route, isSuper } = useAuth()
+  const ceoBadge = useCeoBadge()
   const allOutlets = useOutlets()
   useConfig() // re-render when a company logo changes
   const myLogo = headerLogo(role, myCompanies, myOutlets, allOutlets)
   const inbox = useInbox()
   const { rows: reqs } = useRequests()
-  const myReq = reqs.filter((r) => needsMyAction(r, role || '', session?.user.id || '')).length
+  const myReq = reqs.filter((r) => needsMyAction(r, role || '', session?.user.id || '', { can, route })).length
   const { pending: newUsers } = usePendingUsers()
-  const badge = (to: string) => (to === '/alerts' ? urgent : to === '/requests' ? myReq : to === '/' || to === '/settings' || to === '/more' ? newUsers.length : 0)
+  const badge = (to: string) => (to === '/alerts' ? urgent : to === '/requests' ? myReq : to === '/ceo-review' ? ceoBadge : to === '/' || to === '/settings' || to === '/more' ? newUsers.length : 0)
   const alerts = useAlerts()
   const settings = useSettings()
   const urgent = alerts.filter((a) => a.severity === 'critical' || a.severity === 'high').length
@@ -88,7 +92,7 @@ function MainApp() {
           </div>
         </div>
         <nav aria-label="Main">
-          {NAV.filter((n) => !n.mobile).map((n) => (
+          {NAV.filter((n) => !n.mobile && (!n.ceo || isSuper)).map((n) => (
             <NavLink key={n.to} to={n.to} end={n.end} className={({ isActive }) => (isActive ? 'on' : '')}>
               <Icon name={n.icon} />
               <span>{n.label === 'Home' ? 'Dashboard' : n.label}</span>
@@ -114,7 +118,7 @@ function MainApp() {
         </header>
         <main className="content">
           {IS_TEST_BUILD && <p className="banner small warn" style={{ marginBottom: 12 }}>TEST BUILD — connected to the test project, not live data.</p>}
-          {role === 'viewer' && <p className="banner small" style={{ marginBottom: 12 }}>You have <strong>view-only</strong> access. Ask your Super Admin for more access to add or edit.</p>}
+          {role === 'viewer' && <p className="banner small" style={{ marginBottom: 12 }}>You have <strong>view-only</strong> access. Ask your CEO for more access to add or edit.</p>}
           {loc.pathname === '/' && <div style={{ marginBottom: 12 }}><LocalDataBanner compact /></div>}
           <Routes>
             <Route path="/" element={<Dashboard />} />
@@ -129,12 +133,14 @@ function MainApp() {
             <Route path="/requests" element={<RequestsPage />} />
             <Route path="/requests/new" element={<NewRequest />} />
             <Route path="/requests/:id" element={<RequestDetail />} />
+            <Route path="/ceo-review" element={<CeoReviewPage />} />
             <Route path="/documents" element={<DocumentLibrary />} />
             <Route path="/inbox" element={<Inbox />} />
             <Route path="/more" element={<More />} />
             <Route path="*" element={<Dashboard />} />
           </Routes>
         </main>
+        <Toaster />
       </div>
       <nav className="bottom" aria-label="Main mobile">
         {NAV.filter((n) => !n.desk).map((n) => (

@@ -11,17 +11,19 @@ import { PendingUsersPanel } from './userApprovals'
 import { usePendingUsers } from '../lib/userApprovals'
 import { useOutlets } from '../lib/hooks'
 import { completeness } from '../lib/validate'
+import { Greeting, Priorities, StatusGlance, TipCard, type Extra } from './advice'
+import type { Alert } from '../lib/calc'
 
 /** Requests, flight tickets, emergency-leave proof and passport consent — shared by the HR and Outlet-Manager dashboards. */
 export function WorkflowPanel({ workers }: { workers: Worker[] }) {
-  const { role, session, isOM, canWrite } = useAuth()
+  const { role, session, isOM, canWrite, can, route } = useAuth()
   const outlets = useOutlets()
   const cfg = useConfig()
   const nav = useNavigate()
   const { rows } = useRequests()
   const me = session?.user.id || ''
   const cur = workers.filter((w) => !isExited(w))
-  const mine = rows.filter((r) => needsMyAction(r, role || '', me))
+  const mine = rows.filter((r) => needsMyAction(r, role || '', me, { can, route }))
   const { pending: newUsers } = usePendingUsers()
   const incomplete = canWrite ? cur.filter((w) => !completeness(w, outlets).complete) : []
   const myCount = mine.length + newUsers.length + incomplete.length
@@ -78,19 +80,22 @@ export function WorkflowPanel({ workers }: { workers: Worker[] }) {
 }
 
 /** Simplified dashboard for an Outlet Manager (his outlets only — enforced by the server). */
-export function OmDashboard({ workers }: { workers: Worker[] }) {
-  const { profile, myOutlets } = useAuth()
+export function OmDashboard({ workers, alerts, extra }: { workers: Worker[]; alerts: Alert[]; extra: Extra[] }) {
+  const { myOutlets } = useAuth()
+  const outlets = useOutlets()
   const nav = useNavigate()
   const cur = workers.filter((w) => !isExited(w))
   return (
     <div className="page">
-      <div className="page-h"><div><h1>My outlet{myOutlets.length > 1 ? 's' : ''}</h1><p className="muted">Hi {profile?.full_name || ''} · {cur.length} workers</p></div></div>
-      {myOutlets.length === 0 && <p className="banner warn">No outlets are assigned to you yet. Ask your HR / Super Admin to assign your outlet(s) in Settings → Users.</p>}
+      <div className="page-h"><Greeting sub={`My outlet${myOutlets.length > 1 ? 's' : ''} · ${cur.length} workers`} /></div>
+      {myOutlets.length === 0 && <p className="banner warn">No outlets are assigned to you yet. Ask your HR / CEO to assign your outlet(s) in Settings → Users.</p>}
       <div className="quick">
         {[['annual_leave', '🏖️', 'Annual leave'], ['emergency_leave', '🚨', 'Emergency leave'], ['medical_leave', '🤒', 'MC'], ['home_leave', '✈️', 'Home leave'], ['salary_advance', '💵', 'Advance'], ['passport', '🛂', 'Passport']].map(([k, i, l]) => (
           <button key={k} onClick={() => nav(`/requests/new?type=${k}`)}><span>{i}</span>{l}</button>
         ))}
       </div>
+      <Priorities alerts={alerts} workers={workers} outlets={outlets} om extra={extra} />
+      <div className="dash-3"><StatusGlance workers={workers} /><TipCard /></div>
       <WorkflowPanel workers={workers} />
       <Card title="My workers" actions={<Link className="link" to="/workers">All →</Link>}>
         <ul className="rows compact">{cur.slice(0, 12).map((w) => (

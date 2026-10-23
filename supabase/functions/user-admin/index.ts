@@ -1,6 +1,8 @@
-// user-admin: Super Admin / HR Admin account actions that need the Auth admin API.
+// user-admin: CEO / HR Admin account actions that need the Auth admin API.
 //   POST {action, userId, note?, sendEmail?, redirectTo?}
 //   action: 'pause' | 'resume' | 'delete' | 'reset_password' | 'reject_pending' | 'delete_pending'
+//   POST {action:'create_user', email, fullName, phone?, role, companyIds[], outletIds[], tempPassword?, sendEmail?, channels[]}
+//     adds an ACTIVE user directly; who may add which role is decided in SQL (user_create_check / creatable_roles)
 // The caller's JWT is verified here; who-may-do-what is decided in SQL (public.user_admin_check) with the same
 // rules as the approvals feature. History is never deleted: 'delete' removes the LOGIN (soft-deletes the auth user)
 // and leaves a 'deleted' profile tombstone; requests / remarks / documents keep their rows as "deleted user <name>".
@@ -24,6 +26,49 @@ function tempPassword() {
   return ch.slice(0, 4).join('') + '-' + ch.slice(4, 8).join('') + '-' + ch.slice(8).join('')
 }
 
+const strArr = (v: unknown) => Array.isArray(v) ? v.filter((x) => typeof x === 'string' && x.length < 80).slice(0, 200) as string[] : []
+const pwBad = (p: string) => p.length < 10 || p.length > 64 || !/[A-Za-z]/.test(p) || !/\d/.test(p) || /\s/.test(p)
+
+// deno-lint-ignore no-explicit-any
+async function createUser(db: any, actor: string, body: Record<string, unknown>) {
+  const email = String(body.email || '').trim().toLowerCase()
+  const fullName = String(body.fullName || '').trim().slice(0, 120)
+  const phone = String(body.phone || '').replace(/[\s-]/g, '')
+  const role = String(body.role || '')
+  const companyIds = strArr(body.companyIds), outletIds = strArr(body.outletIds)
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 200) return json({ error: 'Enter a valid email address' }, 400)
+  if (fullName.length < 2) return json({ error: 'Enter the full name' }, 400)
+  if (phone && !/^\+[1-9]\d{7,14}$/.test(phone)) return json({ error: 'Mobile number must be in international format, e.g. +60123456789' }, 400)
+  const { data: chk, error: ce } = await db.rpc('user_create_check', { p_actor: actor, p_email: email, p_role: role, p_companies: companyIds, p_outlets: outletIds })
+  if (ce) return json({ error: ce.message }, 500)
+  if (chk?.error) return json({ error: chk.error, duplicate: chk.duplicate || undefined, editable: chk.editable || undefined }, chk.duplicate !== undefined ? 409 : 403)
+  const chosen = typeof body.tempPassword === 'string' ? body.tempPassword : ''
+  if (chosen && pwBad(chosen)) return json({ error: 'Temporary password: 10–64 characters, letters and numbers, no spaces.' }, 400)
+  const pw = chosen || tempPassword()
+  // one-time ticket: the sign-up trigger turns it into an ACTIVE profile (re-checking the creator's rights)
+  const nonce = Array.from(crypto.getRandomValues(new Uint8Array(24)), (b) => b.toString(16).padStart(2, '0')).join('')
+  const { error: te } = await db.from('user_create_tickets').insert({ nonce, email, actor, role, company_ids: companyIds, outlet_ids: outletIds, phone: phone || null })
+  if (te) return json({ error: 'Could not add the user: ' + te.message }, 500)
+  const { data: cu, error: ue } = await db.auth.admin.createUser({ email, password: pw, email_confirm: true, user_metadata: { full_name: fullName, fwm_ticket: nonce } })
+  if (cu?.user) await db.auth.admin.updateUserById(cu.user.id, { user_metadata: { full_name: fullName, fwm_ticket: null } })
+  else await db.from('user_create_tickets').delete().eq('nonce', nonce)
+  if (ue || !cu?.user) {
+    const m = ue?.message || 'unknown error'
+    return json({ error: /already|registered|exists/i.test(m) ? 'A user with this email already exists' : 'Could not add the user: ' + m }, /already|registered|exists/i.test(m) ? 409 : 500)
+  }
+  const channels = strArr(body.channels).filter((c) => ['email', 'whatsapp', 'sms'].includes(c))
+  const { error: ae } = await db.rpc('user_create_audit', { p_actor: actor, p_target: cu.user.id, p_channels: channels })
+  if (ae) return json({ error: 'User added, but the audit entry failed: ' + ae.message, userId: cu.user.id, tempPassword: pw }, 200)
+  let emailed = false, emailNote: string | undefined
+  if (body.sendEmail) {
+    const redirectTo = OK_REDIRECT.test(String(body.redirectTo || '')) ? String(body.redirectTo) : 'https://fw.sunrisebayumas.com/'
+    const anon = createClient(env('SUPABASE_URL'), env('SUPABASE_ANON_KEY'), { auth: { persistSession: false, autoRefreshToken: false } })
+    const { error: me } = await anon.auth.resetPasswordForEmail(email, { redirectTo })
+    if (me) emailNote = 'Email not sent: ' + me.message; else emailed = true
+  }
+  return json({ ok: true, userId: cu.user.id, tempPassword: pw, emailed, emailNote })
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
   if (req.method !== 'POST') return json({ error: 'POST only' }, 405)
@@ -33,6 +78,7 @@ Deno.serve(async (req) => {
   if (!u?.user) return json({ error: 'Please sign in again' }, 401)
   const body = await req.json().catch(() => ({}))
   const action = String(body.action || ''), userId = String(body.userId || ''), note = body.note ? String(body.note).slice(0, 300) : null
+  if (action === 'create_user') return await createUser(db, u.user.id, body)
   if (!ACTIONS.includes(action) || !/^[0-9a-f-]{36}$/i.test(userId)) return json({ error: 'Bad request' }, 400)
 
   const { data: why, error: ce } = await db.rpc('user_admin_check', { p_actor: u.user.id, p_target: userId, p_action: action })
@@ -58,7 +104,11 @@ Deno.serve(async (req) => {
       return json({ ok: true })
     }
     if (action === 'reset_password') {
-      const pw = tempPassword()
+      // the CEO / admin may type the temporary password; otherwise a strong one is generated. Never stored or logged.
+      const chosen = typeof body.tempPassword === 'string' ? body.tempPassword : ''
+      if (chosen && (chosen.length < 10 || chosen.length > 64 || !/[A-Za-z]/.test(chosen) || !/\d/.test(chosen) || /\s/.test(chosen)))
+        return json({ error: 'Temporary password: 10–64 characters, letters and numbers, no spaces.' }, 400)
+      const pw = chosen || tempPassword()
       const { data: au, error } = await db.auth.admin.updateUserById(userId, { password: pw })
       if (error) return json({ error: 'Could not set the password: ' + error.message }, 500)
       await apply()
@@ -67,9 +117,9 @@ Deno.serve(async (req) => {
         const redirectTo = OK_REDIRECT.test(String(body.redirectTo || '')) ? String(body.redirectTo) : 'https://fw.sunrisebayumas.com/'
         const anon = createClient(env('SUPABASE_URL'), env('SUPABASE_ANON_KEY'), { auth: { persistSession: false, autoRefreshToken: false } })
         const { error: me } = await anon.auth.resetPasswordForEmail(au.user.email, { redirectTo })
-        emailed = me ? 'Reset email not sent: ' + me.message : 'Reset email sent to ' + au.user.email
+        emailed = me ? 'Reset email not sent: ' + me.message : 'sent'
       }
-      return json({ ok: true, tempPassword: pw, emailed })
+      return json({ ok: true, tempPassword: pw, emailed: emailed === 'sent', emailNote: emailed && emailed !== 'sent' ? emailed : undefined })
     }
     if (action === 'delete') {
       const r = await apply() // tombstone + "deleted user <name>" attribution first, so history is safe

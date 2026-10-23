@@ -1,4 +1,4 @@
-/* New sign-ups waiting for approval (Super Admin: all of them; HR Admin: only the companies the Super Admin
+/* New sign-ups waiting for approval (CEO: all of them; HR Admin: only the companies the CEO
  * allowed him — the database read policy decides what each person gets). Live-updated through realtime. */
 import { useEffect, useState } from 'react'
 import { supabase, type Profile, type Role } from './supabase'

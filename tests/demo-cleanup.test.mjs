@@ -35,7 +35,8 @@ const fn = async (k, action, target, extra = {}) => {
   const r = await fetch(`${URL_}/functions/v1/user-admin`, { method: 'POST', headers: { apikey: ANON, Authorization: `Bearer ${tok}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ action, userId: U[target]?.id || target, ...extra }) })
   return { status: r.status, ...(await r.json().catch(() => ({}))) }
 }
-const audit = async (action, id) => (await admin.from('audit_log').select('*').eq('action', action).eq('entity_id', id)).data || []
+const T0 = new Date(Date.now() - 5000).toISOString()
+const audit = async (action, id) => (await admin.from('audit_log').select('*').eq('action', action).eq('entity_id', id).gte('at', T0)).data || []
 const now = () => new Date().toISOString()
 const W = (id, outletId) => ({ entity: 'workers', id, deleted: false, client_ts: now(), data: { id, workerNo: id, fullName: 'Worker ' + id, outletId, nationality: 'Nepal', initialBasicPay: 1700, loans: [], documents: [] } })
 const pullIds = async (c) => { const r = await c.rpc('pull_records', { p_since: '1970-01-01', p_limit: 1000 }); return r.error ? 'ERR' : r.data.filter((x) => x.entity === 'workers' && !x.deleted).map((x) => x.id).sort().join() }

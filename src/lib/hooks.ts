@@ -2,6 +2,7 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { useMemo } from 'react'
 import { db } from './db'
 import { buildAlerts } from './calc'
+import { useConfig } from './config'
 import { DEFAULT_SETTINGS, type JobCategory, type Outlet, type Settings, type Worker } from './types'
 
 const EMPTY_W: Worker[] = []
@@ -27,5 +28,6 @@ export function useJobs() {
 export function useAlerts() {
   const w = useWorkers()
   const s = useSettings()
-  return useMemo(() => buildAlerts(w, s), [w, s])
+  const ag = useConfig().agencies
+  return useMemo(() => buildAlerts(w, s, ag.items), [w, s, ag])
 }

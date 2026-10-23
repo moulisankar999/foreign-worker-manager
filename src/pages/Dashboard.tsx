@@ -9,6 +9,11 @@ import { PendingUsersPanel } from '../components/userApprovals'
 import { useAuth } from '../lib/auth'
 import { missingLanguage } from '../lib/languages'
 import { fmtDate, fmtMonth, rm0, todayISO } from '../lib/util'
+import { ExpiryTimeline, Greeting, HealthCard, LatestChecks, Priorities, StatusGlance, TipCard, type Extra } from '../components/advice'
+import { useCeoBadge } from './CeoReview'
+import { useRequests } from '../lib/requests'
+import { needsMyAction } from '../lib/workflow'
+import { usePendingUsers } from '../lib/userApprovals'
 
 export default function Dashboard() {
   const loaded = useWorkersLoaded()
@@ -18,7 +23,16 @@ export default function Dashboard() {
   const alerts = useAlerts()
   const nav = useNavigate()
   const [busy, setBusy] = useState(false)
-  const { isOM, canWrite, canSeeSalary } = useAuth()
+  const { isOM, canWrite, canSeeSalary, isSuper, role, session, can, route } = useAuth()
+  const ceoN = useCeoBadge()
+  const { rows: reqs } = useRequests()
+  const { pending: newUsers } = usePendingUsers()
+  const mineN = reqs.filter((r) => needsMyAction(r, role || '', session?.user.id || '', { can, route })).length
+  const extra = useMemo<Extra[]>(() => [
+    ...(mineN ? [{ id: 'req', rank: 1, icon: '📝', tone: 'blue' as const, text: `${mineN} request${mineN === 1 ? '' : 's'} waiting for your decision`, detail: 'Approve, return or reject — the outlet is waiting.', to: '/requests?tab=mine_action', label: 'Open requests' }] : []),
+    ...(isSuper && ceoN ? [{ id: 'ceo', rank: 2, icon: '🔒', tone: 'teal' as const, text: `${ceoN} decision${ceoN === 1 ? '' : 's'} to review (CEO)`, detail: 'General Manager decisions and rejections — keep, overrule or recall.', to: '/ceo-review', label: 'Review now' }] : []),
+    ...(newUsers.length ? [{ id: 'users', rank: 2, icon: '👤', tone: 'amber' as const, text: `${newUsers.length} new user${newUsers.length === 1 ? '' : 's'} waiting for approval`, detail: 'Give them a role and the outlets they work for.', to: '/settings/users', label: 'Approve' }] : []),
+  ], [mineN, isSuper, ceoN, newUsers.length])
 
   const k = useMemo(() => {
     const cur = workers.filter((w) => !isExited(w))
@@ -64,7 +78,7 @@ export default function Dashboard() {
     }
   }, [workers, alerts, outlets, s])
 
-  if (isOM) return <OmDashboard workers={workers} />
+  if (isOM) return <OmDashboard workers={workers} alerts={alerts} extra={extra} />
   if (loaded && workers.length === 0 && canWrite)
     return (
       <div className="page">
@@ -87,15 +101,22 @@ export default function Dashboard() {
   return (
     <div className="page">
       <div className="page-h">
-        <div>
-          <h1>Dashboard</h1>
-          <p className="muted">{s.companyName} · {k.total} current workers{k.exited ? ` · ${k.exited} exited` : ''}</p>
-        </div>
+        <Greeting sub={`${k.total} current workers${k.exited ? ` · ${k.exited} exited` : ''}`} />
         <div className="row gap-s wrap">
           {canWrite && <Btn kind="primary" icon="plus" onClick={() => nav('/workers/new')}>Add worker</Btn>}
         </div>
       </div>
+      <div className="dash-top">
+        <Priorities alerts={alerts} workers={workers} outlets={outlets} extra={extra} />
+        <HealthCard workers={workers} alerts={alerts} outlets={outlets} />
+      </div>
+      <div className="dash-3">
+        <StatusGlance workers={workers} />
+        <ExpiryTimeline alerts={alerts} />
+        <TipCard />
+      </div>
       <WorkflowPanel workers={workers} />
+      <LatestChecks workers={workers} />
 
       <div className="stats">
         <Stat label="Total workers" value={k.total} icon="users" onClick={() => nav('/workers')} />
