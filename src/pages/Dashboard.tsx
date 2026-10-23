@@ -14,6 +14,8 @@ import { useCeoBadge } from './CeoReview'
 import { useRequests } from '../lib/requests'
 import { needsMyAction } from '../lib/workflow'
 import { usePendingUsers } from '../lib/userApprovals'
+import { RiskTable } from './Compliance'
+import { useOutletRisks } from '../lib/risk'
 
 export default function Dashboard() {
   const loaded = useWorkersLoaded()
@@ -115,6 +117,7 @@ export default function Dashboard() {
         <ExpiryTimeline alerts={alerts} />
         <TipCard />
       </div>
+      {canWrite && <OutletRiskCard />}
       <WorkflowPanel workers={workers} />
       <LatestChecks workers={workers} />
 
@@ -174,5 +177,19 @@ export default function Dashboard() {
       </div>
       <p className="muted small center">Data syncs to the company cloud and stays available offline on this device. Today: {fmtDate(todayISO())}</p>
     </div>
+  )
+}
+
+/** v1.2.2: outlet risk score (HR / management dashboard; outlet managers have their own dashboard) */
+function OutletRiskCard() {
+  const risks = useOutletRisks()
+  const nav = useNavigate()
+  if (!risks.length) return null
+  const hi = risks.filter((r) => r.level === 'High').length, med = risks.filter((r) => r.level === 'Medium').length
+  return (
+    <Card title="Outlet risk" actions={<Btn small onClick={() => nav('/compliance?tab=risk')}>Details</Btn>}>
+      <p className="small muted" style={{ marginTop: 0 }}>{hi ? <Chip tone="red">{hi} high</Chip> : null} {med ? <Chip tone="amber">{med} medium</Chip> : null} {!hi && !med ? <Chip tone="green">All low</Chip> : null} Combines passports held, late pay, overtime, deductions, hostel, complaints and expiring documents.</p>
+      <RiskTable limit={5} />
+    </Card>
   )
 }

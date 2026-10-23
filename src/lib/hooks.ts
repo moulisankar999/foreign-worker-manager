@@ -2,6 +2,8 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { useMemo } from 'react'
 import { db } from './db'
 import { buildAlerts } from './calc'
+import { setOutletCompanies } from './pay'
+import { outletCompany } from './companies'
 import { useConfig } from './config'
 import { useAuth } from './auth'
 import { DEFAULT_SETTINGS, type JobCategory, type Outlet, type Settings, type Worker } from './types'
@@ -31,7 +33,11 @@ export function useAlerts() {
   const s = useSettings()
   const cfg = useConfig()
   const ag = cfg.agencies
+  const outlets = useOutlets()
   const { canSeeSalary } = useAuth()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  return useMemo(() => buildAlerts(w, s, ag.items), [w, s, ag, canSeeSalary, cfg.rates])
+  return useMemo(() => {
+    setOutletCompanies(Object.fromEntries(outlets.map((o) => [o.id, outletCompany(o)])))
+    return buildAlerts(w, s, ag.items)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [w, s, ag, canSeeSalary, cfg.rates, cfg.hostels, cfg.trackers, cfg.companies, outlets])
 }

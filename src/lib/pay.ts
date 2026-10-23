@@ -5,7 +5,8 @@ import type { Worker } from './types'
 import { addDays, parseISO, rm, todayISO, toISO } from './util'
 
 export interface Dated { from: string; note?: string }
-export interface MinWageRate extends Dated { monthly: number; hourly: number; daily6: number; daily5: number; daily4: number }
+/** largeOnly: applies only to businesses NOT marked as under RM50 million sales (Settings → Pay & Leave rules → business size) */
+export interface MinWageRate extends Dated { monthly: number; hourly: number; daily6: number; daily5: number; daily4: number; largeOnly?: boolean }
 export interface EpfRate extends Dated { employee: number; employer: number }
 export interface SocsoRate extends Dated { employer: number; employee: number; ceiling: number }
 export interface LindungRate extends Dated { employee: number; ceiling: number }
@@ -16,12 +17,15 @@ export interface LeaveRules { tiers: LeaveTier[]; hospital: number; maternity: n
 export interface RatesConfig {
   minWage: MinWageRate[]; epf: EpfRate[]; socso: SocsoRate[]; lindung: LindungRate[]; hostelCap: HostelCapRate[]; ot: OtRule[]
   payDays: number; deductionCapPct: number; leave: LeaveRules
+  /** company ids marked as small / medium businesses (annual sales under RM50 million, counted at group level) */
+  smeCompanies?: string[]
 }
 
 export const DEFAULT_RATES: RatesConfig = {
   minWage: [
     { from: '2022-05-01', monthly: 1500, hourly: 7.21, daily6: 57.69, daily5: 69.23, daily4: 86.54, note: 'Minimum Wages Order 2022' },
     { from: '2025-02-01', monthly: 1700, hourly: 8.72, daily6: 65.38, daily5: 78.46, daily4: 98.08, note: 'Minimum Wages Order 2024 (employers with fewer than 5 workers: from 1 Aug 2025)' },
+    { from: '2027-06-01', monthly: 2000, hourly: 10.26, daily6: 76.92, daily5: 92.31, daily4: 115.38, largeOnly: true, note: 'Budget 2027 — announced — confirm when gazetted. Businesses with annual sales under RM50 million stay at RM1,700 for now.' },
   ],
   epf: [{ from: '2025-10-01', employee: 2, employer: 2, note: 'Foreign workers, from October 2025 wages. Each share is rounded up to the next ringgit.' }],
   socso: [
@@ -50,6 +54,24 @@ export const DEFAULT_RATES: RatesConfig = {
 /** latest entry whose start date is on or before the date */
 export function rateAt<T extends Dated>(list: T[] | undefined, date: string): T | undefined {
   return [...(list || [])].filter((r) => r.from && r.from <= date).sort((a, b) => a.from.localeCompare(b.from)).pop()
+}
+
+/* ---------- minimum wage per company (business-size exemption) ---------- */
+let outletCompanies: Record<string, string> = {}
+/** outlet id → company id, so pay checks know which company a worker belongs to */
+export function setOutletCompanies(map: Record<string, string>) { outletCompanies = map }
+export const workerCompany = (w?: Pick<Worker, 'outletId'>) => (w?.outletId && outletCompanies[w.outletId]) || 'main'
+export const isSmeCompany = (rates: RatesConfig, companyId?: string) => !!companyId && (rates.smeCompanies || []).includes(companyId)
+/** minimum wage for a company on a date: rates marked "largeOnly" are skipped for companies marked as under RM50 million sales */
+export function minWageFor(rates: RatesConfig, date: string, companyId?: string): MinWageRate | undefined {
+  const sme = isSmeCompany(rates, companyId)
+  return rateAt((rates.minWage || []).filter((r) => !(sme && r.largeOnly)), date)
+}
+export const minWageForWorker = (rates: RatesConfig, date: string, w?: Pick<Worker, 'outletId'>) => minWageFor(rates, date, workerCompany(w))
+/** next announced / future minimum-wage step for this company (for "coming up" notes) */
+export function nextMinWage(rates: RatesConfig, date: string, companyId?: string): MinWageRate | undefined {
+  const sme = isSmeCompany(rates, companyId)
+  return [...(rates.minWage || [])].filter((r) => r.from > date && !(sme && r.largeOnly)).sort((a, b) => a.from.localeCompare(b.from))[0]
 }
 
 const r2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100
@@ -133,7 +155,7 @@ export function computePayslip(p: PayslipRec, rates: RatesConfig, w?: Worker, to
   const otherDeductions = r2(num(p.hostel) + num(p.advance) + num(p.loanRepay) + num(p.otherDeductions))
   const net = r2(gross - statutory - otherDeductions)
   const employerCost = r2(gross + epfEr + socsoEr)
-  const mw = rateAt(rates.minWage, end)
+  const mw = w ? minWageForWorker(rates, end, w) : rateAt(rates.minWage, end)
   const capRate = rateAt(rates.hostelCap, end)
   const wageDue = wageDueDate(p.month, rates)
   const otDue = otDueDate(p.month)

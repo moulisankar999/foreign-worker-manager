@@ -10,6 +10,7 @@ import { Avatar, Btn, Card, Chip, Empty, FormModal, KV, Tabs, docTone, sevTone, 
 import { ContractTab, DocumentsTab, FamilyTab, LeaveTab, LoansTab, MemoEditor, MemosTab, NotesTab, PayTab, setStatus } from '../components/sections'
 import { db } from '../lib/db'
 import { RemittanceTab } from '../components/remittance'
+import { ComplianceTab } from '../components/workerCompliance'
 import { completeness, fmtPhone } from '../lib/validate'
 import { LogoImg } from '../components/logos'
 import { outletLogo } from '../lib/logos'
@@ -20,7 +21,7 @@ import { STATUSES, type MemoRec, type WorkerStatus } from '../lib/types'
 import { missingLanguage, otherLanguagesText, primaryLangName } from '../lib/languages'
 import { age, download, fmtDate, rm, serviceText, todayISO } from '../lib/util'
 
-type Tab = 'overview' | 'checks' | 'vault' | 'requests' | 'passport' | 'remarks' | 'docs' | 'remit' | 'family' | 'contract' | 'pay' | 'loans' | 'leave' | 'memos' | 'notes'
+type Tab = 'overview' | 'checks' | 'vault' | 'requests' | 'passport' | 'remarks' | 'docs' | 'remit' | 'family' | 'contract' | 'pay' | 'loans' | 'leave' | 'memos' | 'notes' | 'trackers'
 
 export default function WorkerDetail() {
   const { id } = useParams()
@@ -53,6 +54,7 @@ export default function WorkerDetail() {
     { id: 'docs', label: 'Expiry docs', badge: docs.filter((d) => docStatus(d, s) !== 'Valid' && docStatus(d, s) !== 'No expiry').length },
     { id: 'leave', label: 'Leave & ticket' },
     { id: 'contract', label: 'Contract & exit' },
+    { id: 'trackers', label: 'Compliance', badge: alerts.filter((a) => (a.severity === 'critical' || a.severity === 'high') && ['Absconding', 'Exit', '10-year stay', 'Recruitment cost', 'PLKS renewal'].includes(a.category)).length },
     { id: 'pay', label: 'Pay' },
     { id: 'loans', label: 'Loans' },
     { id: 'family', label: 'Family & address' },
@@ -156,6 +158,7 @@ export default function WorkerDetail() {
       {canWrite && tab === 'family' && <FamilyTab {...p} />}
       {isHr && tab === 'remit' && <RemittanceTab w={w} />}
       {canWrite && tab === 'contract' && <ContractTab {...p} />}
+      {canWrite && tab === 'trackers' && <ComplianceTab w={w} />}
       {canWrite && tab === 'pay' && <PayTab {...p} />}
       {canWrite && tab === 'loans' && <LoansTab {...p} />}
       {canWrite && tab === 'leave' && <LeaveTab {...p} openMemo={setMemo} />}

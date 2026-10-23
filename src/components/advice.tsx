@@ -1,6 +1,7 @@
 /* Advice-style dashboard pieces: greeting, today's priorities, health score rings, worker status, expiries timeline, tip of the day. */
 import { useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { useTrackerExtra } from '../lib/risk'
 import { Card, Chip, Modal } from './ui'
 import { Icon } from './Icon'
 import { LogoImg } from './logos'
@@ -41,11 +42,12 @@ export function Priorities({ alerts, workers, outlets, om, extra = [] }: { alert
   const cfg = useConfig()
   const { canSeeSalary } = useAuth()
   const nav = useNavigate()
+  const tx = useTrackerExtra()
   const list = useMemo(() => {
-    const base = priorities(alerts, workers, outlets, cfg.agencies.items, { om, pay: !!canSeeSalary })
+    const base = priorities(alerts, workers, outlets, cfg.agencies.items, { om, pay: !!canSeeSalary }, om ? {} : tx)
     const ex: Priority[] = extra.map((e) => ({ id: e.id, rank: e.rank, icon: e.icon, tone: e.tone, text: e.text, detail: e.detail, action: { label: e.label, to: e.to } }))
     return [...ex, ...base].sort((a, b) => a.rank - b.rank).slice(0, 5)
-  }, [alerts, workers, outlets, cfg.agencies.items, om, extra, canSeeSalary, cfg.rates])
+  }, [alerts, workers, outlets, cfg.agencies.items, om, extra, canSeeSalary, cfg.rates, tx])
   return (
     <Card title={<><Icon name="check" /> Today’s priorities</>} className="card-prio">
       {list.length === 0 ? <p className="muted">All clear today 🎉 Nothing needs you right now.</p> : (

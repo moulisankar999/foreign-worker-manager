@@ -33,6 +33,8 @@ import { usePendingUsers } from './lib/userApprovals'
 import { IS_TEST_BUILD } from './lib/supabase'
 import { UserMenu } from './components/userMenu'
 import CeoReviewPage, { useCeoBadge } from './pages/CeoReview'
+import CompliancePage from './pages/Compliance'
+import GrievancePublic from './pages/GrievancePublic'
 
 const NAV = [
   { to: '/', label: 'Home', icon: 'home', end: true },
@@ -41,6 +43,7 @@ const NAV = [
   { to: '/documents', label: 'Documents', icon: 'doc', desk: true },
   { to: '/alerts', label: 'Alerts', icon: 'alert' },
   { to: '/reports', label: 'Reports', icon: 'chart', desk: true },
+  { to: '/compliance', label: 'Compliance', icon: 'shield', desk: true, hr: true },
   { to: '/ceo-review', label: 'CEO review', icon: 'lock', desk: true, ceo: true },
   { to: '/settings', label: 'Settings', icon: 'gear', desk: true },
   { to: '/more', label: 'More', icon: 'more', mobile: true },
@@ -48,6 +51,8 @@ const NAV = [
 
 export default function App() {
   const { session, profile, loading } = useAuth()
+  const gm = /^#\/grievance\/([A-Za-z0-9]{8,64})\/?$/.exec(window.location.hash)
+  if (gm) return <GrievancePublic token={gm[1]} />
   if (loading) return <div className="auth-wrap"><p className="muted">Loading…</p></div>
   if (!session) return <Login />
   if (sessionStorage.getItem(RECOVERY_FLAG)) return <SetPasswordScreen mode="recovery" />
@@ -57,7 +62,7 @@ export default function App() {
 }
 
 function MainApp() {
-  const { canWrite, role, session, myCompanies, myOutlets, can, route, isSuper } = useAuth()
+  const { canWrite, role, session, myCompanies, myOutlets, can, route, isSuper, isOM } = useAuth()
   const ceoBadge = useCeoBadge()
   const allOutlets = useOutlets()
   useConfig() // re-render when a company logo changes
@@ -93,7 +98,7 @@ function MainApp() {
           </div>
         </div>
         <nav aria-label="Main">
-          {NAV.filter((n) => !n.mobile && (!n.ceo || isSuper)).map((n) => (
+          {NAV.filter((n) => !n.mobile && (!n.ceo || isSuper) && (!n.hr || (canWrite && !isOM))).map((n) => (
             <NavLink key={n.to} to={n.to} end={n.end} className={({ isActive }) => (isActive ? 'on' : '')}>
               <Icon name={n.icon} />
               <span>{n.label === 'Home' ? 'Dashboard' : n.label}</span>
@@ -135,6 +140,7 @@ function MainApp() {
             <Route path="/requests/new" element={<NewRequest />} />
             <Route path="/requests/:id" element={<RequestDetail />} />
             <Route path="/ceo-review" element={<CeoReviewPage />} />
+            <Route path="/compliance" element={<CompliancePage />} />
             <Route path="/documents" element={<DocumentLibrary />} />
             <Route path="/inbox" element={<Inbox />} />
             <Route path="/more" element={<More />} />

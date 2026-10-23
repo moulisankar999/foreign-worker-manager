@@ -6,13 +6,14 @@ import { SignOutRow } from '../components/userMenu'
 import { useCeoBadge } from './CeoReview'
 
 export default function More() {
-  const { canWrite, isSuper, isGm, isHr } = useAuth()
+  const { canWrite, isSuper, isGm, isHr, isOM } = useAuth()
   const ceoN = useCeoBadge()
   const items: [string, string, string, string][] = [
     ...(isSuper ? [['/ceo-review', 'lock', `CEO review${ceoN ? ` (${ceoN})` : ''}`, 'GM decisions & rejections — overrule, recall, mark reviewed'] as [string, string, string, string]] : []),
     ['/documents', 'doc', 'Document library', 'All scanned documents & expiries'],
     ['/alerts', 'bell', 'Alerts', 'Expiries, overdue passports, proof pending'],
     ['/reports', 'chart', 'Reports', 'Headcount, leave, emergency leave, passport register'],
+    ...(canWrite && !isOM ? [['/compliance', 'shield', 'Compliance', 'Outlet risk, hostels, hiring, complaints, PDPA'] as [string, string, string, string]] : []),
     ['/inbox', 'bell', 'Notifications', 'Request updates'],
     ['/settings', 'gear', 'Settings', isSuper || isGm ? 'Users, approval rules, notifications…' : 'Account & app'],
   ]

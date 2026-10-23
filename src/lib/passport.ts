@@ -9,6 +9,7 @@ import { pdfLogoFor } from './logos'
 import type { MemoRec, Outlet, PassportMove, PassportSafe, Worker } from './types'
 import { fmtDate, todayISO } from './util'
 import { CONSENT_EN, consentLanguage, type ConsentKey, type ConsentText } from './consentText'
+import { ZC_EN, zeroCostLanguage, type ZcKey } from './zeroCostText'
 import { langDef, langName } from './languages'
 import { ensureFonts, needsCanvas, renderText, scriptLang } from './scriptRender'
 
@@ -309,6 +310,106 @@ async function consentOne(d: Awaited<ReturnType<typeof newDoc>>, cache: Cached, 
       : `Translation (${name}) should be checked by a native speaker before use. If anything is unclear, the English text applies and HR must explain it.`
     await w.lines(note, { size: 6.6, italic: true, color: [0.5, 0.5, 0.55], gap: 0 })
   }
+  return pdf.getPageCount() - before
+}
+
+/** Zero-cost recruitment declaration — one page per worker, English + the worker's language (same rule as consent). */
+export async function zeroCostPdf(workers: Worker[], outlets: Outlet[], company: string): Promise<Blob> {
+  const d = await newDoc()
+  const cache: Cached = new Map()
+  for (const wk of workers) {
+    let k = 1
+    for (const t of [1, 0.92, 0.84]) {
+      k = t
+      const scratch = await newDoc()
+      if ((await zeroCostOne(scratch, new Map(), wk, outlets, company, t)) <= 1) break
+    }
+    await zeroCostOne(d, cache, wk, outlets, company, k)
+  }
+  return blob(d.pdf)
+}
+
+async function zeroCostOne(d: Awaited<ReturnType<typeof newDoc>>, cache: Cached, wk: Worker, outlets: Outlet[], company: string, k: number): Promise<number> {
+  const { pdf, f, logoFor } = d
+  const before = pdf.getPageCount()
+  const cfg = getConfig()
+  const L = zeroCostLanguage(wk.primaryLanguage, cfg.zerocost_translations || { items: {} }, cfg.consent_translations || { items: {} })
+  const T = L.text, TL = L.labels, lang = L.code
+  const E = ZC_EN, EL = CONSENT_EN
+  const grey: [number, number, number] = [0.35, 0.35, 0.4]
+  const fontsOk = await ensureFonts(lang)
+  await ensureFonts(scriptLang(wk.fullName))
+  const sub: Lines = { size: 8.6 * k, italic: true, color: [0.27, 0.27, 0.33], lang }
+  const w = new RichWriter(pdf, f, cache)
+  w.onNewPage = (x) => { x.page.drawText(`${wk.workerNo} - zero-cost declaration (continued)`, { x: M, y: x.y, size: 8, font: f.i, color: rgb(0.4, 0.4, 0.45) }); x.y -= 16 }
+  const logo = await logoFor(wk, outlets)
+  if (logo) { const h = 36, wd = (logo.width / logo.height) * h; w.page.drawImage(logo, { x: A4[0] - M - wd, y: w.y - h + 10, width: wd, height: h }) }
+  await w.lines(companyOf(wk, outlets, company), { size: 12.5, bold: true, gap: 3 })
+  await w.lines(E.title, { size: 11.5, bold: true, gap: 0 })
+  await w.lines(T.title, { ...sub, size: 10 * k, gap: 4 * k })
+  w.rule(10 * k)
+  if (!fontsOk) await w.lines('Note: the font for the worker\u2019s language could not be loaded (offline?). Please reprint this form when online.', { size: 7.5, italic: true, color: [0.6, 0.3, 0.0], gap: 5 })
+  else if (L.fallback) await w.lines(`Note: ${L.fallback}`, { size: 7.5, italic: true, color: [0.55, 0.35, 0.05], gap: 5 })
+  const p = passportOf(wk)
+  const field = async (key: ConsentKey, v: string, x: number, valueX: number, valueW: number) => {
+    w.page.drawText(EL[key], { x, y: w.y, size: 8.5, font: f.i, color: rgb(...grey) })
+    const th = await w.cell(TL[key], x, w.y - 9.5, 7, { maxW: valueX - x - 6, lang, color: grey })
+    const vh = await w.cell(v || '-', valueX, w.y, 9.5, { bold: true, maxW: valueW })
+    return Math.max(9.5 + th, vh) + 5 * k
+  }
+  const colW = (A4[0] - 2 * M) / 2
+  w.y -= await field('name', wk.fullName, M, M + 105, A4[0] - 2 * M - 105)
+  const pairs: [ConsentKey, string][] = [
+    ['passportNo', p.no], ['nationality', wk.nationality], ['workerNo', wk.workerNo], ['outlet', outletName(outlets, wk.outletId)],
+    ['job', wk.jobCategory || ''], ['date', fmtDate(todayISO())],
+  ]
+  for (let i = 0; i < pairs.length; i += 2) {
+    const a = await field(pairs[i][0], pairs[i][1], M, M + 105, colW - 110)
+    const b = pairs[i + 1] ? await field(pairs[i + 1][0], pairs[i + 1][1], M + colW, M + colW + 95, colW - 95) : 0
+    w.y -= Math.max(a, b)
+  }
+  w.y -= 4 * k
+  const en9 = 9.2 * k
+  await w.lines(E.intro, { size: en9, gap: 1 }); await w.lines(T.intro, { ...sub, gap: 5 * k })
+  const ps: ZcKey[] = ['z1', 'z2', 'z3', 'z4', 'z5']
+  for (const [i, key] of ps.entries()) {
+    w.ensure(30)
+    await w.lines(`${i + 1}. ${E[key]}`, { size: en9, indent: 8, gap: 0.5 })
+    await w.lines(`${i + 1}. ${T[key]}`, { ...sub, indent: 8, gap: 4 * k })
+  }
+  await w.lines(E.paid, { size: en9, bold: true, gap: 0.5 })
+  await w.lines(T.paid, { ...sub, gap: 3 })
+  w.ensure(60)
+  w.page.drawRectangle({ x: M, y: w.y - 48, width: A4[0] - 2 * M, height: 52, borderColor: rgb(0.6, 0.6, 0.65), borderWidth: 0.7 })
+  w.y -= 60
+  await w.lines(EL.explained, { size: 8.3 * k, italic: true, gap: 0 })
+  await w.lines(TL.explained, { ...sub, size: 8 * k, gap: 7 * k })
+  const labels: [string, string][] = [[EL.signWorker, TL.signWorker], [EL.signWitness, TL.signWitness], [EL.signHr, TL.signHr]]
+  const bh = 52 * Math.min(1, k + 0.04), gap = 12, bw = (A4[0] - 2 * M - gap * 2) / 3
+  const lh = langDef(lang)?.lineHeight || 1.4
+  w.ensure(bh + 10 + 18 + 7 * lh * 2 + 6 + 8 + 6.6 * lh + 4 + 8 + 6.6 * lh + 6)
+  const top = w.y
+  let below = 0
+  for (const [i, [en, tr]] of labels.entries()) {
+    const x = M + i * (bw + gap)
+    w.page.drawRectangle({ x, y: top - bh, width: bw, height: bh, borderColor: rgb(0.6, 0.6, 0.65), borderWidth: 0.7 })
+    let y = top - bh - 10
+    for (const l of wrap(en, f.b, 7.6, bw - 6)) { w.page.drawText(l, { x: x + 3, y, size: 7.6, font: f.b }); y -= 9 }
+    y -= await w.cell(tr, x + 3, y, 7, { maxW: bw - 6, lang, color: grey })
+    y -= 6
+    w.page.drawText(`${EL.signName}: _______________________`, { x: x + 3, y, size: 7.4, font: f.r }); y -= 8
+    y -= await w.cell(`(${TL.signName})`, x + 3, y, 6.6, { maxW: bw - 6, lang, color: grey }) + 4
+    w.page.drawText(`${EL.signDate}: ____ / ____ / ______`, { x: x + 3, y, size: 7.4, font: f.r }); y -= 8
+    y -= await w.cell(`(${TL.signDate})`, x + 3, y, 6.6, { maxW: bw - 6, lang, color: grey })
+    below = Math.max(below, top - y)
+  }
+  w.y = top - below - 6
+  await w.lines(E.reference, { size: 7.3, color: [0.4, 0.4, 0.45], gap: 0 })
+  await w.lines(T.reference, { ...sub, size: 7, gap: 3 })
+  const name = lang === 'ms' ? 'Bahasa Malaysia' : langName(lang)
+  const ov = cfg.zerocost_translations?.items?.[lang]
+  await w.lines(ov?.checked ? `Translation (${name}) reviewed by ${ov.checkedBy || 'a native speaker'}. If anything is unclear, the English text applies.`
+    : `Translation (${name}) should be checked by a native speaker before use. If anything is unclear, the English text applies and HR must explain it.`, { size: 6.6, italic: true, color: [0.5, 0.5, 0.55], gap: 0 })
   return pdf.getPageCount() - before
 }
 

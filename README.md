@@ -137,6 +137,23 @@ Rules are a guide, not legal advice. Wherever a rule is uncertain the app says *
 - **Public holidays by state**: editable list per year (2026 built-in), state and rest-day filters, replacement-day column (EA s.60D). Outlets now have a state and a rest day.
 - **Dashboard**: pay rules feed the health score and Today's priorities. Users without salary access never see pay alerts or pay lines; the server strips payslips and hostel/exemption fields for them.
 
+## Trackers & risk (v1.2.2)
+
+Everything is under **Compliance** in the menu (HR, CEO and GM; outlet managers do not see it) and in each worker's **Compliance** tab.
+
+- **Outlet risk score** — one score per outlet (Low / Medium / High) built from passports held, late pay or missing payslips, overtime, deductions, hostel problems, complaints and expiring documents. The top 5 outlets are on the dashboard. Pay parts are only counted for people who may see pay.
+- **Hostel register (Act 446)** — hostels, Certificate for Accommodation number and expiry, capacity, workers assigned, inspections and alerts. Hostel deductions are capped at RM150 a month from 1 March 2026 (check with JTKSM or your agent).
+- **Expiry rules** — FOMEMA yearly, PLKS renewal reminder 3 months ahead, passport warning at 15 months, SPIKPA insurance and security bond, and the 10-year total stay limit with warnings at 9 and 9.5 years.
+- **Job-permit match** — soft warnings when a PLKS worker is in an office outlet (e.g. accounting, management), a front-of-house job (e.g. cashier), or the employer on the permit is not the company. The lists can be changed under Compliance → Rules.
+- **Exit and absconding checklists** — checkout memo, final pay, passport return, ticket, Check Out Memo (COM) from Immigration and PLKS cancellation; for absconding: contact attempts, police report, Immigration report (FWCMS eRUNAWAY or in person), cancellation, wages owed and the levy / bond note. Day targets are company targets — check with JTKSM or your agent.
+- **Hiring tracker** — MYFutureJobs advert (14 days) and local interviews, quota approval in FWCMS (s.60K), VDR / calling visa, arrival, FOMEMA within 30 days, PLKS issued.
+- **Cost tracker** per worker — levy (RM1,850 default, editable), FOMEMA, insurance, visa, ticket and more, plus employer EPF and PERKESO from payslips. Treated as pay data.
+- **Zero-cost recruitment declaration** — printable per worker in English + the worker's language, using the same translation system as the passport consent form.
+- **Grievance channel** — one public link and QR code per company. Workers can report without logging in, anonymously if they want, and check the status with a private code. Only HR, the GM and the CEO can read reports.
+- **PDPA** — consent record per worker, FOMEMA / medical files hidden from outlet managers and viewers, and a data breach log (the CEO, HR Admin or a GM with the settings power). The 2024 amendments require notifying the Commissioner within 72 hours of a breach — check with the PDP Commissioner (JPDP) or your adviser.
+- **Minimum wage** — the announced RM2,000 from 1 June 2027 is listed as "announced — confirm when gazetted". Companies marked as under RM50 million in sales stay on RM1,700 for now (Settings → Pay & Leave rules → business size).
+- **Missing payslip alert** — active workers with no payslip for last month (only shown to people who may see pay).
+
 ## Features
 
 ### Dashboard

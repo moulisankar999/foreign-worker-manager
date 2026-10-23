@@ -1,8 +1,10 @@
 import { EXITED_STATUSES, LEAVE_STATUSES, REQUIRED_DOCS, type DocRec, type Outlet, type Settings, type Worker } from './types'
 import { daysSinceCheck, lastCheck, type Agency } from './agencies'
 import { getConfig } from './config'
-import { computePayslip, prevMonth, rateAt, statutoryAnnualForYear, statutoryLeave, monthLabel } from './pay'
-import { addMonths, daysUntil, fmtDate, monthsBetween, parseISO, rm, todayISO } from './util'
+import { computePayslip, prevMonth, statutoryAnnualForYear, statutoryLeave, monthLabel, minWageForWorker, nextMinWage, wageDueDate, workerCompany } from './pay'
+import { ABSCOND_STEPS, CHECK, EXIT_STEPS, RECRUITMENT_COSTS, fomemaDue, hostelIssues, sameEmployer, stayYears, type TrackersConfig } from './trackers'
+import { companyName } from './companies'
+import { addDays, addMonths, daysUntil, fmtDate, monthsBetween, parseISO, rm, todayISO } from './util'
 
 export type DocStatus = 'Valid' | 'Expiring soon' | 'Expired' | 'No expiry'
 
@@ -156,10 +158,15 @@ export function buildAlerts(workers: Worker[], s: Settings, agencies: Agency[] =
   const remind = agencies.filter((a) => a.enabled && a.remindDays > 0)
   const out: Alert[] = []
   const maxLead = Math.max(...s.leadTimes, 0)
+  const occ = new Map<string, number>()
+  for (const w of workers) if (w.hostelId && !isExited(w)) occ.set(w.hostelId, (occ.get(w.hostelId) || 0) + 1)
   for (const w of workers) {
-    if (isExited(w)) continue
     const base = { workerId: w.id, workerName: w.fullName, workerNo: w.workerNo, outletId: w.outletId, businessType: w.businessType }
     const push = (a: Omit<Alert, keyof typeof base>) => out.push({ ...base, ...a })
+    // exit / absconding checklists stay on the list after the worker has left, until every step is done
+    for (const a of flowAlerts(w)) push(a)
+    if (isExited(w)) continue
+    for (const a of trackerAlerts(w, s, occ)) push(a)
     // documents: use latest of each type/label
     for (const d of currentDocs(w)) {
       const n = daysUntil(d.expiryDate)
@@ -231,6 +238,110 @@ export function buildAlerts(workers: Worker[], s: Settings, agencies: Agency[] =
   return out.sort((a, b) => SEVERITY_ORDER.indexOf(a.severity) - SEVERITY_ORDER.indexOf(b.severity) || (a.days ?? 9999) - (b.days ?? 9999))
 }
 
+/* ---------- v1.2.2 trackers: exit / absconding checklists ---------- */
+type WAlert = Omit<Alert, 'workerId' | 'workerName' | 'workerNo' | 'outletId' | 'businessType'>
+export function flowAlerts(w: Worker, today = todayISO()): WAlert[] {
+  const out: WAlert[] = []
+  const t = getConfig().trackers
+  const f = w.exitFlow
+  if (w.status === 'Absconded' && (!f || f.kind !== 'abscond')) {
+    out.push({ id: `abscond-start-${w.id}`, category: 'Absconding', title: 'Absconding checklist not started', detail: 'Open the worker → Compliance → Absconding checklist: police report, Immigration report (FWCMS eRUNAWAY), PLKS cancellation.', days: null, severity: 'high' })
+    return out
+  }
+  if (!f || f.closed) return out
+  const steps = f.kind === 'abscond' ? ABSCOND_STEPS : EXIT_STEPS
+  const left = steps.filter((st) => !f.steps?.[st.key]?.done)
+  if (!left.length) return out
+  if (f.kind === 'abscond') {
+    const seen = f.lastSeen || f.started
+    const due = (k: 'police' | 'immigration', d: number, label: string) => {
+      if (f.steps?.[k]?.done) return
+      const date = addDays(seen, d)
+      const n = daysUntil(date, today)!
+      out.push({ id: `abscond-${k}-${w.id}`, category: 'Absconding', title: n < 0 ? `${label} overdue` : `${label} due`, detail: `Last seen ${fmtDate(seen)}. Company target: within ${d} days (${dueText(n)}) — ${CHECK}.`, date, days: n, severity: n < 0 ? 'critical' : 'high' })
+    }
+    due('police', t.abscondPoliceDays, 'Police report')
+    due('immigration', t.abscondImmigrationDays, 'Immigration report')
+    const rest = left.filter((st) => st.key !== 'police' && st.key !== 'immigration')
+    if (rest.length) out.push({ id: `abscond-open-${w.id}`, category: 'Absconding', title: 'Absconding checklist open', detail: `Still to do: ${rest.map((x) => x.label).join(', ')}`, days: null, severity: 'medium' })
+  } else {
+    out.push({ id: `exit-open-${w.id}`, category: 'Exit', title: 'Exit checklist open', detail: `Still to do: ${left.map((x) => x.label).join(', ')}`, days: null, severity: left.some((x) => x.key === 'com' || x.key === 'cancel' || x.key === 'passport') ? 'high' : 'medium' })
+  }
+  return out
+}
+
+/* ---------- v1.2.2 trackers: permit, stay, hostel, job match, declarations ---------- */
+const isPlks = (d: { type: string }) => d.type === 'Work Permit / PLKS (VP(TE))'
+export function trackerAlerts(w: Worker, s: Settings, occ: Map<string, number> = new Map(), today = todayISO()): WAlert[] {
+  const out: WAlert[] = []
+  const cfg = getConfig()
+  const t: TrackersConfig = cfg.trackers
+  const maxLead = Math.max(...s.leadTimes, 0)
+  const permit = latestDoc(w, 'Work Permit / PLKS (VP(TE))')
+  const hasPlks = w.documents.some(isPlks)
+  // PLKS renewal can start 3 months before expiry
+  const pn = daysUntil(permit?.expiryDate, today)
+  if (permit && pn !== null && pn >= 0 && pn <= t.plksLeadDays && permit.stage !== 'Renewal in progress' && permit.stage !== 'With immigration' && permit.stage !== 'With agent')
+    out.push({ id: `plks-renew-${w.id}`, category: 'PLKS renewal', title: 'Start the PLKS renewal', detail: `Permit expires ${fmtDate(permit.expiryDate)} (${dueText(pn)}). Renewal can be submitted up to ${Math.round(t.plksLeadDays / 30)} months before expiry. Set the permit stage to “Renewal in progress” once submitted.`, date: permit.expiryDate, days: pn, severity: pn <= 30 ? 'high' : 'medium' })
+  // FOMEMA yearly (only when the record has no expiry date; dated records already alert above)
+  const lastF = w.documents.filter((d) => d.type === 'FOMEMA Medical').sort((a, b) => (b.issueDate || b.expiryDate || '').localeCompare(a.issueDate || a.expiryDate || ''))[0]
+  const fd = fomemaDue(w, t)
+  if (lastF && !lastF.expiryDate && fd) {
+    const n = daysUntil(fd, today)!
+    if (n <= maxLead) out.push({ id: `fomema-due-${w.id}`, category: 'FOMEMA', title: n < 0 ? 'FOMEMA medical overdue' : 'FOMEMA medical due', detail: `Last exam ${fmtDate(lastF.issueDate)}; next due ${fmtDate(fd)} (${dueText(n)}). Needed for the PLKS renewal.`, date: fd, days: n, severity: severityFor(n, s) })
+  }
+  // passport: warn 15 months ahead; PLKS renewal needs at least 12 months' validity
+  const pp = latestDoc(w, 'Passport')
+  const ppm = pp?.expiryDate ? monthsBetween(today, pp.expiryDate) : null
+  const ppDays = daysUntil(pp?.expiryDate, today)
+  if (pp && ppm !== null && ppDays !== null && ppDays > maxLead && ppm < t.passportWarnMonths)
+    out.push({ id: `pp-15m-${w.id}`, category: 'Passport', title: ppm < t.passportMinMonths ? 'Passport too short for PLKS renewal' : 'Plan the passport renewal', detail: `Passport expires ${fmtDate(pp.expiryDate)}. The PLKS renewal needs at least ${t.passportMinMonths} months of passport validity — start renewing at the embassy early.`, date: pp.expiryDate, days: ppDays, severity: ppm < t.passportMinMonths ? 'medium' : 'low' })
+  // insurance (SPIKPA / hospitalisation) should cover the whole permit
+  const ins = latestDoc(w, 'Insurance (SPIKPA / Hospitalisation)')
+  if (ins?.expiryDate && permit?.expiryDate && ins.expiryDate < permit.expiryDate && (daysUntil(ins.expiryDate, today) ?? 0) >= 0)
+    out.push({ id: `ins-short-${w.id}`, category: 'Insurance', title: 'Insurance ends before the work permit', detail: `Insurance ends ${fmtDate(ins.expiryDate)}, permit ends ${fmtDate(permit.expiryDate)}. Extend SPIKPA / hospitalisation cover.`, date: ins.expiryDate, days: daysUntil(ins.expiryDate, today), severity: 'medium' })
+  // security bond
+  if (hasPlks) {
+    const bond = latestDoc(w, 'Security Bond')
+    if (!bond) out.push({ id: `bond-missing-${w.id}`, category: 'Security bond', title: 'Security bond not recorded', detail: 'Add the security bond / insurance guarantee (Documents → Security Bond) with its end date.', days: null, severity: 'low' })
+    else if (bond.expiryDate && pn !== null && pn <= t.plksLeadDays && monthsBetween(today, bond.expiryDate) < t.bondMinMonths)
+      out.push({ id: `bond-short-${w.id}`, category: 'Security bond', title: 'Security bond too short for renewal', detail: `Bond ends ${fmtDate(bond.expiryDate)}. For the PLKS renewal it should have at least ${t.bondMinMonths} months left — ${CHECK}.`, date: bond.expiryDate, days: daysUntil(bond.expiryDate, today), severity: 'medium' })
+  }
+  // 10-year total stay
+  const y = stayYears(w, today)
+  if (hasPlks && y !== null && y >= t.stayWarnYears) {
+    const from = w.firstArrivalDate || w.joinDate
+    const capDate = from ? addMonths(from, Math.round(t.stayCapYears * 12)) : undefined
+    out.push({ id: `stay-cap-${w.id}`, category: '10-year stay', title: y >= t.stayCapYears ? `Reached the ${t.stayCapYears}-year stay limit` : `${y.toFixed(1)} years in Malaysia — near the ${t.stayCapYears}-year limit`, detail: `${w.firstArrivalDate ? 'First arrival' : 'Joined (first arrival not recorded)'} ${fmtDate(from)}; limit reached about ${fmtDate(capDate)}. Plan the exit or replacement — ${CHECK}.`, date: capDate, days: daysUntil(capDate, today), severity: y >= t.stayCapYears ? 'critical' : y >= t.stayHighYears ? 'high' : 'medium' })
+  }
+  // job-permit match (soft warnings)
+  if (t.jobMatchOn && hasPlks) {
+    const lc = (x?: string) => (x || '').trim().toLowerCase()
+    if (w.businessType && t.officeTypes.some((o) => lc(o) === lc(w.businessType)))
+      out.push({ id: `jobmatch-office-${w.id}`, category: 'Job-permit match', title: 'PLKS worker in an office outlet', detail: `Assigned to a ${w.businessType} outlet. Foreign workers on PLKS are approved for a sector, not for office work — ${CHECK}.`, days: null, severity: 'low' })
+    const job = lc(w.jobCategory)
+    if (job && t.frontRoles.some((r) => lc(r) && job.includes(lc(r))))
+      out.push({ id: `jobmatch-front-${w.id}`, category: 'Job-permit match', title: 'PLKS worker in a front-of-house role', detail: `Job “${w.jobCategory}”. Foreign workers are generally not allowed to work as front liners (e.g. cashier, front desk) — ${CHECK}.`, days: null, severity: 'low' })
+    const myCo = companyName(cfg.companies.items, workerCompany(w))
+    if (w.permitEmployer && myCo && !sameEmployer(w.permitEmployer, myCo))
+      out.push({ id: `jobmatch-employer-${w.id}`, category: 'Job-permit match', title: 'Permit employer differs from the company', detail: `The permit is for “${w.permitEmployer}” but the worker is under “${myCo}”. A worker may only work for the employer on his permit — ${CHECK}.`, days: null, severity: 'medium' })
+  }
+  // hostel (Act 446)
+  if (w.hostelId) {
+    const h = (cfg.hostels.items || []).find((x) => x.id === w.hostelId)
+    if (h) for (const i of hostelIssues(h, occ.get(h.id) || 0, t, today).filter((x) => x.level === 'red'))
+      out.push({ id: `hostel-${h.id}-${w.id}-${i.text.slice(0, 12)}`, category: 'Hostel', title: `Hostel “${h.name}”: ${i.text}`, detail: 'Workers’ accommodation needs a valid Certificate for Accommodation (Act 446) — see Compliance → Hostels.', days: i.days ?? null, severity: 'medium' })
+  }
+  // zero-cost recruitment declaration and recruitment costs paid by the worker
+  if (w.zeroCost?.status !== 'signed') out.push({ id: `zerocost-${w.id}`, category: 'Zero-cost declaration', title: w.zeroCost?.status === 'issued' ? 'Zero-cost declaration not signed yet' : 'Zero-cost declaration not issued', detail: 'Print it from the worker → Compliance tab and get it signed.', days: null, severity: 'low' })
+  if (payVisible) {
+    const paid = (w.costs || []).filter((c) => c.paidBy === 'Worker' && !c.refunded && RECRUITMENT_COSTS.includes(c.type))
+    if (paid.length) out.push({ id: `cost-worker-${w.id}`, category: 'Recruitment cost', title: 'Worker paid recruitment costs', detail: `${paid.map((c) => `${c.type} ${rm(c.amount)}`).join(', ')} — the employer should bear these. Refund the worker and record it.`, days: null, severity: 'high' })
+  }
+  if (!w.pdpa || w.pdpa.status === 'not_recorded') out.push({ id: `pdpa-${w.id}`, category: 'PDPA', title: 'PDPA consent not recorded', detail: 'Record the personal-data notice / consent in the worker → Compliance tab.', days: null, severity: 'info' })
+  return out
+}
+
 export function outletName(outlets: Outlet[], id?: string) {
   return outlets.find((o) => o.id === id)?.name || '—'
 }
@@ -248,8 +359,21 @@ export function payAlerts(w: Worker, s: Settings, today = todayISO()): PayAlert[
   // salary hidden for this role (outlet managers): the fields are missing, so do not guess
   if (w.initialBasicPay === undefined || w.initialBasicPay === null) return out
   const basic = currentBasic(w)
-  const mw = rateAt(rates.minWage, today)
+  const mw = minWageForWorker(rates, today, w)
   if (mw && basic > 0 && basic < mw.monthly && !w.minWageExempt) out.push({ id: `pay-minwage-${w.id}`, category: cat, title: 'Paid below the minimum wage', detail: `Basic ${rm(basic)} — minimum is ${rm(mw.monthly)} a month. Raise the pay or record an exemption (check with JTKSM or your agent).`, days: null, severity: 'high' })
+  else {
+    const nx = nextMinWage(rates, today, workerCompany(w))
+    const nd = daysUntil(nx?.from, today)
+    if (nx && nd !== null && nd <= 366 && basic > 0 && basic < nx.monthly && !w.minWageExempt)
+      out.push({ id: `pay-minwage-next-${w.id}`, category: cat, title: `Minimum wage rises to ${rm(nx.monthly)} on ${fmtDate(nx.from)}`, detail: `Basic ${rm(basic)} is below the new rate${nx.largeOnly ? ' (announced — confirm when gazetted; businesses with sales under RM50 million can be marked exempt in Settings → Pay & Leave rules)' : ''}. Plan the increase.`, date: nx.from, days: nd, severity: 'info' })
+  }
+  // last month's payslip missing (only for workers who were already working last month)
+  const lm = prevMonth(today)
+  if (w.joinDate && w.joinDate < today.slice(0, 7) + '-01' && !(w.payslips || []).some((p) => p.month === lm)) {
+    const due = wageDueDate(lm, rates)
+    const n = daysUntil(due, today)!
+    out.push({ id: `pay-noslip-${w.id}`, category: cat, title: `No payslip for ${monthLabel(lm)}`, detail: n >= 0 ? `Wages for ${monthLabel(lm)} are due by ${fmtDate(due)} — make the payslip in the Pay tab.` : `Wages were due by ${fmtDate(due)}. Make the payslip in the Pay tab and record the pay date.`, date: due, days: n, severity: n >= 0 ? 'low' : 'medium' })
+  }
   // the most recent payslip (and last month's, if it exists) for late pay / OT / deductions / hostel
   const slips = [...(w.payslips || [])].sort((a, b) => b.month.localeCompare(a.month))
   const since = prevMonth(prevMonth(today))

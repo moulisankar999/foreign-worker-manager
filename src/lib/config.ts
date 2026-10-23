@@ -8,6 +8,8 @@ import { DEFAULT_CONSENT_TRANSLATIONS, type ConsentTranslationsConfig } from './
 import { DEFAULT_AGENCIES, mergeAgencies, type AgenciesConfig } from './agencies'
 import { DEFAULT_HOLIDAYS, DEFAULT_RATES, type HolidaysConfig, type RatesConfig } from './pay'
 import { DEFAULT_COMPANIES, DEFAULT_USER_APPROVALS, type CompaniesConfig, type UserApprovalsConfig } from './companies'
+import { DEFAULT_HIRING, DEFAULT_HOSTELS, DEFAULT_TRACKERS, type HiringConfig, type HostelsConfig, type TrackersConfig } from './trackers'
+import type { ZcOverride, ZcTranslationsConfig } from './zeroCostText'
 
 export interface PassportConfig { turnaroundHours: number; overdueGraceDays: number; logo?: string; companyShort?: string; witnessTitle?: string }
 export const DEFAULT_PASSPORT: PassportConfig = { turnaroundHours: 24, overdueGraceDays: 0, witnessTitle: 'Outlet Manager' }
@@ -28,12 +30,18 @@ export interface AppConfig {
   rates: RatesConfig
   /** public holidays per year and state */
   holidays: HolidaysConfig
+  /** v1.2.2: hostel register (Act 446), hiring tracker, tracker rules, zero-cost declaration translations */
+  hostels: HostelsConfig
+  hiring: HiringConfig
+  trackers: TrackersConfig
+  zerocost_translations: ZcTranslationsConfig
 }
 const DEFAULTS: AppConfig = {
   approval_rules: defaultRules(), hr_admin: DEFAULT_HR_FLAGS, vault: DEFAULT_VAULT, emergency_reasons: DEFAULT_EMERGENCY_REASONS,
   notifications: DEFAULT_NOTIFY, passport: DEFAULT_PASSPORT, wa_templates: { items: {}, syncedAt: null },
   companies: DEFAULT_COMPANIES, user_approvals: DEFAULT_USER_APPROVALS, consent_translations: DEFAULT_CONSENT_TRANSLATIONS,
   agencies: DEFAULT_AGENCIES, rates: DEFAULT_RATES, holidays: DEFAULT_HOLIDAYS,
+  hostels: DEFAULT_HOSTELS, hiring: DEFAULT_HIRING, trackers: DEFAULT_TRACKERS, zerocost_translations: { items: {} },
 }
 const CACHE = 'fwm-config'
 let cfg: AppConfig = load()
@@ -58,6 +66,18 @@ function merge(raw: Partial<Record<keyof AppConfig, unknown>>): AppConfig {
   const r = out.rates as RatesConfig
   out.rates = { ...DEFAULT_RATES, ...r, leave: { ...DEFAULT_RATES.leave, ...(r.leave || {}) } }
   for (const k of ['minWage', 'epf', 'socso', 'lindung', 'hostelCap', 'ot'] as const) if (!Array.isArray((out.rates as RatesConfig)[k])) ((out.rates as unknown) as Record<string, unknown>)[k] = DEFAULT_RATES[k]
+  // add new built-in rate steps (e.g. the announced 2027 minimum wage) to a saved list once; a deleted step stays deleted
+  const rr = out.rates as RatesConfig & { knownDefaults?: string[] }
+  const known = Array.isArray(rr.knownDefaults) ? rr.knownDefaults : []
+  const mwKnown = DEFAULT_RATES.minWage.filter((d) => !known.includes('minWage:' + d.from) && !rr.minWage.some((x) => x.from === d.from) && d.from > '2026-10-01')
+  if (mwKnown.length) rr.minWage = [...rr.minWage, ...mwKnown]
+  rr.knownDefaults = [...new Set([...known, ...DEFAULT_RATES.minWage.map((d) => 'minWage:' + d.from)])]
+  if (!Array.isArray(rr.smeCompanies)) rr.smeCompanies = []
+  for (const k of ['hostels', 'hiring'] as const) { const v = out[k] as { items?: unknown }; if (!Array.isArray(v?.items)) out[k] = { items: [] } }
+  const t = out.trackers as TrackersConfig
+  out.trackers = { ...DEFAULT_TRACKERS, ...t, costDefaults: { ...DEFAULT_TRACKERS.costDefaults, ...(t.costDefaults || {}) } }
+  const zc = out.zerocost_translations as { items?: unknown }
+  if (!zc.items || typeof zc.items !== 'object') out.zerocost_translations = { items: {} }
   const h = out.holidays as HolidaysConfig
   if (!h.years || typeof h.years !== 'object') out.holidays = DEFAULT_HOLIDAYS
   return out as unknown as AppConfig
@@ -119,4 +139,17 @@ export async function savePayConfig<K extends 'rates' | 'holidays'>(key: K, valu
   const { data, error } = await supabase.rpc('set_pay_config', { p_key: key, p_value: value })
   if (error) throw new Error(/permission|not allowed|denied/i.test(error.message) ? 'Only the CEO, HR Admin or a General Manager with this power can change pay rules' : error.message)
   set({ ...raw, [key]: data ?? value })
+}
+
+/** HR / CEO: save the hostel register, the hiring tracker or (CEO / HR Admin / GM) the tracker rules (server function, audited). */
+export async function saveTrackerConfig<K extends 'hostels' | 'hiring' | 'trackers'>(key: K, value: AppConfig[K]) {
+  const { error } = await supabase.rpc('set_tracker_config', { p_key: key, p_value: value })
+  if (error) throw new Error(error.message)
+  set({ ...raw, [key]: value })
+}
+/** CEO / HR Admin / GM: correct a translation of the zero-cost declaration (null = back to the built-in text). */
+export async function saveFormTranslation(form: 'zerocost', lang: string, entry: ZcOverride | null) {
+  const { error } = await supabase.rpc('set_form_translation', { p_form: form, p_lang: lang, p_text: entry })
+  if (error) throw new Error(error.message)
+  await refreshConfig()
 }

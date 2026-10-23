@@ -12,10 +12,10 @@ export const EXITED_STATUSES: WorkerStatus[] = ['Absconded', 'Resigned', 'Termin
 export const LEAVE_STATUSES: WorkerStatus[] = ['On Leave', 'Home Leave', 'Medical Leave']
 
 /** display order = the numbered document list (1. Passport, 2. Work permit, ...) */
-export const DOC_TYPES = ['Passport', 'Work Permit / PLKS (VP(TE))', 'Visa / VDR', 'FOMEMA Medical', 'Insurance (SPIKPA / Hospitalisation)', 'Hostel / Accommodation', 'SOCSO / PERKESO', 'Levy Payment', 'Other'] as const
+export const DOC_TYPES = ['Passport', 'Work Permit / PLKS (VP(TE))', 'Visa / VDR', 'FOMEMA Medical', 'Insurance (SPIKPA / Hospitalisation)', 'Hostel / Accommodation', 'SOCSO / PERKESO', 'Levy Payment', 'Security Bond', 'Other'] as const
 export const DOC_SHORT: Record<string, string> = {
   Passport: 'Passport', 'Work Permit / PLKS (VP(TE))': 'Work permit (PLKS)', 'Visa / VDR': 'Visa / VDR', 'FOMEMA Medical': 'FOMEMA',
-  'Insurance (SPIKPA / Hospitalisation)': 'Insurance (SPIKPA)', 'Hostel / Accommodation': 'Hostel', 'SOCSO / PERKESO': 'SOCSO / PERKESO', 'Levy Payment': 'Levy', Other: 'Other',
+  'Insurance (SPIKPA / Hospitalisation)': 'Insurance (SPIKPA)', 'Hostel / Accommodation': 'Hostel', 'SOCSO / PERKESO': 'SOCSO / PERKESO', 'Levy Payment': 'Levy', 'Security Bond': 'Security bond', Other: 'Other',
 }
 export const DOC_STAGES = ['In hand (valid)', 'Applied / in process', 'Renewal in progress', 'With immigration', 'With agent', 'Not applicable']
 export const REQUIRED_DOCS = ['Passport', 'Work Permit / PLKS (VP(TE))', 'FOMEMA Medical', 'Insurance (SPIKPA / Hospitalisation)']
@@ -116,6 +116,18 @@ export interface Worker {
   passportSafe?: PassportSafe
   /** manual status checks on government portals (FOMEMA, Immigration, …) */
   agencyChecks?: import('./agencies').AgencyCheck[]
+  /** v1.2.2 trackers: first entry to Malaysia (10-year stay cap), employer / sector printed on the PLKS */
+  firstArrivalDate?: string
+  permitEmployer?: string
+  permitSector?: string
+  /** hostel from the hostel register (Act 446) */
+  hostelId?: string
+  /** exit or absconding checklist */
+  exitFlow?: import('./trackers').ExitFlow
+  /** cost tracker (pay data: hidden from roles that may not see pay) */
+  costs?: import('./trackers').CostRec[]
+  zeroCost?: import('./trackers').ZeroCostRec
+  pdpa?: import('./trackers').PdpaRec
   waOptIn?: boolean // worker agreed to WhatsApp messages (consent form / onboarding)
   waOptInAt?: string
   waOptOutVia?: string

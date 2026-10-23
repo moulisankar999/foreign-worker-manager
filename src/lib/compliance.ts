@@ -5,7 +5,7 @@ import { completeness } from './validate'
 import type { Agency } from './agencies'
 import type { Outlet, Worker } from './types'
 import { getConfig } from './config'
-import { monthLabel, prevMonth, rateAt, wageDueDate } from './pay'
+import { minWageFor, monthLabel, prevMonth, rateAt, wageDueDate } from './pay'
 import { parseISO, rm0, todayISO } from './util'
 
 export const PERMIT = 'Work Permit / PLKS (VP(TE))'
@@ -22,9 +22,11 @@ const RULES: { key: string; label: string; max: number; tip: string; pay?: boole
   { key: 'missing', label: 'Required document missing', max: 12, tip: 'Add the passport, permit, FOMEMA and insurance records for every worker.', hit: (_w, a) => a.some((x) => x.category === 'Missing document') },
   { key: 'passport', label: 'Passport kept without signed consent', max: 12, tip: 'Keep a passport only with the worker’s signed consent, and return it when he asks.', hit: (_w, a) => a.some((x) => x.id.startsWith('ppnoconsent-')) },
   { key: 'overdue', label: 'Not back from leave', max: 5, tip: 'Contact the worker. If he has absconded, report it — check with JTKSM or your agent.', hit: (_w, a) => a.some((x) => x.category === 'Overdue return') },
+  { key: 'hostel', label: 'Hostel certificate missing / expired or over capacity', max: 4, tip: 'Workers’ housing needs a valid Certificate for Accommodation (Act 446) and must not be over capacity. See Compliance → Hostels.', hit: (_w, a) => a.some((x) => x.category === 'Hostel') },
+  { key: 'stay', label: 'At or near the 10-year stay limit', max: 2, tip: 'Plan the exit or replacement of workers close to the 10-year limit. Check with JTKSM or your agent.', hit: (_w, a) => a.some((x) => x.category === '10-year stay' && (x.severity === 'critical' || x.severity === 'high')) },
   { key: 'profile', label: 'Profile incomplete', max: 4, tip: 'Fill in the missing details so letters and forms are correct.', hit: () => false },
   { key: 'checks', label: 'Status not checked on time', max: 4, tip: 'Open the worker → Check status, check on the official site and record the result.', hit: (_w, a) => a.some((x) => x.category === 'Status check') },
-  { key: 'minwage', pay: true, label: 'Paid below minimum wage', max: 8, tip: 'Raise the basic pay to at least the minimum wage, or record why the worker is exempt. Check with JTKSM or your agent.', hit: (_w, a) => a.some((x) => x.id.startsWith('pay-minwage-')) },
+  { key: 'minwage', pay: true, label: 'Paid below minimum wage', max: 8, tip: 'Raise the basic pay to at least the minimum wage, or record why the worker is exempt. Check with JTKSM or your agent.', hit: (_w, a) => a.some((x) => x.id.startsWith('pay-minwage-') && !x.id.startsWith('pay-minwage-next-')) },
   { key: 'latepay', pay: true, label: 'Wages late or not recorded as paid', max: 5, tip: 'Pay wages within 7 days after the month ends and record the pay date on the payslip.', hit: (_w, a) => a.some((x) => x.id.startsWith('pay-late-')) },
   { key: 'deduct', pay: true, label: 'Deductions or hostel charge over the limit', max: 3, tip: 'Keep deductions within 50% of wages and the hostel charge within the Act 446 limit, with the paperwork on file.', hit: (_w, a) => a.some((x) => x.id.startsWith('pay-deduct-') || x.id.startsWith('pay-hostel-')) },
   { key: 'ot', pay: true, label: 'Overtime over 104 hours a month', max: 1, tip: 'Plan rosters so nobody works more than 104 overtime hours in a month.', hit: (_w, a) => a.some((x) => x.id.startsWith('pay-ot-')) },
@@ -58,7 +60,8 @@ export interface Priority { id: string; rank: number; icon: string; tone: 'red' 
 const plural = (n: number, one: string, many = one + 's') => `${n} ${n === 1 ? one : many}`
 const within = (d: number) => (d <= 31 ? 'within a month' : d <= 62 ? 'within 2 months' : 'within 3 months')
 
-export function priorities(alerts: Alert[], workers: Worker[], outlets: Outlet[], agencies: Agency[], opts: { om?: boolean; pay?: boolean } = {}): Priority[] {
+export interface PriorityExtra { grievancesNew?: number; highRisk?: number; hiringFomema?: number }
+export function priorities(alerts: Alert[], workers: Worker[], outlets: Outlet[], agencies: Agency[], opts: { om?: boolean; pay?: boolean } = {}, extra: PriorityExtra = {}): Priority[] {
   const ag = (id: string) => agencies.find((a) => a.id === id && a.enabled)
   const portal = (id: string, label: string): Action | undefined => { const a = ag(id); return a ? { label, href: a.url } : undefined }
   const uniq = (xs: Alert[]) => [...new Set(xs.map((x) => x.workerId))]
@@ -94,9 +97,9 @@ export function priorities(alerts: Alert[], workers: Worker[], outlets: Outlet[]
   }
   if (!opts.om && opts.pay !== false) {
     const rates = getConfig().rates
-    const mw = rateAt(rates.minWage, todayISO())
+    const mw = minWageFor(rates, todayISO())
     const PAY = '/alerts?cat=Pay%20compliance'
-    const below = uniq(of((a) => a.id.startsWith('pay-minwage-')))
+    const below = uniq(of((a) => a.id.startsWith('pay-minwage-') && !a.id.startsWith('pay-minwage-next-')))
     if (below.length) out.push({ id: 'pay-minwage', rank: 1, icon: '💰', tone: 'red', text: `${plural(below.length, 'worker is', 'workers are')} paid below the minimum wage${mw ? ` (${rm0(mw.monthly)})` : ''}`, detail: 'Raise the basic pay, or record why the worker is exempt. Check with JTKSM or your agent.', action: go(below, 'pay', PAY) })
     const late = uniq(of((a) => a.id.startsWith('pay-late-')))
     if (late.length) out.push({ id: 'pay-late', rank: 1, icon: '⏰', tone: 'red', text: `Wages for ${plural(late.length, 'worker')} ${late.length === 1 ? 'is' : 'are'} late or not recorded as paid`, detail: `Pay wages within ${rates.payDays} days after the month ends, and overtime by the end of the next month (Employment Act s.19).`, action: go(late, 'pay', PAY) })
@@ -113,6 +116,17 @@ export function priorities(alerts: Alert[], workers: Worker[], outlets: Outlet[]
       const missing = users.filter((w) => !w.payslips!.some((p) => p.month === last && p.payDate))
       if (missing.length) out.push({ id: 'pay-day', rank: 3, icon: '🗓️', tone: 'teal', text: `${monthLabel(last)} wages are due by ${parseISO(due)!.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} — ${plural(missing.length, 'worker')} not marked paid yet`, detail: 'Make the payslip and record the pay date on each worker’s Pay tab.', action: go(missing.map((w) => w.id), 'pay', '/workers') })
     }
+  }
+  if (!opts.om) {
+    const abs = uniq(of((a) => a.category === 'Absconding' && (a.severity === 'critical' || a.id.startsWith('abscond-start-'))))
+    if (abs.length) out.push({ id: 'abscond', rank: 1, icon: '🚨', tone: 'red', text: `${plural(abs.length, 'absconding case')} need${abs.length === 1 ? 's' : ''} reports`, detail: 'Make the police report and report to Immigration (FWCMS eRUNAWAY). Check with JTKSM or your agent.', action: go(abs, 'trackers', '/alerts?cat=Absconding') })
+    const hos = of((a) => a.category === 'Hostel')
+    if (hos.length) out.push({ id: 'hostel', rank: 2, icon: '🏠', tone: 'amber', text: `Hostel problems affect ${plural(uniq(hos).length, 'worker')}`, detail: 'Renew the Certificate for Accommodation or move workers out of an over-full hostel.', action: { label: 'Open hostels', to: '/compliance?tab=hostels' } })
+    const stay = uniq(of((a) => a.category === '10-year stay' && a.severity !== 'medium'))
+    if (stay.length) out.push({ id: 'stay', rank: 3, icon: '⌛', tone: 'amber', text: `${plural(stay.length, 'worker is', 'workers are')} at or near the 10-year stay limit`, detail: 'Plan the exit or replacement. Check with JTKSM or your agent.', action: go(stay, 'trackers', '/alerts?cat=10-year%20stay') })
+    if (extra.grievancesNew) out.push({ id: 'grievance', rank: 1, icon: '📣', tone: 'red', text: `${plural(extra.grievancesNew, 'new complaint')} from workers`, detail: 'Read it, set it to “In review” and reply — workers can track the status with their code.', action: { label: 'Open complaints', to: '/compliance?tab=grievances' } })
+    if (extra.highRisk) out.push({ id: 'risk', rank: 2, icon: '📊', tone: 'amber', text: `${plural(extra.highRisk, 'outlet')} with a high risk score`, detail: 'Open the outlet risk table to see what drives the score.', action: { label: 'Outlet risk', to: '/compliance?tab=risk' } })
+    if (extra.hiringFomema) out.push({ id: 'hiring', rank: 2, icon: '🧭', tone: 'amber', text: `${plural(extra.hiringFomema, 'new arrival')} need${extra.hiringFomema === 1 ? 's' : ''} FOMEMA within 30 days`, detail: 'Book the FOMEMA medical exam for workers who arrived recently.', action: { label: 'Hiring tracker', to: '/compliance?tab=hiring' } })
   }
   const pend = uniq(of((a) => a.id.startsWith('pppending-')))
   if (pend.length) out.push({ id: 'pp-pending', rank: 3, icon: '✍️', tone: 'amber', text: `${plural(pend.length, 'passport consent form')} waiting for signature`, detail: 'Collect the signed form and upload it.', action: go(pend, 'passport', '/alerts?cat=Passport%20consent') })

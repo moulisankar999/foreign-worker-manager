@@ -8,7 +8,7 @@ import { useAuth } from '../lib/auth'
 import { savePayConfig, useConfig } from '../lib/config'
 import { allowancesTotal, currentBasic } from '../lib/calc'
 import {
-  BUILTIN_HOLIDAYS, DEFAULT_RATES, REST_DAYS, STATES, computePayslip, holidaysFor, hostelCertValid, monthLabel, otQuick, prevMonth, rateAt, replacementDay, statutoryLeave,
+  BUILTIN_HOLIDAYS, DEFAULT_RATES, REST_DAYS, STATES, computePayslip, holidaysFor, hostelCertValid, minWageFor, minWageForWorker, monthLabel, nextMinWage, workerCompany, otQuick, prevMonth, rateAt, replacementDay, statutoryLeave,
   type Dated, type Holiday, type HolidaysConfig, type PayResult, type PayslipRec, type RatesConfig,
 } from '../lib/pay'
 import type { Outlet, Worker } from '../lib/types'
@@ -57,7 +57,8 @@ export function WorkerPayCompliance({ w, outlets }: { w: Worker; outlets: Outlet
   const rates = cfg.rates
   const today = todayISO()
   const basic = currentBasic(w)
-  const mw = rateAt(rates.minWage, today)
+  const mw = minWageForWorker(rates, today, w)
+  const nx = nextMinWage(rates, today, workerCompany(w))
   const outlet = outlets.find((o) => o.id === w.outletId)
   const est = computePayslip({ id: 'est', month: today.slice(0, 7), basic, allowances: allowancesTotal(w), hostel: w.hostelDeduction?.amount, payDate: today, state: outlet?.state }, rates, w, today)
   const cap = rateAt(rates.hostelCap, today)
@@ -72,7 +73,7 @@ export function WorkerPayCompliance({ w, outlets }: { w: Worker; outlets: Outlet
     <>
       <Card title="Pay compliance">
         <div className="calc">
-          <div className={mw && basic < mw.monthly && !w.minWageExempt ? 'pay-bad' : ''}><span>Minimum wage now</span><strong>{mw ? rm(mw.monthly) : '—'}</strong><small className="muted">{mw ? `${rm(mw.hourly)}/hour · from ${fmtDate(mw.from)}` : ''}</small></div>
+          <div className={mw && basic < mw.monthly && !w.minWageExempt ? 'pay-bad' : ''}><span>Minimum wage now</span><strong>{mw ? rm(mw.monthly) : '—'}</strong><small className="muted">{mw ? `${rm(mw.hourly)}/hour · from ${fmtDate(mw.from)}` : ''}{nx ? ` · next ${rm(nx.monthly)} from ${fmtDate(nx.from)}${nx.largeOnly ? ' (announced — confirm when gazetted)' : ''}` : ''}</small></div>
           <div><span>This worker’s basic</span><strong>{rm(basic)}</strong>
             <small>{w.minWageExempt ? <Chip tone="gray">Exempt</Chip> : mw && basic > 0 && basic < mw.monthly ? <Chip tone="red">Below minimum</Chip> : basic > 0 ? <Chip tone="green">OK</Chip> : <Chip tone="gray">Not set</Chip>}</small></div>
           <div><span>EPF (worker + employer)</span><strong>{rm(est.epfEe)} + {rm(est.epfEr)}</strong><small className="muted">2% each, rounded up</small></div>
@@ -212,7 +213,7 @@ export function PayslipModal({ w, initial, rates, state, onClose }: { w: Worker;
 /* ---------------- OT calculator ---------------- */
 export function OtCalculator() {
   const cfg = useConfig()
-  const [v, setV] = useState<V>({ basic: rateAt(cfg.rates.minWage, todayISO())?.monthly || 1700, normal: 0, rest: 0, ph: 0 })
+  const [v, setV] = useState<V>({ basic: minWageFor(cfg.rates, todayISO())?.monthly || 1700, normal: 0, rest: 0, ph: 0 })
   const q = otQuick(n(v.basic), { normal: n(v.normal), rest: n(v.rest), ph: n(v.ph) }, cfg.rates)
   return (
     <Card title="⏱️ Overtime calculator">
@@ -305,6 +306,7 @@ export function PayRulesSettings() {
       {msg && <p className={msg.startsWith('Saved') ? 'ok-msg' : 'err'} role="status">{msg}</p>}
       <DatedTable title="💰 Minimum wage" help="Domestic servants are not covered. Employers with fewer than 5 workers moved to RM1,700 from 1 Aug 2025." rows={rates.minWage} canEdit={canRates} onSave={put('minWage')}
         cols={[{ key: 'monthly', label: 'Monthly RM' }, { key: 'hourly', label: 'Hourly RM' }, { key: 'daily6', label: 'Daily (6-day wk)' }, { key: 'daily5', label: 'Daily (5-day wk)' }, { key: 'daily4', label: 'Daily (4-day wk)' }]} />
+      <BusinessSizeCard canEdit={canRates} rates={rates} onSave={save} />
       <DatedTable title="🏦 EPF (KWSP) — foreign workers" help="Each share is wages × rate, rounded up to the next ringgit. Overtime is not EPF wages. Pay by the 15th of the next month." rows={rates.epf} canEdit={canRates} onSave={put('epf')}
         cols={[{ key: 'employee', label: 'Worker %', suffix: '%' }, { key: 'employer', label: 'Employer %', suffix: '%' }]} />
       <DatedTable title="🛡️ PERKESO (SOCSO) — foreign workers" help="Employment Injury + Invalidity. The app gives an estimate on wages up to the ceiling; PERKESO’s band table gives the exact amount." rows={rates.socso} canEdit={canRates} onSave={put('socso')}
@@ -407,6 +409,32 @@ export function HolidaysEditor({ canEdit }: { canEdit: boolean }) {
           )}
         </FormModal>
       )}
+    </Card>
+  )
+}
+
+/** v1.2.2: the announced RM2,000 minimum wage (1 June 2027) does not apply for now to businesses with annual sales under RM50 million */
+function BusinessSizeCard({ canEdit, rates, onSave }: { canEdit: boolean; rates: RatesConfig; onSave: (r: RatesConfig) => Promise<void> }) {
+  const companies = useConfig().companies.items
+  const sme = rates.smeCompanies || []
+  const [busy, setBusy] = useState(false)
+  const large = rates.minWage.filter((r) => r.largeOnly).sort((a, b) => a.from.localeCompare(b.from))
+  const toggle = async (id: string, on: boolean) => {
+    setBusy(true)
+    try { await onSave({ ...rates, smeCompanies: on ? [...new Set([...sme, id])] : sme.filter((x) => x !== id) }) } catch { /* message shown above */ } finally { setBusy(false) }
+  }
+  return (
+    <Card title="🏢 Business size (minimum wage)">
+      <p className="muted small">{large.length ? <>The rate{large.length > 1 ? 's' : ''} from {large.map((r) => `${fmtDate(r.from)} (${rm(r.monthly)})`).join(', ')} {large.length > 1 ? 'are' : 'is'} <strong>announced — confirm when gazetted</strong>. </> : null}
+        Tick a company if its annual sales are under RM50 million (counted at group level, including subsidiaries). Those companies stay on the current rate for now. This exemption is announced, not yet law — {CHECK}.</p>
+      <div style={{ display: 'grid', gap: 8 }}>
+        {companies.map((c) => (
+          <label key={c.id} className="row gap-s">
+            <input type="checkbox" checked={sme.includes(c.id)} disabled={!canEdit || busy} onChange={(e) => void toggle(c.id, e.target.checked)} />
+            <span>{c.name} — annual sales under RM50 million</span>
+          </label>
+        ))}
+      </div>
     </Card>
   )
 }
