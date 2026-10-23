@@ -99,7 +99,7 @@ function MainApp() {
         </div>
         <nav aria-label="Main">
           {NAV.filter((n) => !n.mobile && (!n.ceo || isSuper) && (!n.hr || (canWrite && !isOM))).map((n) => (
-            <NavLink key={n.to} to={n.to} end={n.end} className={({ isActive }) => (isActive ? 'on' : '')}>
+            <NavLink key={n.to} to={n.to} end={n.end} className={({ isActive }) => (isActive || (n.to === '/' && loc.pathname.startsWith('/dashboard')) ? 'on' : '')}>
               <Icon name={n.icon} />
               <span>{n.label === 'Home' ? 'Dashboard' : n.label}</span>
               {badge(n.to) > 0 && <span className="badge">{badge(n.to)}</span>}
@@ -125,9 +125,11 @@ function MainApp() {
         <main className="content">
           {IS_TEST_BUILD && <p className="banner small warn" style={{ marginBottom: 12 }}>TEST BUILD — connected to the test project, not live data.</p>}
           {role === 'viewer' && <p className="banner small" style={{ marginBottom: 12 }}>You have <strong>view-only</strong> access. Ask your CEO for more access to add or edit.</p>}
-          {loc.pathname === '/' && <div style={{ marginBottom: 12 }}><LocalDataBanner compact /></div>}
+          {(loc.pathname === '/' || loc.pathname.startsWith('/dashboard')) && <div style={{ marginBottom: 12 }}><LocalDataBanner compact /></div>}
           <Routes>
             <Route path="/" element={<Dashboard />} />
+            <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/dashboard/:tab" element={<Dashboard />} />
             <Route path="/workers" element={<Workers />} />
             <Route path="/workers/new" element={<WorkerForm />} />
             <Route path="/workers/:id" element={<WorkerDetail />} />
@@ -151,7 +153,7 @@ function MainApp() {
       </div>
       <nav className="bottom" aria-label="Main mobile">
         {NAV.filter((n) => !n.desk).map((n) => (
-          <NavLink key={n.to} to={n.to} end={n.end} className={({ isActive }) => (isActive ? 'on' : '')}>
+          <NavLink key={n.to} to={n.to} end={n.end} className={({ isActive }) => (isActive || (n.to === '/' && loc.pathname.startsWith('/dashboard')) ? 'on' : '')}>
             <span className="bi">
               <Icon name={n.icon} size={22} />
               {badge(n.to) > 0 && <span className="badge">{badge(n.to)}</span>}

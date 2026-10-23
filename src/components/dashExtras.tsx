@@ -1,5 +1,6 @@
 import { Link, useNavigate } from 'react-router-dom'
-import { Card, Chip, Stat } from './ui'
+import { Card, Chip, Stat, Tabs } from './ui'
+import { useDashTab } from '../lib/dashTab'
 import { useAuth } from '../lib/auth'
 import { useConfig } from '../lib/config'
 import { isExited } from '../lib/calc'
@@ -80,29 +81,38 @@ export function WorkflowPanel({ workers }: { workers: Worker[] }) {
 }
 
 /** Simplified dashboard for an Outlet Manager (his outlets only — enforced by the server). */
+const OM_TABS: { id: 'overview' | 'requests' | 'workers'; label: string }[] = [{ id: 'overview', label: 'Overview' }, { id: 'requests', label: 'Requests' }, { id: 'workers', label: 'My workers' }]
 export function OmDashboard({ workers, alerts, extra }: { workers: Worker[]; alerts: Alert[]; extra: Extra[] }) {
   const { myOutlets } = useAuth()
   const outlets = useOutlets()
   const nav = useNavigate()
   const cur = workers.filter((w) => !isExited(w))
+  const [tab, setTab] = useDashTab(['overview', 'requests', 'workers'] as const, 'overview')
   return (
-    <div className="page">
+    <div className="page dash-tabs">
       <div className="page-h"><Greeting sub={`My outlet${myOutlets.length > 1 ? 's' : ''} · ${cur.length} workers`} /></div>
       {myOutlets.length === 0 && <p className="banner warn">No outlets are assigned to you yet. Ask your HR / CEO to assign your outlet(s) in Settings → Users.</p>}
-      <div className="quick">
-        {[['annual_leave', '🏖️', 'Annual leave'], ['emergency_leave', '🚨', 'Emergency leave'], ['medical_leave', '🤒', 'MC'], ['home_leave', '✈️', 'Home leave'], ['salary_advance', '💵', 'Advance'], ['passport', '🛂', 'Passport']].map(([k, i, l]) => (
-          <button key={k} onClick={() => nav(`/requests/new?type=${k}`)}><span>{i}</span>{l}</button>
-        ))}
+      <Tabs tabs={OM_TABS.map((t) => ({ ...t, badge: t.id === 'requests' ? extra.length || undefined : undefined }))} value={tab} onChange={setTab} />
+      <div role="tabpanel" className="page dash-panel">
+        {tab === 'overview' && <>
+          <div className="quick">
+            {[['annual_leave', '🏖️', 'Annual leave'], ['emergency_leave', '🚨', 'Emergency leave'], ['medical_leave', '🤒', 'MC'], ['home_leave', '✈️', 'Home leave'], ['salary_advance', '💵', 'Advance'], ['passport', '🛂', 'Passport']].map(([k, i, l]) => (
+              <button key={k} onClick={() => nav(`/requests/new?type=${k}`)}><span>{i}</span>{l}</button>
+            ))}
+          </div>
+          <Priorities alerts={alerts} workers={workers} outlets={outlets} om extra={extra} />
+        </>}
+        {tab === 'requests' && <WorkflowPanel workers={workers} />}
+        {tab === 'workers' && <>
+          <div className="dash-3"><StatusGlance workers={workers} /><TipCard /></div>
+          <Card title="My workers" actions={<Link className="link" to="/workers">All →</Link>}>
+            <ul className="rows compact">{cur.slice(0, 12).map((w) => (
+              <li key={w.id}><Link className="req-link" to={`/workers/${w.id}`}><div className="r-main"><strong>{w.fullName}</strong><small>{w.workerNo} · {w.jobCategory} · {w.status}</small></div>
+                {consentOf(w) !== 'signed' && <Chip tone={CONSENT_TONE[consentOf(w)]}>🛂 {CONSENT_LABEL[consentOf(w)]}</Chip>}</Link></li>
+            ))}</ul>
+          </Card>
+        </>}
       </div>
-      <Priorities alerts={alerts} workers={workers} outlets={outlets} om extra={extra} />
-      <div className="dash-3"><StatusGlance workers={workers} /><TipCard /></div>
-      <WorkflowPanel workers={workers} />
-      <Card title="My workers" actions={<Link className="link" to="/workers">All →</Link>}>
-        <ul className="rows compact">{cur.slice(0, 12).map((w) => (
-          <li key={w.id}><Link className="req-link" to={`/workers/${w.id}`}><div className="r-main"><strong>{w.fullName}</strong><small>{w.workerNo} · {w.jobCategory} · {w.status}</small></div>
-            {consentOf(w) !== 'signed' && <Chip tone={CONSENT_TONE[consentOf(w)]}>🛂 {CONSENT_LABEL[consentOf(w)]}</Chip>}</Link></li>
-        ))}</ul>
-      </Card>
     </div>
   )
 }

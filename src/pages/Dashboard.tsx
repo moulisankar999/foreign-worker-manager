@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { BarList, Btn, Card, Chip, ColumnChart, Empty, Stat, sevTone } from '../components/ui'
+import { useDashTab, type DashTab } from '../lib/dashTab'
+import { BarList, Btn, Card, Chip, ColumnChart, Empty, Stat, Tabs, sevTone } from '../components/ui'
 import { currentBasic, isExited, isOnLeave, outletName, outstanding, ticketInfo } from '../lib/calc'
 import { useAlerts, useOutlets, useSettings, useWorkersLoaded } from '../lib/hooks'
 import { loadSampleData } from '../lib/sample'
@@ -80,6 +81,8 @@ export default function Dashboard() {
     }
   }, [workers, alerts, outlets, s])
 
+  const tabIds = (canSeeSalary ? ['overview', 'expiries', 'requests', 'pay', 'risk', 'workforce'] : ['overview', 'expiries', 'requests', 'risk', 'workforce']) as DashTab[]
+  const [tab, setTab] = useDashTab(tabIds, 'overview')
   if (isOM) return <OmDashboard workers={workers} alerts={alerts} extra={extra} />
   if (loaded && workers.length === 0 && canWrite)
     return (
@@ -100,84 +103,117 @@ export default function Dashboard() {
     )
 
   const urgent = alerts.filter((a) => a.severity === 'critical' || a.severity === 'high').slice(0, 8)
+  const labels: Record<DashTab, string> = { overview: 'Overview', expiries: 'Expiries', requests: 'Requests', pay: 'Pay', risk: 'Risk & checks', workforce: 'Workforce' }
+  const actionN = mineN + newUsers.length + (isSuper ? ceoN : 0), expiringN = k.expired + k.d30
   return (
-    <div className="page">
-      <div className="page-h">
-        <Greeting sub={`${k.total} current workers${k.exited ? ` · ${k.exited} exited` : ''}`} />
-        <div className="row gap-s wrap">
-          {canWrite && <Btn kind="primary" icon="plus" onClick={() => nav('/workers/new')}>Add worker</Btn>}
+      <div className="page dash-tabs">
+        <div className="page-h">
+          <Greeting sub={`${k.total} current workers${k.exited ? ` · ${k.exited} exited` : ''}`} />
+          <div className="row gap-s wrap dash-add">
+            {canWrite && <Btn kind="primary" icon="plus" onClick={() => nav('/workers/new')}>Add worker</Btn>}
+          </div>
         </div>
-      </div>
-      <div className="dash-top">
-        <Priorities alerts={alerts} workers={workers} outlets={outlets} extra={extra} />
-        <HealthCard workers={workers} alerts={alerts} outlets={outlets} />
-      </div>
-      <div className="dash-3">
-        <StatusGlance workers={workers} />
-        <ExpiryTimeline alerts={alerts} />
-        <TipCard />
-      </div>
-      {canWrite && <OutletRiskCard />}
-      <WorkflowPanel workers={workers} />
-      <LatestChecks workers={workers} />
-
-      <div className="stats">
-        <Stat label="Total workers" value={k.total} icon="users" onClick={() => nav('/workers')} />
-        <Stat label="Active / working" value={k.active} icon="check" tone="green" onClick={() => nav('/workers?status=Active-Working')} />
-        <Stat label="On leave" value={k.leave} icon="plane" tone="blue" onClick={() => nav('/workers?status=__leave')} />
-        <Stat label="Expired docs" value={k.expired} icon="alert" tone="red" onClick={() => nav('/alerts?sev=critical')} />
-        <Stat label="Expiring ≤ 30 days" value={k.d30} icon="cal" tone="orange" onClick={() => nav('/alerts')} />
-        <Stat label="Expiring ≤ 60 days" value={k.d60} icon="cal" tone="amber" onClick={() => nav('/alerts')} />
-        <Stat label="Expiring ≤ 90 days" value={k.d90} icon="cal" tone="yellow" onClick={() => nav('/alerts')} />
-        <Stat label="Flight ticket eligible" value={k.tickets} icon="plane" tone="purple" onClick={() => nav('/reports?r=tickets')} />
-        {canSeeSalary && <Stat label="Outstanding loans" value={rm0(k.loans)} icon="money" tone="pink" onClick={() => nav('/reports?r=loans')} />}
-        {canSeeSalary && <Stat label="Monthly basic payroll" value={rm0(k.payroll)} icon="money" tone="teal" onClick={() => nav('/reports?r=payroll')} />}
-      </div>
-
-      {canWrite && k.noLang > 0 && (
-        <div className="banner amber small datagap" role="status">
-          <span>🗣️ <strong>Data gap:</strong> {k.noLang} current worker{k.noLang === 1 ? ' has' : 's have'} no primary language yet. It is needed for the passport consent form in the worker's own language.</span>
-          <span><Btn small onClick={() => nav('/workers?gap=lang&status=__current')}>Review {k.noLang === 1 ? 'worker' : 'workers'}</Btn></span>
+        <Tabs tabs={tabIds.map((id) => ({ id, label: labels[id], badge: id === 'requests' ? actionN : id === 'expiries' ? expiringN : undefined }))} value={tab} onChange={setTab} />
+        <div role="tabpanel" className="page dash-panel">
+          {tab === 'overview' && <>
+            <Priorities alerts={alerts} workers={workers} outlets={outlets} extra={extra} />
+            <div className="stats stats-4">
+              <Stat label="Total workers" value={k.total} icon="users" onClick={() => nav('/workers')} />
+              <Stat label="Active / working" value={k.active} icon="check" tone="green" onClick={() => nav('/workers?status=Active-Working')} />
+              <Stat label="On leave" value={k.leave} icon="plane" tone="blue" onClick={() => nav('/workers?status=__leave')} />
+              <Stat label="Expired docs" value={k.expired} icon="alert" tone="red" onClick={() => nav('/alerts?sev=critical')} />
+            </div>
+            {canWrite && k.noLang > 0 && (
+              <div className="banner amber small datagap" role="status">
+                <span>🗣️ <strong>Data gap:</strong> {k.noLang} current worker{k.noLang === 1 ? ' has' : 's have'} no primary language yet. It is needed for the passport consent form in the worker's own language.</span>
+                <span><Btn small onClick={() => nav('/workers?gap=lang&status=__current')}>Review {k.noLang === 1 ? 'worker' : 'workers'}</Btn></span>
+              </div>
+            )}
+            <div className="quick">
+              {canWrite && <button onClick={() => nav('/workers/new')}><span>➕</span>Add worker</button>}
+              <button onClick={() => nav('/requests/new')}><span>📝</span>New request</button>
+              <button onClick={() => nav('/alerts')}><span>🔔</span>Alerts</button>
+              <button onClick={() => nav('/reports?r=expiry')}><span>📄</span>Expiry report</button>
+              <button onClick={() => nav('/reports?r=tickets')}><span>✈️</span>Flight tickets</button>
+              <button onClick={() => nav('/reports?r=passport')}><span>🛂</span>Passport register</button>
+            </div>
+          </>}
+          {tab === 'expiries' && <>
+            <div className="stats stats-4">
+              <Stat label="Expired docs" value={k.expired} icon="alert" tone="red" onClick={() => nav('/alerts?sev=critical')} />
+              <Stat label="Expiring ≤ 30 days" value={k.d30} icon="cal" tone="orange" onClick={() => nav('/alerts')} />
+              <Stat label="Expiring ≤ 60 days" value={k.d60} icon="cal" tone="amber" onClick={() => nav('/alerts')} />
+              <Stat label="Expiring ≤ 90 days" value={k.d90} icon="cal" tone="yellow" onClick={() => nav('/alerts')} />
+            </div>
+            <Card title="Needs attention" actions={<Link to="/alerts" className="link">All alerts →</Link>}>
+              {urgent.length === 0 ? <p className="muted">Nothing urgent 🎉</p> : (
+                <ul className="alist">
+                  {urgent.map((a) => (
+                    <li key={a.id}>
+                      <Link to={`/workers/${a.workerId}`}>
+                        <Chip tone={sevTone(a.severity)}>{a.days !== null ? (a.days < 0 ? `${-a.days}d late` : `${a.days}d`) : a.severity}</Chip>
+                        <span className="al-t"><strong>{a.title}</strong><small>{a.workerName} · {a.workerNo}</small></span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </Card>
+            <ExpiryTimeline alerts={alerts} />
+            <Card title="Upcoming document expiries (12 months)">
+              <ColumnChart data={k.months} />
+              <div className="legend"><span><i className="tone-red" />Permit</span><span><i className="tone-amber" />Passport</span><span><i className="tone-teal" />Others</span></div>
+            </Card>
+          </>}
+          {tab === 'requests' && <>
+            <WorkflowPanel workers={workers} />
+            <div className="quick small-q">
+              <button onClick={() => nav('/requests/new')}><span>📝</span>New request</button>
+              <button onClick={() => nav('/requests?tab=mine_action')}><span>✅</span>My decisions</button>
+              {isSuper ? <button onClick={() => nav('/ceo-review')}><span>🔒</span>CEO review</button> : <button onClick={() => nav('/requests')}><span>📋</span>All requests</button>}
+            </div>
+          </>}
+          {tab === 'pay' && canSeeSalary && <>
+            <div className="stats stats-4">
+              <Stat label="Monthly basic payroll" value={rm0(k.payroll)} icon="money" tone="teal" onClick={() => nav('/reports?r=payroll')} />
+              <Stat label="Outstanding loans" value={rm0(k.loans)} icon="money" tone="pink" onClick={() => nav('/reports?r=loans')} />
+              <Stat label="Flight ticket eligible" value={k.tickets} icon="plane" tone="purple" onClick={() => nav('/reports?r=tickets')} />
+              <Stat label="On leave" value={k.leave} icon="plane" tone="blue" onClick={() => nav('/workers?status=__leave')} />
+            </div>
+            <div className="quick small-q">
+              <button onClick={() => nav('/reports?r=payroll')}><span>💵</span>Payroll</button>
+              <button onClick={() => nav('/reports?r=loans')}><span>🏦</span>Loans</button>
+              <button onClick={() => nav('/reports?r=tickets')}><span>✈️</span>Flight tickets</button>
+              <button onClick={() => nav('/reports?r=leave')}><span>🏖️</span>Leave balances</button>
+              <button onClick={() => nav('/settings/pay')}><span>⚖️</span>Pay rules</button>
+              <button onClick={() => nav('/alerts')}><span>🔔</span>Pay alerts</button>
+            </div>
+          </>}
+          {tab === 'risk' && <>
+            <HealthCard workers={workers} alerts={alerts} outlets={outlets} />
+            {canWrite && <OutletRiskCard />}
+            <LatestChecks workers={workers} />
+          </>}
+          {tab === 'workforce' && <>
+            <div className="stats stats-4">
+              <Stat label="Total workers" value={k.total} icon="users" onClick={() => nav('/workers')} />
+              <Stat label="Active / working" value={k.active} icon="check" tone="green" onClick={() => nav('/workers?status=Active-Working')} />
+              <Stat label="On leave" value={k.leave} icon="plane" tone="blue" onClick={() => nav('/workers?status=__leave')} />
+              <Stat label="Flight ticket eligible" value={k.tickets} icon="plane" tone="purple" onClick={() => nav('/reports?r=tickets')} />
+            </div>
+            <StatusGlance workers={workers} />
+            <div className="grid2">
+              <Card title="By status"><BarList data={k.byStatus} onClick={(l) => nav(`/workers?status=${encodeURIComponent(l)}`)} /></Card>
+              <Card title="By nationality"><BarList data={k.byNat} onClick={(l) => nav(`/workers?nat=${encodeURIComponent(l)}`)} /></Card>
+              <Card title="By outlet"><BarList data={k.byOutlet} /></Card>
+              <Card title="By business type"><BarList data={k.byType} /></Card>
+            </div>
+            <TipCard />
+          </>}
         </div>
-      )}
-
-      <div className="quick">
-        {canWrite && <button onClick={() => nav('/workers/new')}><span>➕</span>Add worker</button>}
-        <button onClick={() => nav('/requests/new')}><span>📝</span>New request</button>
-        <button onClick={() => nav('/alerts')}><span>🔔</span>Alerts</button>
-        <button onClick={() => nav('/reports?r=expiry')}><span>📄</span>Expiry report</button>
-        <button onClick={() => nav('/reports?r=leave')}><span>🏖️</span>Leave balances</button>
-        <button onClick={() => nav('/reports?r=tickets')}><span>✈️</span>Flight tickets</button>
-        <button onClick={() => nav('/reports?r=passport')}><span>🛂</span>Passport register</button>
+        <p className="muted small center">Data syncs to the company cloud and stays available offline on this device. Today: {fmtDate(todayISO())}</p>
       </div>
-
-      <div className="grid2">
-        <Card title="Needs attention" actions={<Link to="/alerts" className="link">All alerts →</Link>}>
-          {urgent.length === 0 ? <p className="muted">Nothing urgent 🎉</p> : (
-            <ul className="alist">
-              {urgent.map((a) => (
-                <li key={a.id}>
-                  <Link to={`/workers/${a.workerId}`}>
-                    <Chip tone={sevTone(a.severity)}>{a.days !== null ? (a.days < 0 ? `${-a.days}d late` : `${a.days}d`) : a.severity}</Chip>
-                    <span className="al-t"><strong>{a.title}</strong><small>{a.workerName} · {a.workerNo}</small></span>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Card>
-        <Card title="Upcoming document expiries (12 months)">
-          <ColumnChart data={k.months} />
-          <div className="legend"><span><i className="tone-red" />Permit</span><span><i className="tone-amber" />Passport</span><span><i className="tone-teal" />Others</span></div>
-        </Card>
-        <Card title="By nationality"><BarList data={k.byNat} onClick={(l) => nav(`/workers?nat=${encodeURIComponent(l)}`)} /></Card>
-        <Card title="By business type"><BarList data={k.byType} /></Card>
-        <Card title="By outlet"><BarList data={k.byOutlet} /></Card>
-        <Card title="By status"><BarList data={k.byStatus} onClick={(l) => nav(`/workers?status=${encodeURIComponent(l)}`)} /></Card>
-      </div>
-      <p className="muted small center">Data syncs to the company cloud and stays available offline on this device. Today: {fmtDate(todayISO())}</p>
-    </div>
-  )
+    )
 }
 
 /** v1.2.2: outlet risk score (HR / management dashboard; outlet managers have their own dashboard) */
