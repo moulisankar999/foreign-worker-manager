@@ -28,6 +28,7 @@ import { useRequests } from './lib/requests'
 import { needsMyAction } from './lib/workflow'
 import { usePendingUsers } from './lib/userApprovals'
 import { IS_TEST_BUILD } from './lib/supabase'
+import { UserMenu } from './components/userMenu'
 
 const NAV = [
   { to: '/', label: 'Home', icon: 'home', end: true },
@@ -106,6 +107,7 @@ function MainApp() {
             <Icon name="bell" />
             {inbox.unread > 0 && <span className="badge">{inbox.unread}</span>}
           </NavLink>
+          <UserMenu />
         </header>
         <main className="content">
           {IS_TEST_BUILD && <p className="banner small warn" style={{ marginBottom: 12 }}>TEST BUILD — connected to the test project, not live data.</p>}

@@ -123,3 +123,10 @@ export function listenForTaps() {
     window.location.hash = '#' + route
   })
 }
+
+/** Remove every reminder planned on this phone (used on sign-out: they name the previous user's workers). */
+export async function cancelNativeAlerts() {
+  const pending = await LocalNotifications.getPending()
+  if (pending.notifications.length) await LocalNotifications.cancel({ notifications: pending.notifications.map((n) => ({ id: n.id })) })
+  localStorage.removeItem(INFO_KEY)
+}

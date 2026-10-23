@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { Btn, Card, Chip, FormModal, type FieldDef } from '../components/ui'
 import { db, exportBackup, importBackup } from '../lib/db'
+import { SignOutRow } from '../components/userMenu'
 import { AccountCard, PhoneAlertsCard, UsersCard } from '../components/cloud'
 import { ApprovalRulesCard, AuditCard, EmergencyReasonsCard, HrFlagsCard, MyAlertsCard, NotificationsCard, PassportSettingsCard, VaultSettingsCard } from '../components/adminSettings'
 import { useAuth } from '../lib/auth'
@@ -164,6 +165,8 @@ export default function SettingsPage() {
           {msg && <p className="ok" role="status">{msg}</p>}
         </Card>
       </div>
+
+      <SignOutRow />
 
       {policy && (
         <FormModal title="Company & policy" fields={policyFields} initial={{ ...s, leadTimes: s.leadTimes.join(',') }} onClose={() => setPolicy(false)}

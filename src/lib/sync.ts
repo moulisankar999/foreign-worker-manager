@@ -48,6 +48,7 @@ function setStatus(p: Partial<SyncStatus>) {
   status = { ...status, ...p }
   listeners.forEach((l) => l())
 }
+export const getSyncStatus = () => status
 export function useSyncStatus() {
   return useSyncExternalStore((cb) => { listeners.add(cb); return () => listeners.delete(cb) }, () => status)
 }
@@ -336,7 +337,16 @@ export async function startSync(userId: string, role: string, outlets = '') {
     // different account, role or outlets on this device: what this user may see changed → download again
     localStorage.removeItem(CURSOR)
     localStorage.setItem(SYNC_USER, scope)
-    if (prev && prev.split('|')[0] === userId) {
+    if (prev && prev.split('|')[0] !== userId) {
+      // another person's copy is still on this device (e.g. the app was closed before sign-out finished): never show it
+      await remoteTx(async () => {
+        await Promise.all([db.workers.clear(), db.outlets.clear(), db.jobs.clear(), db.settings.clear(), db.remarks.clear(), db.synced.clear()])
+      })
+      dirty = {}
+      saveDirty()
+      localStorage.removeItem('fwm-requests')
+      try { if ('caches' in window) await caches.delete('fwm-logos-v1') } catch { /* ignore */ }
+    } else if (prev && prev.split('|')[0] === userId) {
       await remoteTx(async () => {
         const keep = new Set(Object.keys(dirty))
         await db.synced.where('key').startsWith('workers:').delete()

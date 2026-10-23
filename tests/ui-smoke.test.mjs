@@ -92,6 +92,33 @@ const go = async (p, h) => { await p.goto(process.env.UI_URL + '#' + h); await p
   check('OM does not see Notifications admin card', !/Not configured/.test(s))
   check('OM does not see approval rules', !/Approval rules/i.test(s))
   await go(p, '/requests/new'); check('OM can open new request', /type|Request/i.test(await body(p)))
+  // visible sign-out: avatar menu (every role / screen size) + rows on More and Settings
+  check('Settings has a Sign out row', /Switch user \/ Sign out/.test(s))
+  await go(p, '/more'); check('More page has a Sign out row', /Switch user \/ Sign out/.test(await body(p)))
+  check('avatar button in the top bar (mobile)', await p.locator('header.top button.avatar').isVisible())
+  await p.locator('header.top button.avatar').click(); await p.waitForTimeout(400)
+  const menu = await p.locator('.umenu-pop').innerText().catch(() => '')
+  check('avatar menu shows role + outlet', /Outlet Manager/.test(menu) && /Outlet One/.test(menu), menu)
+  const rowsBefore = await p.evaluate(() => new Promise((res) => { const r = indexedDB.open('foreign-worker-manager'); r.onsuccess = () => { const t = r.result.transaction('outlets').objectStore('outlets').count(); t.onsuccess = () => { res(t.result); r.result.close() } } }))
+  p.once('dialog', (dl) => { void dl.accept() })
+  await p.locator('.umenu-pop button', { hasText: 'Sign out' }).click()
+  await p.waitForTimeout(5000)
+  const st = await p.evaluate(() => new Promise((res) => {
+    const keys = Object.keys(localStorage)
+    const r = indexedDB.open('foreign-worker-manager')
+    r.onsuccess = () => { const tx = r.result.transaction(['workers', 'outlets', 'settings']); let n = 0, done = 0; for (const t of ['workers', 'outlets', 'settings']) { const c = tx.objectStore(t).count(); c.onsuccess = () => { n += c.result; if (++done === 3) { r.result.close(); res({ keys, rows: n }) } } } }
+  }))
+  check('sign-out returns to the login screen', await p.locator('#em').isVisible())
+  check('sign-out clears the session + profile cache', !st.keys.some((k) => k.startsWith('sb-') || k === 'fwm-profile' || k === 'fwm-config' || k === 'fwm-requests'), st.keys.join(','))
+  check('sign-out wipes the device copy', rowsBefore > 0 && st.rows === 0, `before ${rowsBefore} after ${st.rows}`)
+  await p.reload(); await p.waitForTimeout(3000)
+  check('reload after sign-out stays on login (no auto-restore)', await p.locator('#em').isVisible())
+  // another person signs in on the same browser
+  await p.fill('#em', sup); await p.fill('#pw', pw); await p.locator('form button[type=submit]').first().click(); await p.waitForTimeout(6000)
+  await p.locator('header.top button.avatar').click(); await p.waitForTimeout(400)
+  check('next user signs in on the same device', /Super Admin/.test(await p.locator('.umenu-pop').innerText().catch(() => '')))
+  await p.setViewportSize({ width: 1280, height: 800 }); await p.waitForTimeout(300)
+  check('avatar button visible on desktop too', await p.locator('header.top button.avatar').isVisible())
   check('no page errors (OM)', errs.length === 0, errs.join(' | '))
   await ctx.close()
 }

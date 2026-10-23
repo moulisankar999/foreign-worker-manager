@@ -13,6 +13,7 @@ import { enableNativeAlerts, permissionState, reschedule, scheduleInfo, sendTest
 import { useSettings, useWorkers } from '../lib/hooks'
 import { useConfig } from '../lib/config'
 import { scopeLabel } from '../lib/companies'
+import { useSignOut } from './userMenu'
 import { PendingItem, ScopePicker, byLine } from './userApprovals'
 
 const LABEL = { synced: 'Synced', syncing: 'Syncing…', offline: 'Offline', error: 'Sync error', off: 'Not syncing' } as const
@@ -62,8 +63,9 @@ export function LocalDataBanner({ compact }: { compact?: boolean }) {
 }
 
 export function AccountCard() {
-  const { session, profile, signOut, myOutlets } = useAuth()
+  const { session, profile, myOutlets } = useAuth()
   const s = useSyncStatus()
+  const out = useSignOut()
   const outlets = useLiveQuery(() => db.outlets.toArray(), [], [])
   const outletName = (id: string) => outlets.find((o) => o.id === id)?.name || id
   return (
@@ -77,10 +79,7 @@ export function AccountCard() {
       <LocalDataBanner />
       <div className="row gap-s wrap mt-s">
         <Btn icon="upload" onClick={() => syncNow()}>Sync now</Btn>
-        <Btn kind="ghost" icon="exit" onClick={async () => {
-          const warn = s.pending ? `\n\n⚠️ ${s.pending} change(s) are not uploaded yet and will be lost.` : ''
-          if (confirm('Sign out? The copy on this device will be removed (it stays in the cloud).' + warn)) await signOut(true)
-        }}>Sign out</Btn>
+        <Btn kind="ghost" icon="exit" disabled={out.busy} onClick={() => { void out.run() }}>Switch user / Sign out</Btn>
       </div>
     </Card>
   )

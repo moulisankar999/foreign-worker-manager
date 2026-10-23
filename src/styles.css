@@ -358,3 +358,20 @@ code { background: #f1f5f9; padding: 1px 5px; border-radius: 5px; font-size: .85
 .brand .logo-box { border: 0; }
 .top-logo { display: none; }
 @media (max-width: 860px) { .top-logo { display: inline-flex; } }
+
+/* account menu (top app bar, every screen size) */
+.umenu { position: relative; flex: 0 0 auto; margin-left: auto; }
+.avatar { width: 36px; height: 36px; border-radius: 50%; border: 0; background: var(--pri); color: #fff; font-weight: 700; font-size: .85rem; letter-spacing: .02em; display: inline-grid; place-items: center; cursor: pointer; flex: 0 0 auto; }
+.avatar:focus-visible { outline: 3px solid #93c5fd; outline-offset: 2px; }
+.avatar.big { width: 44px; height: 44px; font-size: 1rem; cursor: default; }
+.umenu-pop { position: absolute; right: 0; top: calc(100% + 8px); z-index: 50; width: min(300px, calc(100vw - 24px)); background: var(--card); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 12px 32px rgba(15,23,42,.18); padding: 8px; }
+.umenu-who { display: flex; gap: 10px; align-items: flex-start; padding: 8px 8px 12px; border-bottom: 1px solid var(--line); margin-bottom: 6px; }
+.umenu-who > div { display: flex; flex-direction: column; min-width: 0; }
+.umenu-who strong, .umenu-who small { overflow-wrap: anywhere; }
+.umenu-item { display: flex; align-items: center; gap: 10px; width: 100%; padding: 10px 8px; border: 0; background: none; border-radius: 8px; color: var(--text); font: inherit; text-align: left; cursor: pointer; text-decoration: none; }
+.umenu-item:hover, .umenu-item:focus-visible { background: #f1f5f9; }
+.umenu-item.danger { color: var(--red); font-weight: 600; }
+.signout-row { margin-top: 16px; padding: 10px 16px; }
+.signout-row button { border: 0; background: none; font: inherit; text-align: left; cursor: pointer; padding: 4px 0; }
+.signout-row strong { color: var(--red); }
+.req-ic.danger { background: #fef2f2; color: var(--red); }

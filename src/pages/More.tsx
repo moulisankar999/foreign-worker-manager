@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom'
 import { Card } from '../components/ui'
 import { Icon } from '../components/Icon'
 import { useAuth } from '../lib/auth'
+import { SignOutRow } from '../components/userMenu'
 
 export default function More() {
   const { canWrite, isSuper, isHr } = useAuth()
@@ -17,6 +18,7 @@ export default function More() {
     <div className="page narrow">
       <h1>More</h1>
       <Card><ul className="rows">{items.map(([to, ic, l, d]) => <li key={to}><Link to={to} className="req-link"><span className="req-ic"><Icon name={ic} /></span><div className="r-main"><strong>{l}</strong><small>{d}</small></div></Link></li>)}</ul></Card>
+      <SignOutRow />
     </div>
   )
 }

@@ -1,9 +1,12 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react'
 import type { Session } from '@supabase/supabase-js'
-import { supabase, type Profile, type Role } from './supabase'
+import { forgetStoredSession, supabase, type Profile, type Role } from './supabase'
 import { clearDeviceCopy, startSync, stopSync } from './sync'
 import { startConfig, stopConfig, useConfig } from './config'
 import { ruleFor } from './companies'
+import { disablePush } from './push'
+import { isNative } from './platform'
+import { cancelNativeAlerts } from './localNotify'
 
 export interface Perms {
   role: Role | null
@@ -32,6 +35,8 @@ interface AuthCtx extends Perms {
 const Ctx = createContext<AuthCtx>(null as unknown as AuthCtx)
 export const useAuth = () => useContext(Ctx)
 const PROFILE_CACHE = 'fwm-profile'
+/** per-user caches on this device (removed on sign-out so the next person starts clean) */
+const USER_CACHES = ['fwm-config', 'fwm-requests', 'fwm-sync-user', 'fwm-native-alerts', 'fwm-last-notified', 'fwm-dirty', 'fwm-cursor']
 /** accounts created before roles existed */
 export const normRole = (r?: string | null): Role | null => (r === 'admin' ? 'super_admin' : r === 'manager' ? 'hr_manager' : (r as Role) || null)
 
@@ -84,11 +89,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [active, session?.user.id, role, outletKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const signOut = async (wipe = true) => {
-    stopSync()
-    await supabase.auth.signOut().catch(() => {})
-    if (wipe) await clearDeviceCopy()
+    stopSync(); stopConfig()
+    if (wipe) {
+      // this phone/browser stops receiving the previous user's alerts
+      await Promise.race([disablePush().catch(() => {}), new Promise((r) => setTimeout(r, 3000))])
+      if (isNative()) await cancelNativeAlerts().catch(() => {})
+    }
+    const { error } = await supabase.auth.signOut().catch((e) => ({ error: e }))
+    if (error) await supabase.auth.signOut({ scope: 'local' }).catch(() => {}) // offline: still forget the session here
+    await forgetStoredSession() // belt and braces: no stored login may survive a sign-out
+    if (wipe) {
+      await clearDeviceCopy().catch(() => {})
+      USER_CACHES.forEach((k) => localStorage.removeItem(k))
+      sessionStorage.clear()
+    }
     setProfile(null)
+    setSession(null)
     localStorage.removeItem(PROFILE_CACHE)
+    // start fresh at the login screen: drops every in-memory copy of the previous user's data
+    if (wipe) window.location.replace(window.location.pathname + window.location.search + '#/')
   }
   const flags = cfg.hr_admin
   const isSuper = role === 'super_admin'
