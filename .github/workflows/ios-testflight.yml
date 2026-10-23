@@ -1,7 +1,9 @@
 # Builds the FW Manager iPhone app and uploads it to TestFlight (App Store Connect).
 # Run it: GitHub → Actions → "iOS TestFlight" → Run workflow   (or: gh workflow run ios-testflight.yml)
 # Also runs when a tag like v1.2.3-ios is pushed.
-# Needs repo secrets: ASC_KEY_P8 (App Store Connect API .p8 contents), ASC_KEY_ID, ASC_ISSUER_ID, APPLE_TEAM_ID.
+# Needs repo secrets: ASC_KEY_P8 (App Store Connect API .p8 contents), ASC_KEY_ID, ASC_ISSUER_ID, APPLE_TEAM_ID,
+#   IOS_DIST_P12_B64 + IOS_DIST_P12_PASSWORD (Apple Distribution certificate) and IOS_PROFILE_B64
+#   ("FW Manager App Store" provisioning profile). Both expire Oct 2027 and must then be renewed.
 # The repo is public, so this workflow never prints secrets and never uploads the .ipa as an artifact.
 name: iOS TestFlight
 
@@ -72,7 +74,32 @@ jobs:
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
             -quiet
 
-      - name: Sign, export and upload to TestFlight
+      - name: Install distribution certificate and App Store profile
+        env:
+          IOS_DIST_P12_B64: ${{ secrets.IOS_DIST_P12_B64 }}
+          IOS_DIST_P12_PASSWORD: ${{ secrets.IOS_DIST_P12_PASSWORD }}
+          IOS_PROFILE_B64: ${{ secrets.IOS_PROFILE_B64 }}
+        run: |
+          KC="$RUNNER_TEMP/signing.keychain-db"
+          KC_PASS=$(uuidgen)
+          echo "::add-mask::$KC_PASS"
+          printf '%s' "$IOS_DIST_P12_B64" | base64 --decode > "$RUNNER_TEMP/dist.p12"
+          security create-keychain -p "$KC_PASS" "$KC"
+          security set-keychain-settings -lut 3600 "$KC"
+          security unlock-keychain -p "$KC_PASS" "$KC"
+          security import "$RUNNER_TEMP/dist.p12" -k "$KC" -P "$IOS_DIST_P12_PASSWORD" -A -t cert -f pkcs12
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KC_PASS" "$KC" > /dev/null
+          security list-keychains -d user -s "$KC" $(security list-keychains -d user | tr -d '"')
+          rm -f "$RUNNER_TEMP/dist.p12"
+          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
+          printf '%s' "$IOS_PROFILE_B64" | base64 --decode > "$RUNNER_TEMP/profile.mobileprovision"
+          UUID=$(/usr/libexec/PlistBuddy -c 'Print :UUID' /dev/stdin <<< "$(security cms -D -i "$RUNNER_TEMP/profile.mobileprovision")")
+          cp "$RUNNER_TEMP/profile.mobileprovision" "$HOME/Library/MobileDevice/Provisioning Profiles/$UUID.mobileprovision"
+          mkdir -p "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles"
+          cp "$RUNNER_TEMP/profile.mobileprovision" "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles/$UUID.mobileprovision"
+          echo "SIGNING_KEYCHAIN=$KC" >> "$GITHUB_ENV"
+
+      - name: Sign and export .ipa
         run: |
           cat > "$RUNNER_TEMP/ExportOptions.plist" <<PLIST
           <?xml version="1.0" encoding="UTF-8"?>
@@ -80,9 +107,14 @@ jobs:
           <plist version="1.0">
           <dict>
             <key>method</key><string>app-store-connect</string>
-            <key>destination</key><string>upload</string>
-            <key>signingStyle</key><string>automatic</string>
+            <key>destination</key><string>export</string>
+            <key>signingStyle</key><string>manual</string>
             <key>teamID</key><string>${APPLE_TEAM_ID}</string>
+            <key>signingCertificate</key><string>Apple Distribution</string>
+            <key>provisioningProfiles</key>
+            <dict>
+              <key>com.moulisankar.fwmanager</key><string>FW Manager App Store</string>
+            </dict>
             <key>uploadSymbols</key><true/>
             <key>manageAppVersionAndBuildNumber</key><false/>
           </dict>
@@ -91,13 +123,19 @@ jobs:
           xcodebuild -exportArchive \
             -archivePath "$RUNNER_TEMP/App.xcarchive" \
             -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
-            -exportPath "$RUNNER_TEMP/export" \
-            -allowProvisioningUpdates \
-            -authenticationKeyPath "$ASC_KEY_PATH" \
-            -authenticationKeyID "$ASC_KEY_ID" \
-            -authenticationKeyIssuerID "$ASC_ISSUER_ID"
+            -exportPath "$RUNNER_TEMP/export"
+          ls -la "$RUNNER_TEMP/export"
+
+      - name: Upload to TestFlight
+        run: |
+          IPA=$(ls "$RUNNER_TEMP"/export/*.ipa | head -1)
+          API_PRIVATE_KEYS_DIR="$RUNNER_TEMP/private_keys" xcrun altool --upload-app -f "$IPA" -t ios \
+            --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID"
           echo "Uploaded FW Manager $(node -p "require('./package.json').version") build $BUILD_NUMBER to App Store Connect."
 
       - name: Clean up key and build outputs
         if: always()
-        run: rm -rf "$RUNNER_TEMP/private_keys" "$RUNNER_TEMP/export" "$RUNNER_TEMP/App.xcarchive" "$RUNNER_TEMP/ExportOptions.plist"
+        run: |
+          rm -rf "$RUNNER_TEMP/private_keys" "$RUNNER_TEMP/export" "$RUNNER_TEMP/App.xcarchive" "$RUNNER_TEMP/ExportOptions.plist" "$RUNNER_TEMP/dist.p12" "$RUNNER_TEMP/profile.mobileprovision"
+          [ -n "${SIGNING_KEYCHAIN:-}" ] && security delete-keychain "$SIGNING_KEYCHAIN" || true
+          rm -f "$HOME/Library/MobileDevice/Provisioning Profiles/"*.mobileprovision "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles/"*.mobileprovision
