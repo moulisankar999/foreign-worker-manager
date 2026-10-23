@@ -8,6 +8,7 @@ import Dexie from 'dexie'
 import { useSyncExternalStore } from 'react'
 import { db, defaultJobRows } from './db'
 import { supabase } from './supabase'
+import { isNative, openExternal, shareFile } from './platform'
 import { type DocRec, type Worker } from './types'
 
 export type Entity = 'workers' | 'outlets' | 'jobs' | 'settings'
@@ -133,6 +134,18 @@ function mergeLocalAttachments(remote: Worker, local?: Worker): Worker {
 }
 /** Open an attachment (local copy if present, otherwise a short-lived signed link from the cloud). */
 export async function openAttachment(a: NonNullable<DocRec['attachment']>) {
+  if (isNative()) {
+    try {
+      if (a.path) {
+        const { data, error } = await supabase.storage.from(BUCKET).createSignedUrl(a.path, 300)
+        if (error) throw error
+        await openExternal(data.signedUrl)
+      } else if (a.dataUrl) {
+        await shareFile(a.name || 'attachment', await (await fetch(a.dataUrl)).blob())
+      } else throw new Error('File not available')
+    } catch (e) { alert('Could not open attachment: ' + (e as Error).message) }
+    return
+  }
   const win = window.open('', '_blank')
   try {
     let url = a.dataUrl
@@ -250,6 +263,34 @@ export async function syncNow() {
   } catch (e) { fail(e) }
 }
 
+/* ---------- Self-heal: re-upload local rows the cloud no longer has ---------- */
+// Cloud rows are only ever soft-deleted, so a local row that is missing from the cloud
+// (e.g. lost in a server-side wipe) and was synced before is re-uploaded from this device.
+async function reconcile() {
+  if (!active || !canWrite) return
+  const server = new Set<string>()
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await supabase.from('records').select('entity,id').order('entity').order('id').range(from, from + 999)
+    if (error) throw error
+    data.forEach((r) => server.add(keyOf(r.entity, r.id)))
+    if (data.length < 1000) break
+  }
+  // only rows that were synced before (never auto-upload pre-cloud local data)
+  const syncedKeys = new Set((await db.synced.toCollection().primaryKeys()) as string[])
+  const now = new Date().toISOString()
+  let n = 0
+  for (const e of ENTITIES) {
+    const ids = (await db.table(e).toCollection().primaryKeys()) as string[]
+    for (const id of ids) {
+      const k = keyOf(e, id)
+      if (server.has(k) || dirty[k] || !syncedKeys.has(k)) continue
+      dirty[k] = now
+      n++
+    }
+  }
+  if (n) { saveDirty(); await push() }
+}
+
 /* ---------- Start / stop ---------- */
 async function seedJobsIfEmpty() {
   if (!canWrite || (await db.jobs.count()) > 0) return
@@ -281,6 +322,7 @@ export async function startSync(userId: string, role: string) {
       await pull()
       await seedJobsIfEmpty()
       await push()
+      await reconcile()
     } catch (e) { fail(e) }
   }
 }

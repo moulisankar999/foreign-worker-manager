@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
 import { NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { Icon } from './components/Icon'
-import { useAlerts, useSettings } from './lib/hooks'
+import { useAlerts, useSettings, useWorkers } from './lib/hooks'
+import { isNative } from './lib/platform'
+import { rescheduleSoon } from './lib/localNotify'
 import { notifyOnOpen } from './lib/notify'
 import Dashboard from './pages/Dashboard'
 import Workers from './pages/Workers'
@@ -40,7 +42,10 @@ function MainApp() {
   const loc = useLocation()
   const [q, setQ] = useState('')
 
-  useEffect(() => { if (alerts.length) notifyOnOpen(alerts) }, [alerts])
+  const workers = useWorkers()
+  useEffect(() => { if (!isNative() && alerts.length) notifyOnOpen(alerts) }, [alerts])
+  // Android/iOS app: re-plan the on-phone 8 AM reminders whenever data changes (after every sync)
+  useEffect(() => { if (isNative()) rescheduleSoon(workers, settings) }, [workers, settings])
   useEffect(() => { window.scrollTo(0, 0) }, [loc.pathname])
 
   if (loc.pathname.startsWith('/print/')) return <Routes><Route path="/print/memo/:wid/:mid" element={<MemoPrint />} /></Routes>

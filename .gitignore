@@ -5,3 +5,8 @@ dist
 .secrets.env
 .env*
 supabase/.temp
+dist-native
+android-keystore/
+*.jks
+*.keystore
+release/

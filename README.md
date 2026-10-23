@@ -1,6 +1,6 @@
 # Foreign Worker Manager
 
-A mobile-first, installable web app (PWA) for managing **foreign workers in Malaysia**: passports, PLKS work permits, FOMEMA, insurance, leave, return flight tickets, pay increments, loans, prorated exit penalties and printable checkout memos. It covers multiple business units: restaurants, convenience shops, central store, accounting, management, hotels and jewellery shops.
+A mobile-first web app (PWA) **and Android app** for managing **foreign workers in Malaysia**: passports, PLKS work permits, FOMEMA, insurance, leave, return flight tickets, pay increments, loans, prorated exit penalties and printable checkout memos. It covers multiple business units: restaurants, convenience shops, central store, accounting, management, hotels and jewellery shops.
 
 **Live app:** https://moulisankar999.github.io/foreign-worker-manager/
 
@@ -87,7 +87,82 @@ Expiry report · Worker master list · Leave balances · Leave applications · F
 No real personal data is included in this repository. Sample data is fake and prefixed `DEMO`.
 
 ## Install on phone
-Open the live link in Chrome (Android) or Safari (iPhone), then Menu/Share → **Add to Home Screen**. The app works offline after the first load.
+
+### Android: FW Manager app (APK)
+1. On the Android phone, open **https://github.com/moulisankar999/foreign-worker-manager/releases/latest/download/FW-Manager.apk** (the same link is under **Settings → Calendar** in the web app).
+2. When the download finishes, tap it. If Android says it's blocked, tap **Settings → Allow from this source** (“Install unknown apps” for Chrome), go back and tap **Install**.
+3. Open **FW Manager**, sign in with your usual email and password, then go to **Settings → Phone alerts → Turn on phone alerts** and allow notifications.
+4. Updates: install a newer APK the same way. It updates in place and keeps your login, because every release is signed with the same key.
+
+Google Play Protect may warn about an app “from an unknown developer”. That's normal for apps installed outside the Play Store. Tap **More details → Install anyway**.
+
+### iPhone / iPad
+**For now, use the web app:** open the live link in **Safari** → **Share** → **Add to Home Screen**, open it from the Home Screen icon and sign in. It works offline, and morning alerts work through web push (iOS 16.4 or newer).
+
+A native iPhone app can be built from this repo (the `ios/` folder is ready), but Apple only allows that with a Mac and an Apple Developer account. See [Building the iPhone app](#building-the-iphone-app).
+
+### Android / iOS app vs. web app
+| | Android app | Web app / Home Screen (iPhone, any browser) |
+|---|---|---|
+| Login, live team sync, offline use | ✅ same cloud account | ✅ |
+| 8:00 AM alerts | **On-phone reminders** (no internet needed at 8 AM) | Web push from the server |
+| Export CSV / backup / calendar (.ics), document attachments | Opens the phone's **share sheet** (save to Files/Drive, WhatsApp, email) | Browser download / new tab |
+| Print memo / report | Android print dialog (printer or **Save as PDF**) | Browser print |
+
+#### How alerts work in the Android/iOS app
+- Every time data changes (after each sync, or when you open the app), the app plans reminders **on the phone** for 08:00 Malaysia time:
+  - a **daily summary** of urgent items for the next 30 days (14 on iPhone), worked out for each day
+  - a reminder **90 / 60 / 30 / 7 days before and on the day** that each passport, permit, medical, insurance or other dated document **expires**, and that each **contract ends**
+  - the day a worker **becomes eligible for a flight ticket**, **completes the minimum contract**, or is **due back from leave**, plus a reminder the day after the grace period if they haven't returned
+- Tapping a notification opens **Alerts**. **Settings → Phone alerts** shows how many reminders are planned and has a **test alert** button.
+- Limits:
+  - Reminders reflect the data as of the last time the app synced. Changes made by other users only reach a phone after it opens the app. Open it at least every couple of weeks.
+  - Android may deliver a few minutes late in battery-saver mode.
+  - iPhone allows at most 64 waiting reminders, so the app keeps the soonest ones.
+- **Server push to the native app (optional, later):** the web-push server can't reach the native app. Adding true server push needs:
+  - **Android:** a free Firebase project and its `google-services.json`, plus a Firebase service-account key stored as a Supabase function secret
+  - **iPhone:** an Apple Developer account and an APNs key
+  - the `@capacitor/push-notifications` plugin and an FCM sender in the `daily-alerts` function
+
+## Building the apps (Capacitor)
+The Android and iOS apps wrap the same React app using [Capacitor](https://capacitorjs.com) (app id `com.moulisankar.fwmanager`, name **FW Manager**). The web files are bundled inside the app, so it starts offline.
+
+```bash
+npm run build:native   # web build with relative paths -> dist-native/ (GitHub Pages build is unchanged: npm run build -> dist/)
+npx cap sync           # copy dist-native/ + plugins into android/ and ios/  (Capacitor CLI needs Node 22+)
+```
+
+### Android (Linux, Mac or Windows)
+Needs JDK 21 and the Android SDK (platform 36, build-tools 36). The release signing key and its passwords are **not in git**:
+- `android-keystore/fw-manager-release.jks`
+- `FWM_KEYSTORE`, `FWM_KEYSTORE_PASSWORD`, `FWM_KEY_ALIAS` and `FWM_KEY_PASSWORD` in `.secrets.env`
+
+**Back both up somewhere safe.** If the key is lost, phones can't update the app. They'd have to uninstall it and install it again.
+```bash
+npm run android:apk    # build:native + cap sync + signed release -> release/FW-Manager.apk and release/FW-Manager-<version>.aab
+```
+Before each new release, bump `version` in `package.json` and `versionCode` / `versionName` in `android/app/build.gradle`.
+
+**Google Play Store (optional):** create a Google Play Console developer account (**US$25 one-time**, needs ID verification). Then create the app and upload `release/FW-Manager-<version>.aab`. Use Play App Signing and keep this keystore as the *upload key*. You'll also need a privacy policy URL and the Data safety form (the app stores personal data of workers in Supabase), and new personal developer accounts must run a closed test with testers before going public.
+
+### Building the iPhone app
+Apple requires **macOS + Xcode** to build, and an **Apple Developer Program** membership (**US$99/year**) to install the app on iPhones through TestFlight or the App Store. The `ios/` folder is already set up. Pick one route:
+
+**Route A: your own Mac**
+1. Install **Xcode** (Mac App Store) and **Node 22**. Join the Apple Developer Program with your Apple ID at developer.apple.com (US$99/yr).
+2. `git clone https://github.com/moulisankar999/foreign-worker-manager && cd foreign-worker-manager && npm install && npm run build:native && npx cap sync ios && npx cap open ios`
+3. In Xcode, select **App** → **Signing & Capabilities** → tick *Automatically manage signing* and pick your **Team**. The bundle id is `com.moulisankar.fwmanager`.
+4. To test on your own iPhone: plug it in, select it as the run target and press ▶.
+5. For TestFlight or the App Store: **Product → Archive → Distribute App → App Store Connect → Upload**. In [App Store Connect](https://appstoreconnect.apple.com), create the app (same bundle id), add yourself and your staff as **TestFlight** testers (they install the **TestFlight** app), or fill in the store listing, privacy details and screenshots and submit for review.
+
+**Route B: no Mac, using a cloud Mac build service (e.g. Codemagic, Ionic Appflow)**
+1. Join the Apple Developer Program (US$99/yr). In App Store Connect, create the app with bundle id `com.moulisankar.fwmanager`.
+2. Create an **App Store Connect API key**: Users and Access → Integrations → Keys, role *App Manager*. Download the `.p8` and note the Key ID and Issuer ID.
+3. Sign up at codemagic.io with GitHub and add this repository. Under **Teams → Integrations → Developer Portal**, add the API key. Under **Code signing identities**, let Codemagic create an iOS distribution certificate and an App Store provisioning profile for `com.moulisankar.fwmanager`.
+4. Create an iOS workflow (Capacitor/Ionic template) with these build steps: `npm ci`, `npm run build:native`, `npx cap sync ios`, then build `ios/App/App.xcodeproj` (scheme **App**) with automatic App Store signing and publish to **App Store Connect / TestFlight**.
+5. Start the build. The finished app appears in TestFlight. Install the **TestFlight** app on the iPhone to get it, and submit for App Store review when you're ready.
+
+Notifications on iPhone use the same on-phone reminders as Android, so no extra setup is needed. Printing from the iPhone app isn't supported yet; use **Share** or the web app.
 
 ## Run locally
 ```bash

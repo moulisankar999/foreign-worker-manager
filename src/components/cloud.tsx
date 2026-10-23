@@ -7,6 +7,9 @@ import { useAuth } from '../lib/auth'
 import { supabase, type Profile, type Role } from '../lib/supabase'
 import { discardLocalData, localOnlyData, syncNow, uploadLocalData, useSyncStatus, type LocalOnly } from '../lib/sync'
 import { currentSubscription, disablePush, enablePush, isIOS, isStandalone, pushSupported, sendTestPush } from '../lib/push'
+import { isNative } from '../lib/platform'
+import { enableNativeAlerts, permissionState, reschedule, scheduleInfo, sendTestNotification } from '../lib/localNotify'
+import { useSettings, useWorkers } from '../lib/hooks'
 
 const LABEL = { synced: 'Synced', syncing: 'Syncing…', offline: 'Offline', error: 'Sync error', off: 'Not syncing' } as const
 
@@ -121,6 +124,39 @@ export function UsersCard() {
 }
 
 export function PhoneAlertsCard() {
+  return isNative() ? <NativeAlertsCard /> : <WebPushCard />
+}
+
+/** Android / iOS app: reminders are scheduled on the phone itself (no server push needed). */
+function NativeAlertsCard() {
+  const workers = useWorkers()
+  const settings = useSettings()
+  const [perm, setPerm] = useState<string>('…')
+  const [info, setInfo] = useState(scheduleInfo())
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState('')
+  useEffect(() => { void permissionState().then(setPerm) }, [])
+  const run = async (fn: () => Promise<unknown>, ok: string) => {
+    setBusy(true); setMsg('')
+    try { await fn(); setMsg(ok) } catch (e) { setMsg('⚠️ ' + (e as Error).message) } finally { setBusy(false); setPerm(await permissionState()); setInfo(scheduleInfo()) }
+  }
+  const on = perm === 'granted'
+  return (
+    <Card title="Phone alerts">
+      <p className="small">This app reminds you <strong>at 8:00 AM (Malaysia time)</strong> — even when it is closed and offline: a <strong>daily summary</strong> of urgent items, plus a reminder <strong>{[...settings.leadTimes].sort((a, b) => b - a).join(' / ')} days before</strong> and <strong>on the day</strong> each passport, permit, medical or contract expires, when a worker becomes eligible for a flight ticket, completes the minimum contract, or is due back from leave.</p>
+      <p className="small">Status on this phone: <strong>{on ? 'On ✅' : perm === '…' ? '…' : 'Off'}</strong>{on && info ? ` · ${info.count} reminder(s) planned${info.next ? `, next ${new Date(info.next).toLocaleString()}` : ''}` : ''}</p>
+      <div className="row gap-s wrap">
+        {!on && <Btn kind="primary" icon="bell" disabled={busy} onClick={() => run(async () => { await enableNativeAlerts(); await reschedule(workers, settings) }, 'Phone alerts are on.')}>Turn on phone alerts</Btn>}
+        {on && <Btn icon="bell" disabled={busy} onClick={() => run(sendTestNotification, 'Test alert coming in a few seconds…')}>Send me a test alert</Btn>}
+        {on && <Btn kind="ghost" icon="upload" disabled={busy} onClick={() => run(() => reschedule(workers, settings), 'Reminders updated.')}>Refresh reminders</Btn>}
+      </div>
+      <p className="muted small">Reminders update automatically whenever data changes. Open the app at least once every couple of weeks so new items are included. To stop alerts: phone Settings → Apps → FW Manager → Notifications.</p>
+      {msg && <p className="small" role="status">{msg}</p>}
+    </Card>
+  )
+}
+
+function WebPushCard() {
   const [on, setOn] = useState<boolean | null>(null)
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState('')

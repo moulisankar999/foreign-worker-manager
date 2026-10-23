@@ -12,6 +12,7 @@ import { notifySupported, requestNotify } from '../lib/notify'
 import { loadSampleData } from '../lib/sample'
 import { BUSINESS_TYPES, SKILL_LEVELS, type BusinessType, type Settings } from '../lib/types'
 import { download, todayISO, uid } from '../lib/util'
+import { ANDROID_APK_URL, APP_VERSION, isNative } from '../lib/platform'
 
 type V = Record<string, unknown>
 interface BIPEvent extends Event { prompt: () => Promise<void> }
@@ -114,14 +115,19 @@ export default function SettingsPage() {
         </div>
       </Card>
 
-      <Card title="Install & calendar">
-        <p className="small">In-app notifications: <strong>{notifySupported() ? Notification.permission : 'not supported'}</strong>. A summary of urgent items also shows when you open the app.</p>
+      <Card title={isNative() ? 'Calendar' : 'Install & calendar'}>
+        {!isNative() && <p className="small">In-app notifications: <strong>{notifySupported() ? Notification.permission : 'not supported'}</strong>. A summary of urgent items also shows when you open the app.</p>}
         <div className="row gap-s wrap">
-          {notifySupported() && Notification.permission !== 'granted' && <Btn icon="bell" onClick={async () => { await requestNotify(); setMsg('Notification permission: ' + Notification.permission) }}>Enable notifications</Btn>}
+          {!isNative() && notifySupported() && Notification.permission !== 'granted' && <Btn icon="bell" onClick={async () => { await requestNotify(); setMsg('Notification permission: ' + Notification.permission) }}>Enable notifications</Btn>}
           {install && <Btn kind="primary" icon="download" onClick={() => install.prompt()}>Install app</Btn>}
           <Btn icon="cal" onClick={() => download(`all-expiries-${todayISO()}.ics`, buildICS(buildAlerts(workers, { ...s, leadTimes: [100000] }).filter((a) => a.date), Math.max(...s.leadTimes)), 'text/calendar')}>Export all expiries (.ics)</Btn>
         </div>
-        <p className="muted small">To install on phone: open in Chrome/Safari → Share/Menu → “Add to Home Screen”.</p>
+        {!isNative() && <>
+          <p className="muted small"><strong>iPhone:</strong> open in Safari → Share → “Add to Home Screen”. <strong>Android:</strong> install the app below, or in Chrome → menu → “Install app”.</p>
+          <p className="small"><a className="btn btn-secondary" href={ANDROID_APK_URL} rel="noopener">⬇ Download Android app (APK)</a></p>
+          <p className="muted small">After downloading, open the file and allow “Install unknown apps” for your browser when Android asks.</p>
+        </>}
+        {isNative() && <p className="muted small">FW Manager app {APP_VERSION}</p>}
       </Card>
 
       <div ref={backupRef} id="backup">

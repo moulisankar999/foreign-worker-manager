@@ -3,8 +3,16 @@ export const uid = () => (crypto.randomUUID ? crypto.randomUUID() : Math.random(
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
+let todayOverride: string | null = null
+/** Run fn as if "today" were iso (used to pre-compute future daily summaries). */
+export function withToday<T>(iso: string, fn: () => T): T {
+  const prev = todayOverride
+  todayOverride = iso
+  try { return fn() } finally { todayOverride = prev }
+}
 export function todayISO() {
   const d = new Date(Date.now() + 8 * 3600 * 1000) // Malaysia time (server clock is UTC)
+  if (todayOverride) return todayOverride
   return toISO(d)
 }
 export function toISO(d: Date) {
@@ -78,8 +86,13 @@ export function rm(n?: number | null) {
 export function rm0(n?: number | null) {
   return 'RM ' + Math.round(Number(n || 0)).toLocaleString('en-MY')
 }
+type Saver = (filename: string, blob: Blob) => Promise<void>
+let nativeSaver: Saver | null = null
+/** In the Android/iOS app there is no browser download: files are shared/saved via the phone's share sheet instead. */
+export function setNativeSaver(f: Saver) { nativeSaver = f }
 export function download(filename: string, content: string | Blob, mime = 'text/plain') {
   const blob = content instanceof Blob ? content : new Blob([content], { type: mime })
+  if (nativeSaver) { nativeSaver(filename, blob).catch((e) => alert('Could not save file: ' + (e as Error).message)); return }
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url

@@ -1,3 +1,4 @@
+import { printPage } from '../lib/platform'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
@@ -26,7 +27,7 @@ export default function MemoPrint() {
     <div className="print-wrap">
       <div className="no-print print-bar">
         <button className="btn btn-secondary" onClick={() => nav(`/workers/${w.id}`)}>← Back</button>
-        <button className="btn btn-primary" onClick={() => window.print()}>🖨 Print / Save PDF</button>
+        <button className="btn btn-primary" onClick={() => printPage()}>🖨 Print / Save PDF</button>
       </div>
       <article className="memo">
         <header className="memo-h">

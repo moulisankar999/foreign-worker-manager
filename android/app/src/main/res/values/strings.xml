@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">FW Manager</string>
+    <string name="title_activity_main">FW Manager</string>
+    <string name="package_name">com.moulisankar.fwmanager</string>
+    <string name="custom_url_scheme">com.moulisankar.fwmanager</string>
+</resources>

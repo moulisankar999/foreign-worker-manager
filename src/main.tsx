@@ -5,6 +5,9 @@ import App from './App'
 import { AuthProvider } from './lib/auth'
 import './styles.css'
 import { ensureSeed } from './lib/db'
+import { isNative, shareFile } from './lib/platform'
+import { setNativeSaver } from './lib/util'
+import { listenForTaps } from './lib/localNotify'
 
 ensureSeed()
 
@@ -14,7 +17,16 @@ window.addEventListener('unhandledrejection', (e) => {
   if (m.startsWith('View-only access')) { e.preventDefault(); alert(m) }
 })
 
-if ('serviceWorker' in navigator && import.meta.env.PROD) {
+if (isNative()) {
+  // Android / iOS app: files go to the share sheet, notification taps open Alerts, Android back button navigates back
+  document.documentElement.classList.add('native')
+  setNativeSaver(shareFile)
+  listenForTaps()
+  void import('@capacitor/app').then(({ App }) => App.addListener('backButton', ({ canGoBack }) => {
+    if (canGoBack && window.location.hash.replace(/^#\/?/, '') !== '') window.history.back()
+    else void App.exitApp()
+  }))
+} else if ('serviceWorker' in navigator && import.meta.env.PROD) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`, { scope: import.meta.env.BASE_URL }).catch(() => {})
   })

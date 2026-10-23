@@ -1,3 +1,4 @@
+import { printPage } from '../lib/platform'
 import { useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { Btn, Card, SelectFilter, Toolbar } from '../components/ui'
@@ -156,7 +157,7 @@ export default function Reports() {
           </label>
         )}
         <span className="spacer" />
-        <Btn small icon="print" onClick={() => window.print()}>Print</Btn>
+        <Btn small icon="print" onClick={() => printPage()}>Print</Btn>
         <Btn small kind="primary" icon="download" onClick={csv}>CSV</Btn>
       </Toolbar>
       <Card title={<>{rep.name} <small className="muted">· {rows.length} rows</small></>}>
