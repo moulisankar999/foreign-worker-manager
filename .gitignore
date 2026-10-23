@@ -10,3 +10,4 @@ android-keystore/
 *.jks
 *.keystore
 release/
+backups/
