@@ -1,6 +1,7 @@
 import { EXITED_STATUSES, LEAVE_STATUSES, REQUIRED_DOCS, type DocRec, type Outlet, type Settings, type Worker } from './types'
 import { daysSinceCheck, lastCheck, type Agency } from './agencies'
 import { getConfig } from './config'
+import { computePayslip, prevMonth, rateAt, statutoryAnnualForYear, statutoryLeave, monthLabel } from './pay'
 import { addMonths, daysUntil, fmtDate, monthsBetween, parseISO, rm, todayISO } from './util'
 
 export type DocStatus = 'Valid' | 'Expiring soon' | 'Expired' | 'No expiry'
@@ -66,11 +67,14 @@ export interface LeaveYear { year: number; carryIn: number; entitled: number; us
 export function leaveBalances(w: Worker, s: Settings): LeaveYear[] {
   const join = parseISO(w.joinDate)
   if (!join) return []
-  const ent = w.annualLeaveDays ?? s.annualLeaveDays
+  const ent0 = w.annualLeaveDays ?? s.annualLeaveDays
+  const rates = getConfig().rates
   const endYear = new Date().getFullYear()
   const rows: LeaveYear[] = []
   let carry = 0
   for (let y = join.getFullYear(); y <= endYear; y++) {
+    // never less than the Employment Act minimum for the length of service (s.60E)
+    const ent = Math.max(ent0, statutoryAnnualForYear(w.joinDate, y, rates))
     // prorate the joining year by remaining months
     const entitled = y === join.getFullYear() ? Math.round((ent * (12 - join.getMonth())) / 12 * 2) / 2 : ent
     const used = w.leaves
@@ -220,6 +224,7 @@ export function buildAlerts(workers: Worker[], s: Settings, agencies: Agency[] =
         push({ id: `check-${a.id}-${w.id}`, category: 'Status check', title: `${a.short} not checked in ${a.remindDays} days`, detail: lc ? `Last checked ${fmtDate(lc.date)} by ${lc.by || '—'}: ${lc.status}` : 'Never checked — open the worker → Check status', days: null, severity: 'low' })
       }
     }
+    if (payVisible) for (const a of payAlerts(w, s)) push(a)
     const bal = outstanding(w)
     if (bal > 0) push({ id: `loan-${w.id}`, category: 'Loan / advance', title: 'Outstanding loan / advance', detail: `${rm(bal)} balance`, days: null, severity: 'info' })
   }
@@ -228,4 +233,44 @@ export function buildAlerts(workers: Worker[], s: Settings, agencies: Agency[] =
 
 export function outletName(outlets: Outlet[], id?: string) {
   return outlets.find((o) => o.id === id)?.name || '—'
+}
+
+/** pay alerts are shown only to people allowed to see pay (set by the sign-in provider) */
+let payVisible = false
+export function setPayAlertsVisible(v: boolean) { payVisible = v }
+
+/* ---------- Pay compliance (minimum wage, late pay, OT, deductions, hostel, leave) ---------- */
+type PayAlert = Omit<Alert, 'workerId' | 'workerName' | 'workerNo' | 'outletId' | 'businessType'>
+export function payAlerts(w: Worker, s: Settings, today = todayISO()): PayAlert[] {
+  const out: PayAlert[] = []
+  const cat = 'Pay compliance'
+  const rates = getConfig().rates
+  // salary hidden for this role (outlet managers): the fields are missing, so do not guess
+  if (w.initialBasicPay === undefined || w.initialBasicPay === null) return out
+  const basic = currentBasic(w)
+  const mw = rateAt(rates.minWage, today)
+  if (mw && basic > 0 && basic < mw.monthly && !w.minWageExempt) out.push({ id: `pay-minwage-${w.id}`, category: cat, title: 'Paid below the minimum wage', detail: `Basic ${rm(basic)} — minimum is ${rm(mw.monthly)} a month. Raise the pay or record an exemption (check with JTKSM or your agent).`, days: null, severity: 'high' })
+  // the most recent payslip (and last month's, if it exists) for late pay / OT / deductions / hostel
+  const slips = [...(w.payslips || [])].sort((a, b) => b.month.localeCompare(a.month))
+  const since = prevMonth(prevMonth(today))
+  for (const p of slips.filter((x) => x.month >= since)) {
+    const r = computePayslip(p, rates, w, today)
+    const red = (k: string) => r.warnings.find((x) => x.key === k && x.level === 'red')
+    const tag = monthLabel(p.month)
+    const late = red('late') || red('otlate')
+    if (late && !out.some((a) => a.id === `pay-late-${w.id}`)) out.push({ id: `pay-late-${w.id}`, category: cat, title: p.payDate ? 'Wages paid late' : 'Wages not recorded as paid', detail: `${tag}: ${late.text}`, date: r.wageDue, days: daysUntil(r.wageDue), severity: p.payDate ? 'medium' : 'high' })
+    const ot = red('ot')
+    if (ot && !out.some((a) => a.id === `pay-ot-${w.id}`)) out.push({ id: `pay-ot-${w.id}`, category: cat, title: 'Overtime over the monthly limit', detail: `${tag}: ${ot.text}`, days: null, severity: 'medium' })
+    const de = red('deduct')
+    if (de && !out.some((a) => a.id === `pay-deduct-${w.id}`)) out.push({ id: `pay-deduct-${w.id}`, category: cat, title: 'Deductions over 50% of wages', detail: `${tag}: ${de.text}`, days: null, severity: 'high' })
+    const ho = red('hostel')
+    if (ho && !out.some((a) => a.id === `pay-hostel-${w.id}`)) out.push({ id: `pay-hostel-${w.id}`, category: cat, title: 'Accommodation deduction not allowed', detail: `${tag}: ${ho.text}`, days: null, severity: 'high' })
+  }
+  // annual leave set lower than the law gives for the length of service
+  if (w.annualLeaveDays !== undefined && w.annualLeaveDays !== null && w.joinDate) {
+    const st = statutoryLeave(w.joinDate, rates, today)
+    if (w.annualLeaveDays < st.annual) out.push({ id: `pay-leave-${w.id}`, category: cat, title: 'Annual leave set below the legal minimum', detail: `Set to ${w.annualLeaveDays} days; after ${st.years} year${st.years === 1 ? '' : 's'} of service the minimum is ${st.annual} days (the app already uses ${st.annual}). Update the worker’s leave setting.`, days: null, severity: 'low' })
+  }
+  void s
+  return out
 }

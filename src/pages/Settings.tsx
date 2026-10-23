@@ -29,18 +29,21 @@ import { RemoveDemoCard, isDemoName } from '../components/demoCleanup'
 import { BUSINESS_TYPES, SKILL_LEVELS, type BusinessType, type Settings } from '../lib/types'
 import { download, todayISO, uid } from '../lib/util'
 import { ANDROID_APK_URL, APP_VERSION, isNative } from '../lib/platform'
+import { PayRulesSettings } from '../components/pay'
+import { REST_DAYS, STATES } from '../lib/pay'
 
 type V = Record<string, unknown>
 interface BIPEvent extends Event { prompt: () => Promise<void> }
 
 /* Settings is split into tabs (deep links: #/settings/<tab>). Each tab shows only for roles that can use it. */
-export type SettingsTab = 'account' | 'users' | 'agencies' | 'org' | 'workers' | 'passport' | 'requests' | 'notifications' | 'data' | 'about'
+export type SettingsTab = 'account' | 'users' | 'agencies' | 'org' | 'workers' | 'pay' | 'passport' | 'requests' | 'notifications' | 'data' | 'about'
 const TABS: { id: SettingsTab; label: string; icon: string; sub: string }[] = [
   { id: 'account', label: 'Account', icon: 'users', sub: 'My profile, password, sign out' },
   { id: 'users', label: 'Users & Access', icon: 'lock', sub: 'Users, sign-ups, roles, General Manager powers, HR Admin permissions, audit log' },
   { id: 'agencies', label: 'Agencies & Integrations', icon: 'store', sub: 'Government sites for status checks, notes, future API' },
   { id: 'org', label: 'Companies & Outlets', icon: 'store', sub: 'Companies, outlets, logos' },
   { id: 'workers', label: 'Workers & Documents', icon: 'doc', sub: 'Leave / ticket / contract policy, job categories, document vault' },
+  { id: 'pay', label: 'Pay & Leave rules', icon: 'money', sub: 'Minimum wage, EPF, PERKESO, LINDUNG, overtime, hostel limit, leave, public holidays' },
   { id: 'passport', label: 'Passport & Consent', icon: 'plane', sub: 'Safekeeping, release reasons, consent translations' },
   { id: 'requests', label: 'Requests & Approvals', icon: 'check', sub: 'Who approves which request' },
   { id: 'notifications', label: 'Notifications', icon: 'bell', sub: 'Phone alerts, my alerts, WhatsApp / SMS / email' },
@@ -48,10 +51,11 @@ const TABS: { id: SettingsTab; label: string; icon: string; sub: string }[] = [
   { id: 'about', label: 'About', icon: 'more', sub: 'Version, install the app' },
 ]
 /** searchable settings: [tab, section id, words] */
-const TITLES: Record<string, string> = {"s-demo": "Remove sample (DEMO) data", "s-account": "Account & cloud sync", "s-password": "Change password", "s-signout": "Sign out", "s-pending": "New users waiting for approval", "s-users": "Users", "s-approvers": "Who may approve new users", "s-hrflags": "HR Admin permissions", "s-audit": "Audit log", "s-gmpowers": "General Manager powers", "s-agencies": "Agencies & Integrations", "s-adduser": "Add user", "s-companies": "Companies", "s-outlets": "Outlets", "s-policy": "Company & policy", "s-jobs": "Job categories", "s-vault": "Document vault", "s-passport": "Passport safekeeping", "s-reasons": "Emergency release reasons", "s-consent": "Consent form translations", "s-rules": "Approval rules", "s-phone": "Phone alerts", "s-myalerts": "My alerts", "s-notify": "WhatsApp / SMS / email notifications", "s-backup": "Backup & data", "s-calendar": "Calendar & in-app notifications", "s-about": "About"}
+const TITLES: Record<string, string> = {"s-demo": "Remove sample (DEMO) data", "s-account": "Account & cloud sync", "s-password": "Change password", "s-signout": "Sign out", "s-pending": "New users waiting for approval", "s-users": "Users", "s-approvers": "Who may approve new users", "s-hrflags": "HR Admin permissions", "s-audit": "Audit log", "s-gmpowers": "General Manager powers", "s-agencies": "Agencies & Integrations", "s-adduser": "Add user", "s-companies": "Companies", "s-outlets": "Outlets", "s-policy": "Company & policy", "s-jobs": "Job categories", "s-vault": "Document vault", "s-payrules": "Pay & Leave rules", "s-passport": "Passport safekeeping", "s-reasons": "Emergency release reasons", "s-consent": "Consent form translations", "s-rules": "Approval rules", "s-phone": "Phone alerts", "s-myalerts": "My alerts", "s-notify": "WhatsApp / SMS / email notifications", "s-backup": "Backup & data", "s-calendar": "Calendar & in-app notifications", "s-about": "About"}
 const INDEX: [SettingsTab, string, string][] = [
   ['account', 's-account', 'Account & cloud sync signed in role access sync now'],
   ['account', 's-password', 'Change password'],
+  ['pay', 's-payrules', 'Pay leave rules minimum wage EPF KWSP PERKESO SOCSO LINDUNG overtime OT hostel accommodation public holidays rates'],
   ['account', 's-signout', 'Sign out switch user'],
   ['users', 's-pending', 'New users waiting for approval sign-ups approve reject'],
   ['users', 's-users', 'Users pause resume reset password delete user roles outlets companies add user create'],
@@ -98,7 +102,7 @@ export default function SettingsPage() {
   const nav = useNavigate()
   const params = useParams<{ tab?: string }>()
   const visible = useMemo(() => TABS.filter((t) => ({
-    account: true, users: isAdmin || canApproveUsers || isSuper || canSeeAudit || creatableRoles.length > 0, agencies: canAgencies, org: isHr, workers: isHr, passport: isHr, requests: isHr,
+    account: true, users: isAdmin || canApproveUsers || isSuper || canSeeAudit || creatableRoles.length > 0, agencies: canAgencies, org: isHr, workers: isHr, pay: isHr, passport: isHr, requests: isHr,
     notifications: true, data: true, about: true,
   } as Record<SettingsTab, boolean>)[t.id]), [isAdmin, canApproveUsers, isSuper, canSeeAudit, isHr, creatableRoles.length, canAgencies])
   const legacy = window.location.hash.includes('backup') ? 'data' : ''
@@ -208,7 +212,7 @@ export default function SettingsPage() {
             {outlets.map((o) => (
               <li key={o.id}>
                 <LogoImg path={outletLogo(o)} size={36} title={o.name} />
-                <div className="r-main"><strong>{o.name}</strong><small>{companies.length > 1 ? `${companyName(companies, outletCompany(o))} · ` : ''}{o.type}{o.manager ? ` · ${o.manager}` : ''} · {workers.filter((w) => w.outletId === o.id).length} workers</small></div>
+                <div className="r-main"><strong>{o.name}</strong><small>{companies.length > 1 ? `${companyName(companies, outletCompany(o))} · ` : ''}{o.type}{o.manager ? ` · ${o.manager}` : ''}{o.state ? ` · ${o.state}` : ''} · {workers.filter((w) => w.outletId === o.id).length} workers</small></div>
                 <div className="r-act"><LogoEdit kind="outlet" id={o.id} path={o.logo} name={o.name} /><Btn small kind="ghost" icon="edit" title="Edit outlet" onClick={() => setOutlet(o as unknown as V)} /></div>
               </li>
             ))}
@@ -256,6 +260,8 @@ export default function SettingsPage() {
         <Sec id="s-reasons"><EmergencyReasonsCard /></Sec>
         <Sec id="s-consent"><ConsentTranslationsCard /></Sec>
       </>}
+
+      {tab === 'pay' && <Sec id="s-payrules"><PayRulesSettings /></Sec>}
 
       {tab === 'requests' && <Sec id="s-rules"><ApprovalRulesCard /></Sec>}
 
@@ -324,9 +330,9 @@ export default function SettingsPage() {
       {outlet && (
         <FormModal title={outlet.id ? 'Edit outlet' : 'Add outlet'} initial={{ ...outlet, companyId: outlet.companyId || DEFAULT_COMPANY_ID }} onClose={() => setOutlet(null)}
           fields={[{ key: 'name', label: 'Outlet name', required: true, full: true },
-            ...(top('org.companies') || !outlet.id ? [{ key: 'companyId', label: 'Company', type: 'select' as const, options: coOptions, required: true }] : []), { key: 'type', label: 'Business type', type: 'select', options: [...BUSINESS_TYPES], required: true }, { key: 'manager', label: 'Manager / PIC' }, { key: 'address', label: 'Address', type: 'textarea' }]}
+            ...(top('org.companies') || !outlet.id ? [{ key: 'companyId', label: 'Company', type: 'select' as const, options: coOptions, required: true }] : []), { key: 'type', label: 'Business type', type: 'select', options: [...BUSINESS_TYPES], required: true }, { key: 'manager', label: 'Manager / PIC' }, { key: 'state', label: 'State', type: 'select', options: [...STATES], hint: 'Used for public holidays and pay rules' }, { key: 'restDay', label: 'Weekly rest day', type: 'select', options: [...REST_DAYS] }, { key: 'address', label: 'Address', type: 'textarea' }]}
           onDelete={outlet.id ? () => { if (workers.some((w) => w.outletId === outlet.id)) alert('Workers are assigned to this outlet; they will show “—”.'); db.outlets.delete(String(outlet.id)) } : undefined}
-          onSave={(v) => db.outlets.put({ id: (outlet.id as string) || uid(), name: String(v.name), type: v.type as BusinessType, manager: v.manager as string, address: v.address as string, companyId: String(v.companyId || outlet.companyId || DEFAULT_COMPANY_ID), ...(outlet.logo ? { logo: String(outlet.logo) } : {}) }).then(() => {})} />
+          onSave={(v) => db.outlets.put({ id: (outlet.id as string) || uid(), name: String(v.name), type: v.type as BusinessType, manager: v.manager as string, address: v.address as string, ...(v.state ? { state: String(v.state) } : {}), ...(v.restDay ? { restDay: String(v.restDay) } : {}), companyId: String(v.companyId || outlet.companyId || DEFAULT_COMPANY_ID), ...(outlet.logo ? { logo: String(outlet.logo) } : {}) }).then(() => {})} />
       )}
       {job && (
         <FormModal title={job.id ? 'Edit category' : 'Add category'} initial={job} onClose={() => setJob(null)}

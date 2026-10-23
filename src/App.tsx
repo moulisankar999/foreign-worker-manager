@@ -17,6 +17,7 @@ import Alerts from './pages/Alerts'
 import Reports from './pages/Reports'
 import SettingsPage from './pages/Settings'
 import MemoPrint from './pages/MemoPrint'
+import PayslipPrint from './pages/PayslipPrint'
 import Login, { Pending } from './pages/Login'
 import SetPasswordScreen, { RECOVERY_FLAG } from './pages/SetPassword'
 import { useAuth } from './lib/auth'
@@ -79,7 +80,7 @@ function MainApp() {
   useEffect(() => { if (isNative()) rescheduleSoon(workers, settings) }, [workers, settings])
   useEffect(() => { window.scrollTo(0, 0) }, [loc.pathname])
 
-  if (loc.pathname.startsWith('/print/')) return <Routes><Route path="/print/memo/:wid/:mid" element={<MemoPrint />} /></Routes>
+  if (loc.pathname.startsWith('/print/')) return <Routes><Route path="/print/memo/:wid/:mid" element={<MemoPrint />} /><Route path="/print/payslip/:wid/:pid" element={<PayslipPrint />} /></Routes>
 
   return (
     <div className="shell">

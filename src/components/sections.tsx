@@ -5,6 +5,7 @@ import { FilePick } from './filePick'
 import { compressImage } from '../lib/vault'
 import { Icon } from './Icon'
 import { updateWorker } from '../lib/db'
+import { useOutlets } from '../lib/hooks'
 import { openAttachment } from '../lib/sync'
 import { allowancesTotal, buildAlerts, currentBasic, docStatus, leaveBalances, loanBalance, loanLedger, minContractEnd, outstanding, proratedPenalty, sortedIncrements, ticketInfo } from '../lib/calc'
 import { buildICS } from '../lib/ics'
@@ -12,6 +13,7 @@ import { defaultChecklist } from '../lib/memo'
 import { dateIssues, passportIssue } from '../lib/validate'
 import { APPROVAL, DEDUCTION_TYPES, DOC_SHORT, DOC_STAGES, DOC_TYPES, REQUIRED_DOCS, EXIT_TYPES, LEAVE_TYPES, LOAN_TYPES, RELATIONS, TICKET_PAYERS, type DocRec, type LeaveRec, type MemoRec, type Settings, type Worker, type WorkerStatus } from '../lib/types'
 import { daysBetweenInclusive, daysUntil, download, fmtDate, readFileAsDataURL, rm, todayISO, uid } from '../lib/util'
+import { LeaveEntitlementCard, WorkerPayCompliance } from './pay'
 
 type V = Record<string, unknown>
 type P = { w: Worker; s: Settings }
@@ -272,6 +274,7 @@ function ExitModal({ w, onClose, onDone }: P & { onClose: () => void; onDone: (m
 
 /* ---------------- Pay ---------------- */
 export function PayTab({ w }: P) {
+  const outlets = useOutlets()
   const [inc, setInc] = useState<V | null>(null)
   const [al, setAl] = useState<V | null>(null)
   const incs = sortedIncrements(w)
@@ -323,6 +326,7 @@ export function PayTab({ w }: P) {
             x.allowances = al.id ? x.allowances.map((a) => (a.id === al.id ? rec : a)) : [...x.allowances, rec]
           })} />
       )}
+      <WorkerPayCompliance w={w} outlets={outlets} />
     </>
   )
 }
@@ -432,6 +436,7 @@ export function LeaveTab({ w, s, openMemo }: P & { openMemo: (m: Partial<MemoRec
   }
   return (
     <>
+      <LeaveEntitlementCard w={w} />
       <div className="grid2">
         <Card title="✈ Return flight ticket">
           <div className="calc">

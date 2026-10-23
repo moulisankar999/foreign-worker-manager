@@ -594,3 +594,28 @@ fieldset.pw-choice legend { padding: 0 .3rem; }
 [data-theme=dark] .wlist a, [data-theme=dark] .stat, [data-theme=dark] .quick button { border-color: var(--line); }
 [data-theme=dark] .memo { color: #111; } /* printable memos stay on white paper */
 [data-theme=dark] .modal-bg { background: rgba(0,0,0,.6); }
+
+/* v1.2.1 pay compliance */
+.pay-grid { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 18px; }
+.pay-grid h4 { margin: 14px 0 6px; font-size: .9rem; }
+.pay-side { position: sticky; top: 0; align-self: start; }
+.pay-res td { padding: 5px 8px; }
+.pay-warn { list-style: none; margin: 6px 0; padding: 0; display: grid; gap: 6px; }
+.pay-warn li { display: flex; gap: 8px; padding: 8px 10px; border-radius: 10px; font-size: .86rem; }
+.pay-warn li small { display: block; color: var(--muted); font-size: .74rem; margin-top: 2px; }
+.pay-warn .pw-red { background: #fef2f2; color: #7f1d1d; }
+.pay-warn .pw-amber { background: #fffbeb; color: #78350f; }
+.pay-warn .pw-info { background: #f1f5f9; }
+.pay-ok { background: #f0fdf4; color: #166534; padding: 8px 10px; border-radius: 10px; font-weight: 600; }
+.calc .pay-bad { background: #fef2f2; } .calc .pay-bad strong { color: var(--red); }
+.calc small { font-size: .74rem; margin-top: 2px; }
+.pay-hostel { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 10px; }
+.pay-hostel h4 { margin: 0 0 8px; }
+.pay-toggles { margin: 10px 0; }
+.pay-filters { margin-bottom: 8px; } .pay-filters label { display: flex; gap: 6px; align-items: center; font-size: .86rem; font-weight: 600; }
+.pay-states { border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 4px; margin-top: 10px; }
+tr.pay-now td { background: #f0fdfa; }
+.ok-msg { color: #166534; font-weight: 600; }
+.wrap { flex-wrap: wrap; } .nowrap { white-space: nowrap; }
+.slip-cols { gap: 14px; } .slip-net { margin-top: 10px; } .slip-net th { font-size: 15px; } .slip-net td { font-size: 15px; font-weight: 700; }
+@media (max-width: 760px) { .pay-grid { grid-template-columns: 1fr; } .pay-side { position: static; } }

@@ -3,6 +3,7 @@ import { useMemo } from 'react'
 import { db } from './db'
 import { buildAlerts } from './calc'
 import { useConfig } from './config'
+import { useAuth } from './auth'
 import { DEFAULT_SETTINGS, type JobCategory, type Outlet, type Settings, type Worker } from './types'
 
 const EMPTY_W: Worker[] = []
@@ -28,6 +29,9 @@ export function useJobs() {
 export function useAlerts() {
   const w = useWorkers()
   const s = useSettings()
-  const ag = useConfig().agencies
-  return useMemo(() => buildAlerts(w, s, ag.items), [w, s, ag])
+  const cfg = useConfig()
+  const ag = cfg.agencies
+  const { canSeeSalary } = useAuth()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  return useMemo(() => buildAlerts(w, s, ag.items), [w, s, ag, canSeeSalary, cfg.rates])
 }

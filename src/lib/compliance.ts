@@ -4,38 +4,49 @@ import { isExited, type Alert } from './calc'
 import { completeness } from './validate'
 import type { Agency } from './agencies'
 import type { Outlet, Worker } from './types'
+import { getConfig } from './config'
+import { monthLabel, prevMonth, rateAt, wageDueDate } from './pay'
+import { parseISO, rm0, todayISO } from './util'
 
 export const PERMIT = 'Work Permit / PLKS (VP(TE))'
 export const FOMEMA = 'FOMEMA Medical'
 export const INSURANCE = 'Insurance (SPIKPA / Hospitalisation)'
 
-export interface ScoreLine { key: string; label: string; affected: number; lost: number; max: number; tip: string }
+export interface ScoreLine { key: string; label: string; affected: number; lost: number; max: number; tip: string; pay?: boolean }
 export interface Score { score: number | null; total: number; lines: ScoreLine[]; tone: 'green' | 'amber' | 'red' | 'gray'; label: string }
 
-const RULES: { key: string; label: string; max: number; tip: string; hit: (w: Worker, a: Alert[]) => boolean }[] = [
-  { key: 'permit', label: 'Work permit (PLKS) expired', max: 30, tip: 'Renew in FWCMS now. A worker without a valid permit should not be working.', hit: (_w, a) => a.some((x) => x.category === PERMIT && (x.days ?? 0) < 0) },
-  { key: 'expired', label: 'Passport, FOMEMA or insurance expired', max: 15, tip: 'Renew the expired document — the permit renewal needs them.', hit: (_w, a) => a.some((x) => ['Passport', FOMEMA, INSURANCE].includes(x.category) && (x.days ?? 0) < 0) },
-  { key: 'soon', label: 'Key document expires within 60 days', max: 10, tip: 'Start the renewal now so there is no gap.', hit: (_w, a) => a.some((x) => [PERMIT, 'Passport', FOMEMA, INSURANCE].includes(x.category) && x.days !== null && x.days >= 0 && x.days <= 60) },
-  { key: 'missing', label: 'Required document missing', max: 15, tip: 'Add the passport, permit, FOMEMA and insurance records for every worker.', hit: (_w, a) => a.some((x) => x.category === 'Missing document') },
-  { key: 'passport', label: 'Passport kept without signed consent', max: 15, tip: 'Keep a passport only with the worker’s signed consent, and return it when he asks.', hit: (_w, a) => a.some((x) => x.id.startsWith('ppnoconsent-')) },
+const RULES: { key: string; label: string; max: number; tip: string; pay?: boolean; hit: (w: Worker, a: Alert[]) => boolean }[] = [
+  { key: 'permit', label: 'Work permit (PLKS) expired', max: 25, tip: 'Renew in FWCMS now. A worker without a valid permit should not be working.', hit: (_w, a) => a.some((x) => x.category === PERMIT && (x.days ?? 0) < 0) },
+  { key: 'expired', label: 'Passport, FOMEMA or insurance expired', max: 12, tip: 'Renew the expired document — the permit renewal needs them.', hit: (_w, a) => a.some((x) => ['Passport', FOMEMA, INSURANCE].includes(x.category) && (x.days ?? 0) < 0) },
+  { key: 'soon', label: 'Key document expires within 60 days', max: 8, tip: 'Start the renewal now so there is no gap.', hit: (_w, a) => a.some((x) => [PERMIT, 'Passport', FOMEMA, INSURANCE].includes(x.category) && x.days !== null && x.days >= 0 && x.days <= 60) },
+  { key: 'missing', label: 'Required document missing', max: 12, tip: 'Add the passport, permit, FOMEMA and insurance records for every worker.', hit: (_w, a) => a.some((x) => x.category === 'Missing document') },
+  { key: 'passport', label: 'Passport kept without signed consent', max: 12, tip: 'Keep a passport only with the worker’s signed consent, and return it when he asks.', hit: (_w, a) => a.some((x) => x.id.startsWith('ppnoconsent-')) },
   { key: 'overdue', label: 'Not back from leave', max: 5, tip: 'Contact the worker. If he has absconded, report it — check with JTKSM or your agent.', hit: (_w, a) => a.some((x) => x.category === 'Overdue return') },
-  { key: 'profile', label: 'Profile incomplete', max: 5, tip: 'Fill in the missing details so letters and forms are correct.', hit: () => false },
-  { key: 'checks', label: 'Status not checked on time', max: 5, tip: 'Open the worker → Check status, check on the official site and record the result.', hit: (_w, a) => a.some((x) => x.category === 'Status check') },
+  { key: 'profile', label: 'Profile incomplete', max: 4, tip: 'Fill in the missing details so letters and forms are correct.', hit: () => false },
+  { key: 'checks', label: 'Status not checked on time', max: 4, tip: 'Open the worker → Check status, check on the official site and record the result.', hit: (_w, a) => a.some((x) => x.category === 'Status check') },
+  { key: 'minwage', pay: true, label: 'Paid below minimum wage', max: 8, tip: 'Raise the basic pay to at least the minimum wage, or record why the worker is exempt. Check with JTKSM or your agent.', hit: (_w, a) => a.some((x) => x.id.startsWith('pay-minwage-')) },
+  { key: 'latepay', pay: true, label: 'Wages late or not recorded as paid', max: 5, tip: 'Pay wages within 7 days after the month ends and record the pay date on the payslip.', hit: (_w, a) => a.some((x) => x.id.startsWith('pay-late-')) },
+  { key: 'deduct', pay: true, label: 'Deductions or hostel charge over the limit', max: 3, tip: 'Keep deductions within 50% of wages and the hostel charge within the Act 446 limit, with the paperwork on file.', hit: (_w, a) => a.some((x) => x.id.startsWith('pay-deduct-') || x.id.startsWith('pay-hostel-')) },
+  { key: 'ot', pay: true, label: 'Overtime over 104 hours a month', max: 1, tip: 'Plan rosters so nobody works more than 104 overtime hours in a month.', hit: (_w, a) => a.some((x) => x.id.startsWith('pay-ot-')) },
+  { key: 'leave', pay: true, label: 'Annual leave set below the legal minimum', max: 1, tip: 'Annual leave is at least 8, 12 or 16 days a year depending on length of service. Update the worker’s leave setting.', hit: (_w, a) => a.some((x) => x.id.startsWith('pay-leave-')) },
 ]
 
 /** score for a group of workers (company, outlet or everyone) */
-export function healthScore(workers: Worker[], alerts: Alert[], outlets: Outlet[]): Score {
+/** opts.pay = false when the viewer may not see pay (outlet managers): pay lines are left out and the score is rescaled to 100 */
+export function healthScore(workers: Worker[], alerts: Alert[], outlets: Outlet[], opts: { pay?: boolean } = {}): Score {
+  const rules = RULES.filter((r) => opts.pay !== false || !r.pay)
+  const maxSum = rules.reduce((t, r) => t + r.max, 0)
   const act = workers.filter((w) => !isExited(w))
   if (!act.length) return { score: null, total: 0, lines: [], tone: 'gray', label: 'No workers yet' }
   const byW = new Map<string, Alert[]>()
   for (const a of alerts) { const l = byW.get(a.workerId); if (l) l.push(a); else byW.set(a.workerId, [a]) }
-  const lines = RULES.map((r) => {
+  const lines = rules.map((r) => {
     const affected = act.filter((w) => r.key === 'profile' ? !completeness(w, outlets).complete : r.hit(w, byW.get(w.id) || [])).length
     // any problem costs at least 30% of that line, the rest grows with the share of workers affected
     const lost = affected ? Math.round(r.max * Math.min(1, 0.3 + 0.7 * (affected / act.length))) : 0
-    return { key: r.key, label: r.label, affected, lost, max: r.max, tip: r.tip }
+    return { key: r.key, label: r.label, affected, lost, max: r.max, tip: r.tip, pay: !!r.pay }
   })
-  const score = Math.max(0, 100 - lines.reduce((s, l) => s + l.lost, 0))
+  const score = Math.max(0, Math.round(100 - (lines.reduce((s, l) => s + l.lost, 0) * 100) / maxSum))
   const tone = score >= 85 ? 'green' : score >= 65 ? 'amber' : 'red'
   return { score, total: act.length, lines, tone, label: score >= 85 ? 'Good' : score >= 65 ? 'Needs attention' : 'At risk' }
 }
@@ -47,7 +58,7 @@ export interface Priority { id: string; rank: number; icon: string; tone: 'red' 
 const plural = (n: number, one: string, many = one + 's') => `${n} ${n === 1 ? one : many}`
 const within = (d: number) => (d <= 31 ? 'within a month' : d <= 62 ? 'within 2 months' : 'within 3 months')
 
-export function priorities(alerts: Alert[], workers: Worker[], outlets: Outlet[], agencies: Agency[], opts: { om?: boolean } = {}): Priority[] {
+export function priorities(alerts: Alert[], workers: Worker[], outlets: Outlet[], agencies: Agency[], opts: { om?: boolean; pay?: boolean } = {}): Priority[] {
   const ag = (id: string) => agencies.find((a) => a.id === id && a.enabled)
   const portal = (id: string, label: string): Action | undefined => { const a = ag(id); return a ? { label, href: a.url } : undefined }
   const uniq = (xs: Alert[]) => [...new Set(xs.map((x) => x.workerId))]
@@ -81,6 +92,28 @@ export function priorities(alerts: Alert[], workers: Worker[], outlets: Outlet[]
       out.push({ id: 'checks', rank: 6, icon: '🔎', tone: 'teal', text: `${plural(ids.length, 'worker')}: ${first.title.replace(/ not checked.*/, '')} not checked recently`, detail: 'Open the worker → Check status, check on the official site and record the result.', action: { label: ids.length === 1 ? 'Check now' : 'Start checking', to: `/workers/${ids[0]}?tab=checks` }, second: { label: 'See all', to: '/alerts?cat=Status%20check' } })
     }
   }
+  if (!opts.om && opts.pay !== false) {
+    const rates = getConfig().rates
+    const mw = rateAt(rates.minWage, todayISO())
+    const PAY = '/alerts?cat=Pay%20compliance'
+    const below = uniq(of((a) => a.id.startsWith('pay-minwage-')))
+    if (below.length) out.push({ id: 'pay-minwage', rank: 1, icon: '💰', tone: 'red', text: `${plural(below.length, 'worker is', 'workers are')} paid below the minimum wage${mw ? ` (${rm0(mw.monthly)})` : ''}`, detail: 'Raise the basic pay, or record why the worker is exempt. Check with JTKSM or your agent.', action: go(below, 'pay', PAY) })
+    const late = uniq(of((a) => a.id.startsWith('pay-late-')))
+    if (late.length) out.push({ id: 'pay-late', rank: 1, icon: '⏰', tone: 'red', text: `Wages for ${plural(late.length, 'worker')} ${late.length === 1 ? 'is' : 'are'} late or not recorded as paid`, detail: `Pay wages within ${rates.payDays} days after the month ends, and overtime by the end of the next month (Employment Act s.19).`, action: go(late, 'pay', PAY) })
+    const ded = uniq(of((a) => a.id.startsWith('pay-deduct-') || a.id.startsWith('pay-hostel-')))
+    if (ded.length) out.push({ id: 'pay-deduct', rank: 2, icon: '🏠', tone: 'amber', text: `${plural(ded.length, 'worker has', 'workers have')} deductions over the legal limit`, detail: `Total deductions: max ${rates.deductionCapPct}% of wages. Hostel: max ${rm0(rateAt(rates.hostelCap, todayISO())?.amount || 0)} a month, with a valid Certificate for Accommodation and the worker’s written request. Check with JTKSM or your agent.`, action: go(ded, 'pay', PAY) })
+    const ot = uniq(of((a) => a.id.startsWith('pay-ot-')))
+    if (ot.length) out.push({ id: 'pay-ot', rank: 2, icon: '⏱️', tone: 'amber', text: `${plural(ot.length, 'worker')} worked more than 104 overtime hours in a month`, detail: 'Spread the overtime so nobody goes over the monthly limit.', action: go(ot, 'pay', PAY) })
+    const lv = uniq(of((a) => a.id.startsWith('pay-leave-')))
+    if (lv.length) out.push({ id: 'pay-leave', rank: 5, icon: '🏖️', tone: 'blue', text: `${plural(lv.length, 'worker has', 'workers have')} annual leave set below the legal minimum`, detail: 'Annual leave is at least 8 / 12 / 16 days for under 2 / 2–5 / 5+ years of service.', action: go(lv, 'leave', PAY) })
+    // pay-day reminder for companies using the payslip helper
+    const users = workers.filter((w) => !isExited(w) && w.payslips?.length)
+    const last = prevMonth(todayISO()); const due = wageDueDate(last, rates)
+    if (users.length && todayISO() <= due) {
+      const missing = users.filter((w) => !w.payslips!.some((p) => p.month === last && p.payDate))
+      if (missing.length) out.push({ id: 'pay-day', rank: 3, icon: '🗓️', tone: 'teal', text: `${monthLabel(last)} wages are due by ${parseISO(due)!.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} — ${plural(missing.length, 'worker')} not marked paid yet`, detail: 'Make the payslip and record the pay date on each worker’s Pay tab.', action: go(missing.map((w) => w.id), 'pay', '/workers') })
+    }
+  }
   const pend = uniq(of((a) => a.id.startsWith('pppending-')))
   if (pend.length) out.push({ id: 'pp-pending', rank: 3, icon: '✍️', tone: 'amber', text: `${plural(pend.length, 'passport consent form')} waiting for signature`, detail: 'Collect the signed form and upload it.', action: go(pend, 'passport', '/alerts?cat=Passport%20consent') })
   const back = uniq(of((a) => a.category === 'Due back'))
@@ -93,15 +126,20 @@ export interface Tip { title: string; text: string; source: string }
 export const TIPS: Tip[] = [
   { title: 'Passports belong to the worker', text: 'You may keep a passport in safe custody only with the worker’s written consent, and you must give it back when he asks.', source: 'Passports Act 1966, s.12(1)(f)' },
   { title: 'Pay wages on time', text: 'Wages must be paid no later than the 7th day after the end of each wage period (normally the month).', source: 'Employment Act 1955, s.19' },
-  { title: 'Minimum wage', text: 'The minimum wage is RM1,700 a month for most employers (Minimum Wages Order 2024). Check the current order for your business size.', source: 'Minimum Wages Order 2024 — check with JTKSM or your agent' },
-  { title: 'Overtime pay', text: 'Overtime is paid at least 1.5× the hourly rate on a normal day, 2× on a rest day and 3× on a public holiday.', source: 'Employment Act 1955, s.60 & s.60A' },
+  { title: 'Minimum wage', text: 'The minimum wage is RM1,700 a month (RM8.72 an hour) from 1 February 2025; employers with fewer than 5 workers followed from 1 August 2025. Domestic servants are not covered.', source: 'Minimum Wages Order 2024 — check with JTKSM or your agent' },
+  { title: 'Overtime and holiday pay deadline', text: 'Overtime, rest-day and public-holiday pay must be paid by the last day of the next wage period.', source: 'Employment Act 1955, s.19(1A)' },
+  { title: 'Overtime pay', text: 'Overtime is paid at least 1.5× the hourly rate on a normal day, 2× on a rest day and 3× on a public holiday. The hourly rate is the monthly pay ÷ 26 ÷ normal hours a day.', source: 'Employment Act 1955, s.60 & s.60A — check with JTKSM or your agent' },
   { title: 'Overtime limit', text: 'A worker should not do more than 104 hours of overtime in a month.', source: 'Employment (Limitation of Overtime Work) Regulations 1980' },
   { title: 'Deductions', text: 'Total deductions in a month should not exceed 50% of the wages, except for the cases the law allows.', source: 'Employment Act 1955, s.24 — check with JTKSM or your agent' },
   { title: 'Worker housing', text: 'Accommodation for workers must meet the minimum standards and needs a Certificate for Accommodation.', source: 'Act 446 — check with JTKSM or your agent' },
+  { title: 'Hostel deduction limit', text: 'From 1 March 2026 you may deduct at most RM150 a month for accommodation (RM100 before), only with a valid Certificate for Accommodation, the worker’s written request and approval, and never more than the contract says. Applies in Peninsular Malaysia and Labuan.', source: 'Act 446, P.U.(A) 49/2026 — check with JTKSM or your agent' },
+  { title: 'LINDUNG 24 Jam', text: 'From 1 June 2026 workers pay 0.75% of wages (up to RM6,000) for PERKESO’s 24-hour non-work accident cover. It is deducted from the worker, not paid by the employer.', source: 'PERKESO — check with PERKESO' },
+  { title: 'Leave grows with service', text: 'Annual leave is at least 8 days (under 2 years), 12 days (2–5 years) and 16 days (5 years or more). Sick leave is 14, 18 or 22 days, plus up to 60 days if hospitalised.', source: 'Employment Act 1955, s.60E & s.60F' },
+  { title: 'Public holidays', text: 'Give 11 paid public holidays a year, including National Day, the Agong’s Birthday, the Ruler’s (or Federal Territory Day), Labour Day and Malaysia Day. A holiday on a rest day moves to the next working day.', source: 'Employment Act 1955, s.60D — check with JTKSM or your agent' },
   { title: 'Medical check-ups', text: 'Foreign workers need a FOMEMA medical exam on arrival and again for permit renewals. Keep the result on file.', source: 'FOMEMA — check with your agent for the exact schedule' },
   { title: 'Start permit renewals early', text: 'Start the PLKS renewal about 3 months before expiry so the worker never works without a valid permit.', source: 'Immigration — check with JTKSM or your agent' },
-  { title: 'Social security', text: 'Register every foreign worker with PERKESO (SOCSO) and pay the contribution every month.', source: 'Employees’ Social Security Act 1969 — check with PERKESO' },
-  { title: 'EPF for foreign workers', text: 'EPF contributions for foreign workers (2% employer + 2% employee) apply from October 2025 wages.', source: 'KWSP — check with KWSP or your agent' },
+  { title: 'Social security', text: 'Register every foreign worker with PERKESO (SOCSO). The employer pays 1.75% and the worker 0.5% of wages up to RM6,000, using PERKESO’s contribution table.', source: 'Employees’ Social Security Act 1969 — check with PERKESO' },
+  { title: 'EPF for foreign workers', text: 'EPF for foreign workers is 2% from the employer and 2% from the worker, from October 2025 wages. Each share is rounded up to the next ringgit and is due by the 15th of the next month.', source: 'KWSP — check with KWSP or your agent' },
   { title: 'Written contract', text: 'Give every worker a written contract and keep a copy. Explain it in a language he understands.', source: 'Employment Act 1955, s.10 — check with JTKSM or your agent' },
   { title: 'No recruitment fees from workers', text: 'Workers should not pay recruitment fees. Keep a signed zero-cost recruitment declaration on file.', source: 'Good practice / buyer audits — check with your agent' },
   { title: 'Insurance cover', text: 'Keep each worker’s hospitalisation and surgical insurance (SPIKPA) active for the whole permit period.', source: 'Ministry of Health — check with your agent' },

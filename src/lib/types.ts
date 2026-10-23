@@ -102,6 +102,13 @@ export interface Worker {
   loans: LoanRec[]
   deductions: DeductionRec[]
   annualLeaveDays?: number
+  /** monthly payslips made with the payslip helper (salary data: hidden from roles that may not see pay) */
+  payslips?: import('./pay').PayslipRec[]
+  /** minimum-wage check switched off (e.g. not covered by the Order) — reason is kept for audit */
+  minWageExempt?: boolean
+  minWageExemptReason?: string
+  /** accommodation (hostel) deduction set-up for Act 446 checks */
+  hostelDeduction?: import('./pay').HostelDeduction
   leaves: LeaveRec[]
   memos: MemoRec[]
   notes: NoteRec[]
@@ -134,7 +141,7 @@ export interface PassportSafe {
   moves?: PassportMove[]
 }
 
-export interface Outlet { id: string; name: string; type: BusinessType; address?: string; manager?: string; companyId?: string; logo?: string }
+export interface Outlet { id: string; name: string; type: BusinessType; address?: string; manager?: string; companyId?: string; logo?: string; /** Malaysian state (public holidays, Act 446 scope) */ state?: string; /** weekly rest day, default Sunday */ restDay?: string }
 export interface JobCategory { id: string; name: string; businessType: BusinessType }
 
 export interface Settings {

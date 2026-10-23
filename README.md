@@ -123,6 +123,20 @@ Sample data: **Settings → Data & Backup → Load sample data** adds fake `DEMO
 
 **Remove sample (DEMO) data** (v1.1.3, Super Admin only, Settings → Data & Backup): shows a preview (DEMO workers, outlets, remarks, documents, requests; users assigned to DEMO outlets with a dropdown to move each to a real outlet or leave unassigned), then asks you to type `REMOVE`. It soft-deletes (synced to every device) only workers/outlets whose name starts with `DEMO ` plus their remarks and documents, cancels their open requests without notifications, and writes an audit entry (`demo.remove`). A DEMO outlet that still has a real worker is kept. Job categories are standard lists and are not removed. Server: `demo_data_preview()` / `remove_demo_data()` (migration 011).
 
+## Pay & contribution compliance (v1.2.1)
+
+Rules are a guide, not legal advice. Wherever a rule is uncertain the app says **"check with JTKSM or your agent"**.
+
+- **Minimum wage**: dated list (RM1,700 from 1 Feb 2025). A worker's basic below the rate in force shows a warning and a dashboard priority. HR can record a per-worker exemption with a required reason.
+- **Overtime**: calculator (×1.5 normal day, ×2 rest day, ×3 public holiday; ORP = monthly ÷ 26, hourly = ORP ÷ 8). Warns above 104 hours a month (Overtime Regulations 1980), amber when close.
+- **Pay deadlines & deductions**: wages due within 7 days after the wage month (EA s.19), OT by the end of the next month (s.19(1A)); warns when paid late or not recorded as paid, and when total deductions pass 50% of wages (s.24).
+- **Hostel deduction (Act 446)**: RM150/month cap from 1 Mar 2026 (RM100 before, P.U.(A) 49/2026), only with a valid Certificate for Accommodation, the worker's written request, DG approval and not above the contract. Peninsular Malaysia & Labuan; Sabah/Sarawak get a note.
+- **Payslip helper** (worker → Pay → Payslips): earnings, OT, deductions, EPF 2% + 2% (foreign workers), PERKESO 1.75% employer / 0.5% worker (estimate — use PERKESO's contribution table for exact amounts), LINDUNG 24 Jam 0.75% worker; printable payslip.
+- **All rates editable with effective dates** in Settings → Pay & Leave rules (CEO, HR Admin, or anyone with the `compliance.rates` power). Saved via the `set_pay_config` RPC with an audit entry.
+- **Leave entitlements by service**: annual 8/12/16 days, sick 14/18/22 days, hospitalisation 60 days, maternity 98 days, paternity 7 days. The Leave tab shows the statutory minimum next to the worker's contract.
+- **Public holidays by state**: editable list per year (2026 built-in), state and rest-day filters, replacement-day column (EA s.60D). Outlets now have a state and a rest day.
+- **Dashboard**: pay rules feed the health score and Today's priorities. Users without salary access never see pay alerts or pay lines; the server strips payslips and hostel/exemption fields for them.
+
 ## Features
 
 ### Dashboard

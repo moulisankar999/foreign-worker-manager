@@ -6,6 +6,7 @@ import { DEFAULT_EMERGENCY_REASONS, DEFAULT_HR_FLAGS, DEFAULT_VAULT, defaultRule
 import { DEFAULT_NOTIFY, type NotifyConfig } from './notifyEvents'
 import { DEFAULT_CONSENT_TRANSLATIONS, type ConsentTranslationsConfig } from './consentText'
 import { DEFAULT_AGENCIES, mergeAgencies, type AgenciesConfig } from './agencies'
+import { DEFAULT_HOLIDAYS, DEFAULT_RATES, type HolidaysConfig, type RatesConfig } from './pay'
 import { DEFAULT_COMPANIES, DEFAULT_USER_APPROVALS, type CompaniesConfig, type UserApprovalsConfig } from './companies'
 
 export interface PassportConfig { turnaroundHours: number; overdueGraceDays: number; logo?: string; companyShort?: string; witnessTitle?: string }
@@ -23,12 +24,16 @@ export interface AppConfig {
   user_approvals: UserApprovalsConfig
   consent_translations: ConsentTranslationsConfig
   agencies: AgenciesConfig
+  /** pay & contribution rates, effective-dated (Settings → Pay & Leave rules) */
+  rates: RatesConfig
+  /** public holidays per year and state */
+  holidays: HolidaysConfig
 }
 const DEFAULTS: AppConfig = {
   approval_rules: defaultRules(), hr_admin: DEFAULT_HR_FLAGS, vault: DEFAULT_VAULT, emergency_reasons: DEFAULT_EMERGENCY_REASONS,
   notifications: DEFAULT_NOTIFY, passport: DEFAULT_PASSPORT, wa_templates: { items: {}, syncedAt: null },
   companies: DEFAULT_COMPANIES, user_approvals: DEFAULT_USER_APPROVALS, consent_translations: DEFAULT_CONSENT_TRANSLATIONS,
-  agencies: DEFAULT_AGENCIES,
+  agencies: DEFAULT_AGENCIES, rates: DEFAULT_RATES, holidays: DEFAULT_HOLIDAYS,
 }
 const CACHE = 'fwm-config'
 let cfg: AppConfig = load()
@@ -50,6 +55,11 @@ function merge(raw: Partial<Record<keyof AppConfig, unknown>>): AppConfig {
   const ct = out.consent_translations as ConsentTranslationsConfig
   if (!ct.items || typeof ct.items !== 'object') out.consent_translations = DEFAULT_CONSENT_TRANSLATIONS
   out.agencies = mergeAgencies(raw.agencies)
+  const r = out.rates as RatesConfig
+  out.rates = { ...DEFAULT_RATES, ...r, leave: { ...DEFAULT_RATES.leave, ...(r.leave || {}) } }
+  for (const k of ['minWage', 'epf', 'socso', 'lindung', 'hostelCap', 'ot'] as const) if (!Array.isArray((out.rates as RatesConfig)[k])) ((out.rates as unknown) as Record<string, unknown>)[k] = DEFAULT_RATES[k]
+  const h = out.holidays as HolidaysConfig
+  if (!h.years || typeof h.years !== 'object') out.holidays = DEFAULT_HOLIDAYS
   return out as unknown as AppConfig
 }
 function load(): AppConfig {
@@ -102,4 +112,11 @@ export async function saveConsentTranslation(lang: string, entry: import('./cons
   const { data, error } = await supabase.rpc('set_consent_translation', { p_lang: lang, p_text: entry })
   if (error) throw new Error(/permission|not allowed|denied/i.test(error.message) ? 'Only the CEO, General Manager or HR Admin can change translations' : error.message)
   set({ ...raw, consent_translations: data ?? raw.consent_translations })
+}
+
+/** CEO, HR Admin or a General Manager with the compliance power: save pay rates or the holiday list (server function, audited). */
+export async function savePayConfig<K extends 'rates' | 'holidays'>(key: K, value: AppConfig[K]) {
+  const { data, error } = await supabase.rpc('set_pay_config', { p_key: key, p_value: value })
+  if (error) throw new Error(/permission|not allowed|denied/i.test(error.message) ? 'Only the CEO, HR Admin or a General Manager with this power can change pay rules' : error.message)
+  set({ ...raw, [key]: data ?? value })
 }

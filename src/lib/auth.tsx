@@ -1,3 +1,4 @@
+import { setPayAlertsVisible } from './calc'
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { forgetStoredSession, supabase, type Profile, type Role } from './supabase'
@@ -162,6 +163,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       : isGm ? (can('users.create') ? ['hr_admin', 'hr_manager', 'outlet_manager', 'viewer'] : [])
       : isHrAdmin ? ['hr_manager', 'outlet_manager', 'viewer'] : role === 'hr_manager' ? ['outlet_manager'] : [],
   }
+  setPayAlertsVisible(perms.canSeeSalary)
   return (
     <Ctx.Provider value={{ session, profile, loading, ...perms, refreshProfile: () => loadProfile(session), signOut }}>
       {children}

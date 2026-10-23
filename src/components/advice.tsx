@@ -39,12 +39,13 @@ export function Greeting({ sub }: { sub?: string }) {
 export interface Extra { id: string; icon: string; tone: Priority['tone']; text: string; detail: string; to: string; label: string; rank: number }
 export function Priorities({ alerts, workers, outlets, om, extra = [] }: { alerts: Alert[]; workers: Worker[]; outlets: Outlet[]; om?: boolean; extra?: Extra[] }) {
   const cfg = useConfig()
+  const { canSeeSalary } = useAuth()
   const nav = useNavigate()
   const list = useMemo(() => {
-    const base = priorities(alerts, workers, outlets, cfg.agencies.items, { om })
+    const base = priorities(alerts, workers, outlets, cfg.agencies.items, { om, pay: !!canSeeSalary })
     const ex: Priority[] = extra.map((e) => ({ id: e.id, rank: e.rank, icon: e.icon, tone: e.tone, text: e.text, detail: e.detail, action: { label: e.label, to: e.to } }))
     return [...ex, ...base].sort((a, b) => a.rank - b.rank).slice(0, 5)
-  }, [alerts, workers, outlets, cfg.agencies.items, om, extra])
+  }, [alerts, workers, outlets, cfg.agencies.items, om, extra, canSeeSalary, cfg.rates])
   return (
     <Card title={<><Icon name="check" /> Today’s priorities</>} className="card-prio">
       {list.length === 0 ? <p className="muted">All clear today 🎉 Nothing needs you right now.</p> : (
@@ -80,21 +81,23 @@ export function Ring({ score, size = 76, tone }: { score: number | null; size?: 
 
 export function HealthCard({ workers, alerts, outlets }: { workers: Worker[]; alerts: Alert[]; outlets: Outlet[] }) {
   const cfg = useConfig()
+  const { canSeeSalary } = useAuth()
+  const pay = !!canSeeSalary
   const [why, setWhy] = useState<{ name: string; s: Score } | null>(null)
   const groups = useMemo(() => {
-    const all = { id: 'all', name: 'All workers', s: healthScore(workers, alerts, outlets) }
+    const all = { id: 'all', name: 'All workers', s: healthScore(workers, alerts, outlets, { pay }) }
     const cos = cfg.companies.items.map((c) => {
       const ws = workers.filter((w) => outletCompany(outlets.find((o) => o.id === w.outletId)) === c.id)
       const ids = new Set(ws.map((w) => w.id))
-      return { id: c.id, name: c.name, s: healthScore(ws, alerts.filter((a) => ids.has(a.workerId)), outlets) }
+      return { id: c.id, name: c.name, s: healthScore(ws, alerts.filter((a) => ids.has(a.workerId)), outlets, { pay }) }
     }).filter((g) => g.s.total > 0)
     const outs = outlets.map((o) => {
       const ws = workers.filter((w) => w.outletId === o.id)
       const ids = new Set(ws.map((w) => w.id))
-      return { id: o.id, name: o.name, s: healthScore(ws, alerts.filter((a) => ids.has(a.workerId)), outlets) }
+      return { id: o.id, name: o.name, s: healthScore(ws, alerts.filter((a) => ids.has(a.workerId)), outlets, { pay }) }
     }).filter((g) => g.s.total > 0).sort((a, b) => (a.s.score ?? 100) - (b.s.score ?? 100))
     return { all, cos: cos.length > 1 ? cos : [], outs }
-  }, [workers, alerts, outlets, cfg.companies.items])
+  }, [workers, alerts, outlets, cfg.companies.items, pay])
   const Tile = ({ g, big }: { g: { name: string; s: Score }; big?: boolean }) => (
     <button type="button" className={`h-tile${big ? ' h-big' : ''}`} onClick={() => setWhy(g)} title="Why this score?">
       <Ring score={g.s.score} tone={g.s.tone} size={big ? 92 : 64} />
@@ -111,14 +114,14 @@ export function HealthCard({ workers, alerts, outlets }: { workers: Worker[]; al
         <h4>By outlet (lowest first)</h4>
         <div className="h-grid h-small">{groups.outs.slice(0, 8).map((g) => <Tile key={g.id} g={g} />)}</div>
       </>}
-      <p className="muted small">Score out of 100 from expired / expiring permits, documents, passport consent, overdue returns, profiles and status checks. Tap a ring for the breakdown.</p>
+      <p className="muted small">Score out of 100 from expired / expiring permits, documents, passport consent, overdue returns, profiles and status checks{pay ? ', plus pay rules (minimum wage, paying on time, deductions and hostel charges, overtime limit and leave)' : ''}. Tap a ring for the breakdown.</p>
       {why && (
         <Modal title={`Why ${why.s.score ?? '—'}/100 — ${why.name}`} onClose={() => setWhy(null)}>
           <ul className="why">
             {why.s.lines.map((l) => (
               <li key={l.key} className={l.lost ? 'why-lost' : 'why-ok'}>
                 <span className="why-n">{l.lost ? `−${l.lost}` : '✓'}</span>
-                <div><strong>{l.label}</strong><small>{l.affected ? `${l.affected} of ${why.s.total} workers · ` : 'No problems · '}max −{l.max}</small>{l.lost > 0 && <small className="why-tip">👉 {l.tip}</small>}</div>
+                <div><strong>{l.label}</strong><small>{l.affected ? `${l.affected} of ${why.s.total} workers · ` : 'No problems · '}max −{l.max}{l.pay ? ' · pay' : ''}</small>{l.lost > 0 && <small className="why-tip">👉 {l.tip}</small>}</div>
               </li>
             ))}
           </ul>
