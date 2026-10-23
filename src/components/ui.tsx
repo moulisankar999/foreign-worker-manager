@@ -1,6 +1,8 @@
 import { useEffect, useId, useState, type ReactNode } from 'react'
 import { Icon } from './Icon'
 import { fmtDate } from '../lib/util'
+import { PhoneInput } from './phoneInput'
+import { fmtMoneyInput, moneyIssue, parseMoney, type Issue, type Issues } from '../lib/validate'
 
 export function Card({ title, actions, children, className = '' }: { title?: ReactNode; actions?: ReactNode; children: ReactNode; className?: string }) {
   return (
@@ -36,10 +38,24 @@ export function Btn({ children, onClick, kind = 'secondary', icon, type = 'butto
   )
 }
 
-export type FieldType = 'text' | 'date' | 'number' | 'select' | 'textarea' | 'checkbox' | 'tel' | 'email'
-export interface FieldDef { key: string; label: string; type?: FieldType; options?: string[] | { value: string; label: string }[]; required?: boolean; placeholder?: string; full?: boolean; hint?: string; show?: (v: Record<string, unknown>) => boolean }
+export type FieldType = 'text' | 'date' | 'number' | 'select' | 'textarea' | 'checkbox' | 'tel' | 'email' | 'money' | 'phone' | 'upper'
+export interface FieldDef { key: string; label: string; type?: FieldType; options?: string[] | { value: string; label: string }[]; required?: boolean; placeholder?: string; full?: boolean; hint?: string; show?: (v: Record<string, unknown>) => boolean; defaultCc?: string; max?: string }
 
-export function Field({ def, value, onChange }: { def: FieldDef; value: unknown; onChange: (v: unknown) => void }) {
+function MoneyInput({ id, value, onChange, required, placeholder }: { id: string; value: unknown; onChange: (v: unknown) => void; required?: boolean; placeholder?: string }) {
+  const [txt, setTxt] = useState<string | null>(null)
+  return (
+    <div className="money-in">
+      <span className="money-pre" aria-hidden="true">RM</span>
+      <input id={id} type="text" inputMode="decimal" autoComplete="off" required={required} placeholder={placeholder || '0.00'}
+        value={txt ?? fmtMoneyInput(value)}
+        onFocus={() => setTxt(value === undefined || value === null || value === '' ? '' : String(value))}
+        onChange={(e) => { const t = e.target.value.replace(/[^\d.,-]/g, ''); setTxt(t); onChange(parseMoney(t)) }}
+        onBlur={() => setTxt(null)} />
+    </div>
+  )
+}
+
+export function Field({ def, value, onChange, issue, missing }: { def: FieldDef; value: unknown; onChange: (v: unknown) => void; issue?: Issue; missing?: boolean }) {
   const id = useId()
   const t = def.type || 'text'
   if (t === 'checkbox')
@@ -49,7 +65,7 @@ export function Field({ def, value, onChange }: { def: FieldDef; value: unknown;
       </label>
     )
   return (
-    <div className={`field ${def.full || t === 'textarea' ? 'full' : ''}`}>
+    <div className={`field ${def.full || t === 'textarea' ? 'full' : ''} ${missing ? 'is-missing' : ''} ${issue ? `is-${issue.level}` : ''}`}>
       <label htmlFor={id}>
         {def.label}
         {def.required && <span className="req"> *</span>}
@@ -59,25 +75,34 @@ export function Field({ def, value, onChange }: { def: FieldDef; value: unknown;
           <option value="">— Select —</option>
           {(def.options || []).map((o) => (typeof o === 'string' ? <option key={o} value={o}>{o}</option> : <option key={o.value} value={o.value}>{o.label}</option>))}
         </select>
+      ) : t === 'money' ? (
+        <MoneyInput id={id} value={value} onChange={onChange} required={def.required} placeholder={def.placeholder} />
+      ) : t === 'phone' ? (
+        <PhoneInput id={id} value={value as string | undefined} onChange={onChange} defaultCc={def.defaultCc} />
+      ) : t === 'upper' ? (
+        <input id={id} type="text" autoCapitalize="characters" autoComplete="off" spellCheck={false} value={String(value ?? '')} placeholder={def.placeholder}
+          onChange={(e) => onChange(e.target.value.toUpperCase().replace(/[^A-Z0-9/-]/g, ''))} />
       ) : t === 'textarea' ? (
         <textarea id={id} rows={3} value={String(value ?? '')} placeholder={def.placeholder} onChange={(e) => onChange(e.target.value)} required={def.required} />
       ) : (
         <input
-          id={id} type={t} inputMode={t === 'number' ? 'decimal' : undefined} step={t === 'number' ? 'any' : undefined}
+          id={id} type={t} max={def.max} inputMode={t === 'number' ? 'decimal' : undefined} step={t === 'number' ? 'any' : undefined}
           value={value === undefined || value === null ? '' : String(value)} placeholder={def.placeholder} required={def.required}
           onChange={(e) => onChange(t === 'number' ? (e.target.value === '' ? undefined : Number(e.target.value)) : e.target.value)}
         />
       )}
+      {issue ? <small className={`fmsg ${issue.level}`} role={issue.level === 'error' ? 'alert' : undefined}>{issue.level === 'error' ? '⛔ ' : '⚠️ '}{issue.msg}</small>
+        : missing ? <small className="fmsg missing">Required to complete the profile</small> : null}
       {def.hint && <small className="hint">{def.hint}</small>}
     </div>
   )
 }
 
-export function FormGrid({ fields, value, onChange }: { fields: FieldDef[]; value: Record<string, unknown>; onChange: (v: Record<string, unknown>) => void }) {
+export function FormGrid({ fields, value, onChange, issues, missing }: { fields: FieldDef[]; value: Record<string, unknown>; onChange: (v: Record<string, unknown>) => void; issues?: Issues; missing?: Set<string> }) {
   return (
     <div className="grid-form">
       {fields.filter((f) => !f.show || f.show(value)).map((f) => (
-        <Field key={f.key} def={f} value={value[f.key]} onChange={(v) => onChange({ ...value, [f.key]: v })} />
+        <Field key={f.key} def={f} value={value[f.key]} issue={issues?.[f.key]} missing={missing?.has(f.key)} onChange={(v) => onChange({ ...value, [f.key]: v })} />
       ))}
     </div>
   )
@@ -112,6 +137,7 @@ export function FormModal({ title, fields, initial, onSave, onClose, onDelete, c
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
     for (const f of fields) if (f.required && (!f.show || f.show(v)) && (v[f.key] === undefined || v[f.key] === '')) return setErr(`${f.label} is required`)
+    for (const f of fields) if (f.type === 'money' && (!f.show || f.show(v))) { const mi = moneyIssue(v[f.key], f.label); if (mi) return setErr(mi.msg) }
     const msg = validate?.(v)
     if (msg) return setErr(msg)
     await onSave(v)

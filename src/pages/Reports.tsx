@@ -10,6 +10,7 @@ import { useAuth } from '../lib/auth'
 import { updateWorker } from '../lib/db'
 import { useConfig } from '../lib/config'
 import { CONSENT_LABEL, CUSTODY_LABEL, consentPdf, consentOf, custodyOf, lastRelease, overdueDays, passportOf } from '../lib/passport'
+import { missingLanguage, otherLanguagesText, primaryLangName } from '../lib/languages'
 import { proofDue, proofState, refNo, useRequests } from '../lib/requests'
 import { STATUS_LABEL, type EmergencyReason, type RequestRow } from '../lib/workflow'
 import { daysUntil, download, fmtDate, monthsBetween, rm, serviceText, toCSV, todayISO } from '../lib/util'
@@ -55,8 +56,8 @@ const REPORTS: Report[] = [
   },
   {
     id: 'master', name: 'Worker master list', desc: 'All worker details in one sheet',
-    cols: [...WC, { key: 'nat', label: 'Nationality' }, { key: 'gender', label: 'Gender' }, { key: 'dob', label: 'DOB', fmt: 'date' }, { key: 'type', label: 'Business' }, { key: 'job', label: 'Job' }, { key: 'skill', label: 'Skill' }, { key: 'join', label: 'Joined', fmt: 'date' }, { key: 'svc', label: 'Service' }, { key: 'status', label: 'Status' }, { key: 'pp', label: 'Passport' }, { key: 'ppx', label: 'Passport exp', fmt: 'date' }, { key: 'vpx', label: 'Permit exp', fmt: 'date' }, { key: 'fmx', label: 'FOMEMA exp', fmt: 'date' }, { key: 'phone', label: 'Phone' }, { key: 'hostel', label: 'Hostel' }],
-    rows: (ws, o) => ws.map((w) => ({ ...base(w, o), nat: w.nationality, gender: w.gender, dob: w.dob, type: w.businessType, job: w.jobCategory, skill: w.skillLevel, join: w.joinDate, svc: serviceText(w.joinDate, w.exitDate), status: w.status, pp: latestDoc(w, 'Passport')?.number, ppx: latestDoc(w, 'Passport')?.expiryDate, vpx: latestDoc(w, 'Work Permit / PLKS (VP(TE))')?.expiryDate, fmx: latestDoc(w, 'FOMEMA Medical')?.expiryDate, phone: w.phoneMY, hostel: w.hostelAddress })),
+    cols: [...WC, { key: 'nat', label: 'Nationality' }, { key: 'lang', label: 'Primary language' }, { key: 'langrw', label: 'Reads / writes it' }, { key: 'langs', label: 'Other languages' }, { key: 'gender', label: 'Gender' }, { key: 'dob', label: 'DOB', fmt: 'date' }, { key: 'type', label: 'Business' }, { key: 'job', label: 'Job' }, { key: 'skill', label: 'Skill' }, { key: 'join', label: 'Joined', fmt: 'date' }, { key: 'svc', label: 'Service' }, { key: 'status', label: 'Status' }, { key: 'pp', label: 'Passport' }, { key: 'ppx', label: 'Passport exp', fmt: 'date' }, { key: 'vpx', label: 'Permit exp', fmt: 'date' }, { key: 'fmx', label: 'FOMEMA exp', fmt: 'date' }, { key: 'phone', label: 'Phone' }, { key: 'hostel', label: 'Hostel' }],
+    rows: (ws, o) => ws.map((w) => ({ ...base(w, o), nat: w.nationality, lang: missingLanguage(w) ? 'MISSING' : primaryLangName(w), langrw: w.primaryLanguage ? [w.primaryRead ? 'read' : '', w.primaryWrite ? 'write' : ''].filter(Boolean).join(' & ') || 'speaks only' : '', langs: otherLanguagesText(w), gender: w.gender, dob: w.dob, type: w.businessType, job: w.jobCategory, skill: w.skillLevel, join: w.joinDate, svc: serviceText(w.joinDate, w.exitDate), status: w.status, pp: latestDoc(w, 'Passport')?.number, ppx: latestDoc(w, 'Passport')?.expiryDate, vpx: latestDoc(w, 'Work Permit / PLKS (VP(TE))')?.expiryDate, fmx: latestDoc(w, 'FOMEMA Medical')?.expiryDate, phone: w.phoneMY, hostel: w.hostelAddress })),
   },
   {
     id: 'leave', name: 'Leave balances', desc: 'Annual leave entitlement, carry-forward and balance (current year)', scope: 'current',

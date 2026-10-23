@@ -4,7 +4,7 @@ import { Capacitor, registerPlugin } from '@capacitor/core'
 export const isNative = () => Capacitor.isNativePlatform()
 export const platform = () => Capacitor.getPlatform() as 'android' | 'ios' | 'web'
 
-export const APP_VERSION = '1.1.1'
+export const APP_VERSION = '1.1.2'
 export { APP_PUBLIC_URL } from './appUrl'
 export const ANDROID_APK_URL = 'https://github.com/moulisankar999/foreign-worker-manager/releases/latest/download/FW-Manager.apk'
 

@@ -1,13 +1,16 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Btn, Card, Chip, D, Empty, FormModal, KV, Modal, docTone, type FieldDef } from './ui'
+import { FilePick } from './filePick'
+import { compressImage } from '../lib/vault'
 import { Icon } from './Icon'
 import { updateWorker } from '../lib/db'
 import { openAttachment } from '../lib/sync'
 import { allowancesTotal, buildAlerts, currentBasic, docStatus, leaveBalances, loanBalance, loanLedger, minContractEnd, outstanding, proratedPenalty, sortedIncrements, ticketInfo } from '../lib/calc'
 import { buildICS } from '../lib/ics'
 import { defaultChecklist } from '../lib/memo'
-import { APPROVAL, DEDUCTION_TYPES, DOC_TYPES, EXIT_TYPES, LEAVE_TYPES, LOAN_TYPES, RELATIONS, TICKET_PAYERS, type DocRec, type LeaveRec, type MemoRec, type Settings, type Worker, type WorkerStatus } from '../lib/types'
+import { dateIssues, passportIssue } from '../lib/validate'
+import { APPROVAL, DEDUCTION_TYPES, DOC_SHORT, DOC_STAGES, DOC_TYPES, REQUIRED_DOCS, EXIT_TYPES, LEAVE_TYPES, LOAN_TYPES, RELATIONS, TICKET_PAYERS, type DocRec, type LeaveRec, type MemoRec, type Settings, type Worker, type WorkerStatus } from '../lib/types'
 import { daysBetweenInclusive, daysUntil, download, fmtDate, readFileAsDataURL, rm, todayISO, uid } from '../lib/util'
 
 type V = Record<string, unknown>
@@ -29,45 +32,78 @@ export function DocumentsTab({ w, s }: P) {
   const fields: FieldDef[] = [
     { key: 'type', label: 'Document type', type: 'select', options: [...DOC_TYPES], required: true },
     { key: 'label', label: 'Document name', required: true, show: (v) => v.type === 'Other', placeholder: 'e.g. Food handler cert, Driving licence' },
-    { key: 'number', label: 'Number / reference' },
-    { key: 'issueDate', label: 'Issue date', type: 'date' },
+    { key: 'number', label: 'Number / reference', type: 'upper' },
+    { key: 'issueDate', label: 'Issue date', type: 'date', max: todayISO() },
     { key: 'expiryDate', label: 'Expiry date', type: 'date' },
+    { key: 'issuePlace', label: 'Issuing place / office' },
+    { key: 'stage', label: 'Status', type: 'select', options: DOC_STAGES },
     { key: 'remarks', label: 'Remarks', type: 'textarea' },
   ]
-  const sorted = [...w.documents].sort((a, b) => a.type.localeCompare(b.type) || (b.expiryDate || '').localeCompare(a.expiryDate || ''))
+  const order = (t: string) => { const i = (DOC_TYPES as readonly string[]).indexOf(t); return i < 0 ? 99 : i }
+  // one numbered entry per document type (latest record first, older ones as history)
+  const groups = new Map<string, DocRec[]>()
+  for (const d of w.documents) { const g = d.type === 'Other' ? `Other:${d.label || d.id}` : d.type; groups.set(g, [...(groups.get(g) || []), d]) }
+  for (const t of REQUIRED_DOCS) if (!groups.has(t)) groups.set(t, [])
+  const list = [...groups.entries()].map(([g, ds]) => ({ g, type: ds[0]?.type || g, ds: ds.sort((a, b) => (b.expiryDate || '').localeCompare(a.expiryDate || '')) }))
+    .sort((a, b) => order(a.type) - order(b.type) || a.g.localeCompare(b.g))
   const ics = (d: DocRec) => {
     const a = buildAlerts([{ ...w, documents: [d], leaves: [], loans: [], family: [], contractEnd: undefined, minContractMonths: undefined }], { ...s, leadTimes: [100000] }).filter((x) => x.id === `doc-${d.id}`)
     download(`${w.workerNo}-${(d.label || d.type).replace(/\W+/g, '-')}.ics`, buildICS(a, Math.max(...s.leadTimes)), 'text/calendar')
   }
+  const validate = (v: V) => {
+    const di = dateIssues(v.issueDate as string, v.expiryDate as string)
+    if (di.issue?.level === 'error') return di.issue.msg
+    if (di.expiry?.level === 'error') return di.expiry.msg
+    if (v.type === 'Passport') { const pi = passportIssue(v.number, w.nationality); if (pi?.level === 'error') return pi.msg }
+    return null
+  }
   return (
     <Card title="Documents" actions={<Btn kind="primary" small icon="plus" onClick={() => setEdit({ type: 'Passport' })}>Add</Btn>}>
-      {sorted.length === 0 ? <Empty title="No documents yet" /> : (
-        <ul className="rows">
-          {sorted.map((d) => {
+      {list.length === 0 ? <Empty title="No documents yet" /> : (
+        <ol className="doc-list">
+          {list.map(({ g, type, ds }, i) => {
+            const d = ds[0]
+            const title = type === 'Other' ? d?.label || 'Other' : DOC_SHORT[type] || type
+            if (!d) return (
+              <li key={g} className="doc-item empty">
+                <div className="doc-h"><span className="doc-no">{i + 1}.</span><strong>{title}</strong><Chip tone="red">Not recorded</Chip><span className="spacer" />
+                  <Btn small icon="plus" onClick={() => setEdit({ type })}>Add</Btn></div>
+              </li>
+            )
             const st = docStatus(d, s)
             const n = daysUntil(d.expiryDate)
             return (
-              <li key={d.id}>
-                <div className="r-main">
-                  <strong>{d.type === 'Other' ? d.label : d.type}</strong>
-                  <small>{d.number ? `#${d.number} · ` : ''}Issued <D d={d.issueDate} /> · Expires <D d={d.expiryDate} />{n !== null ? ` (${n < 0 ? `${-n}d ago` : `${n}d`})` : ''}</small>
-                  {d.remarks && <small className="muted">{d.remarks}</small>}
-                </div>
-                <div className="r-act">
+              <li key={g} className="doc-item">
+                <div className="doc-h">
+                  <span className="doc-no">{i + 1}.</span><strong>{title}</strong>
                   <Chip tone={docTone(st)}>{st}</Chip>
+                  <span className="spacer" />
                   {d.attachment && <button type="button" className="btn btn-ghost btn-s" title="Open attachment" aria-label="Open attachment" onClick={() => openAttachment(d.attachment!)}><Icon name="doc" size={16} /></button>}
                   {d.expiryDate && <Btn small kind="ghost" icon="cal" title="Add to calendar" onClick={() => ics(d)} />}
-                  {d.expiryDate && <Btn small onClick={() => setEdit({ type: d.type, label: d.label, number: d.number })}>Renew</Btn>}
+                  {d.expiryDate && <Btn small onClick={() => setEdit({ type: d.type, label: d.label, number: d.number, issuePlace: d.issuePlace })}>Renew</Btn>}
                   <Btn small kind="ghost" icon="edit" title="Edit" onClick={() => setEdit(d)} />
                 </div>
+                <dl className="doc-dl">
+                  <div><dt>Number</dt><dd>{d.number || '—'}</dd></div>
+                  <div><dt>Issue date</dt><dd><D d={d.issueDate} /></dd></div>
+                  <div><dt>Expiry date</dt><dd><D d={d.expiryDate} />{n !== null ? <small className="muted"> ({n < 0 ? `${-n}d ago` : `${n}d`})</small> : null}</dd></div>
+                  <div><dt>Issuing place</dt><dd>{d.issuePlace || '—'}</dd></div>
+                  <div><dt>Status</dt><dd>{d.stage || '—'}</dd></div>
+                </dl>
+                {d.remarks && <small className="muted">{d.remarks}</small>}
+                {ds.length > 1 && (
+                  <div className="doc-hist">History: {ds.slice(1).map((h) => (
+                    <button key={h.id} type="button" className="link small ml-s" onClick={() => setEdit(h)}>{h.number ? `#${h.number} ` : ''}exp {fmtDate(h.expiryDate)}</button>
+                  ))}</div>
+                )}
               </li>
             )
           })}
-        </ul>
+        </ol>
       )}
       <p className="muted small">Tip: “Renew” adds a new record and keeps the old one as history. Alerts use the latest expiry per document type.</p>
       {edit && (
-        <FormModal title={edit.id ? 'Edit document' : 'Add document'} fields={fields} initial={edit as V} onClose={() => setEdit(null)}
+        <FormModal title={edit.id ? 'Edit document' : 'Add document'} fields={fields} initial={edit as V} onClose={() => setEdit(null)} validate={validate}
           onDelete={edit.id ? () => upd(w, (x) => { x.documents = x.documents.filter((d) => d.id !== edit.id) }) : undefined}
           onSave={(v) => upd(w, (x) => {
             const rec = { ...(strip(v) as unknown as DocRec), id: edit.id || uid() }
@@ -86,11 +122,11 @@ function AttachmentField({ v, set }: { v: V; set: (p: V) => void }) {
     <div className="field full">
       <label>Attachment (optional, max 5 MB, saved privately in the cloud)</label>
       <div className="row gap-s wrap">
-        <input type="file" accept="image/*,application/pdf" aria-label="Attachment" onChange={async (e) => {
-          const f = e.target.files?.[0]
-          if (!f) return
+        <FilePick name="attachment" onFiles={async ([f0]) => {
+          let f: Blob = f0
+          if (f0.type.startsWith('image/') && f0.size > 1024 * 1024) { try { f = await compressImage(f0) } catch { f = f0 } }
           if (f.size > 5 * 1024 * 1024) { alert('File too large (max 5 MB)'); return }
-          set({ attachment: { name: f.name, type: f.type, dataUrl: await readFileAsDataURL(f) } })
+          set({ attachment: { name: f0.name, type: f.type || f0.type, dataUrl: await readFileAsDataURL(f as File) } })
         }} />
         {att && <span className="small">📎 {att.name} <button type="button" className="link" onClick={() => set({ attachment: undefined })}>remove</button></span>}
       </div>
@@ -270,7 +306,7 @@ export function PayTab({ w }: P) {
       </Card>
       {inc && (
         <FormModal title={inc.id ? 'Edit increment' : 'Add increment'} initial={inc} onClose={() => setInc(null)}
-          fields={[{ key: 'date', label: 'Effective date', type: 'date', required: true }, { key: 'oldPay', label: 'Old basic (RM)', type: 'number', required: true }, { key: 'newPay', label: 'New basic (RM)', type: 'number', required: true }, { key: 'reason', label: 'Reason', placeholder: 'Annual increment / promotion' }]}
+          fields={[{ key: 'date', label: 'Effective date', type: 'date', required: true }, { key: 'oldPay', label: 'Old basic', type: 'money', required: true }, { key: 'newPay', label: 'New basic', type: 'money', required: true }, { key: 'reason', label: 'Reason', placeholder: 'Annual increment / promotion' }]}
           onDelete={inc.id ? () => upd(w, (x) => { x.increments = x.increments.filter((i) => i.id !== inc.id) }) : undefined}
           onSave={(v) => upd(w, (x) => {
             const rec = { ...(strip(v) as unknown as Worker['increments'][number]), id: (inc.id as string) || uid() }
@@ -280,7 +316,7 @@ export function PayTab({ w }: P) {
         </FormModal>
       )}
       {al && (
-        <FormModal title="Allowance" initial={al} onClose={() => setAl(null)} fields={[{ key: 'name', label: 'Name', required: true }, { key: 'amount', label: 'Amount (RM / month)', type: 'number', required: true }]}
+        <FormModal title="Allowance" initial={al} onClose={() => setAl(null)} fields={[{ key: 'name', label: 'Name', required: true }, { key: 'amount', label: 'Amount per month', type: 'money', required: true }]}
           onDelete={al.id ? () => upd(w, (x) => { x.allowances = x.allowances.filter((a) => a.id !== al.id) }) : undefined}
           onSave={(v) => upd(w, (x) => {
             const rec = { ...(strip(v) as unknown as Worker['allowances'][number]), id: (al.id as string) || uid() }
@@ -342,7 +378,7 @@ export function LoansTab({ w }: P) {
       </Card>
       {loan && (
         <FormModal title={loan.id ? 'Edit loan / advance' : 'New loan / advance'} initial={loan} onClose={() => setLoan(null)}
-          fields={[{ key: 'type', label: 'Type', type: 'select', options: LOAN_TYPES, required: true }, { key: 'date', label: 'Date', type: 'date', required: true }, { key: 'amount', label: 'Amount (RM)', type: 'number', required: true }, { key: 'monthlyDeduction', label: 'Monthly deduction (RM)', type: 'number' }, { key: 'purpose', label: 'Purpose', full: true }]}
+          fields={[{ key: 'type', label: 'Type', type: 'select', options: LOAN_TYPES, required: true }, { key: 'date', label: 'Date', type: 'date', required: true }, { key: 'amount', label: 'Amount', type: 'money', required: true }, { key: 'monthlyDeduction', label: 'Monthly deduction', type: 'money' }, { key: 'purpose', label: 'Purpose', full: true }]}
           onDelete={loan.id ? () => upd(w, (x) => { x.loans = x.loans.filter((l) => l.id !== loan.id); x.deductions = x.deductions.map((d) => (d.loanId === loan.id ? { ...d, loanId: undefined } : d)) }) : undefined}
           onSave={(v) => upd(w, (x) => {
             const rec = { ...(strip(v) as unknown as Worker['loans'][number]), id: (loan.id as string) || uid() }
@@ -351,7 +387,7 @@ export function LoansTab({ w }: P) {
       )}
       {ded && (
         <FormModal title={ded.id ? 'Edit deduction' : 'Record deduction'} initial={ded} onClose={() => setDed(null)}
-          fields={[{ key: 'date', label: 'Date', type: 'date', required: true }, { key: 'type', label: 'Type', type: 'select', options: DEDUCTION_TYPES, required: true }, { key: 'amount', label: 'Amount (RM)', type: 'number', required: true }, { key: 'loanId', label: 'Against loan / advance', type: 'select', options: loanOpts, hint: 'Linked deductions reduce the balance automatically' }, { key: 'remarks', label: 'Remarks', full: true }]}
+          fields={[{ key: 'date', label: 'Date', type: 'date', required: true }, { key: 'type', label: 'Type', type: 'select', options: DEDUCTION_TYPES, required: true }, { key: 'amount', label: 'Amount', type: 'money', required: true }, { key: 'loanId', label: 'Against loan / advance', type: 'select', options: loanOpts, hint: 'Linked deductions reduce the balance automatically' }, { key: 'remarks', label: 'Remarks', full: true }]}
           onDelete={ded.id ? () => upd(w, (x) => { x.deductions = x.deductions.filter((d) => d.id !== ded.id) }) : undefined}
           validate={(v) => { const b = v.loanId ? loanBalance(w, String(v.loanId)) + (ded.id && ded.loanId === v.loanId ? Number(ded.amount || 0) : 0) : Infinity; return Number(v.amount) > b + 0.001 ? `Amount exceeds balance (${rm(b)})` : null }}
           onSave={(v) => upd(w, (x) => {
@@ -379,7 +415,7 @@ export function LeaveTab({ w, s, openMemo }: P & { openMemo: (m: Partial<MemoRec
     { key: 'remarks', label: 'Remarks', type: 'textarea' },
     { key: 'ticketProvided', label: 'Return flight ticket provided', type: 'checkbox', full: true },
     { key: 'ticketDetails', label: 'Ticket details (route, airline, PNR)', full: true, show: (v) => !!v.ticketProvided },
-    { key: 'ticketCost', label: 'Ticket cost (RM)', type: 'number', show: (v) => !!v.ticketProvided },
+    { key: 'ticketCost', label: 'Ticket cost', type: 'money', show: (v) => !!v.ticketProvided },
     { key: 'ticketPaidBy', label: 'Paid by', type: 'select', options: TICKET_PAYERS, show: (v) => !!v.ticketProvided, hint: 'Company/Shared/Agent-paid home-leave tickets use up the entitlement' },
   ]
   const startLeave = async (l: LeaveRec) => {

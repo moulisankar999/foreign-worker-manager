@@ -9,10 +9,13 @@ import { OPEN_STATUSES, REQUEST_TYPE, STATUS_LABEL, STATUS_TONE, needsMyAction }
 import type { Worker } from '../lib/types'
 import { PendingUsersPanel } from './userApprovals'
 import { usePendingUsers } from '../lib/userApprovals'
+import { useOutlets } from '../lib/hooks'
+import { completeness } from '../lib/validate'
 
 /** Requests, flight tickets, emergency-leave proof and passport consent — shared by the HR and Outlet-Manager dashboards. */
 export function WorkflowPanel({ workers }: { workers: Worker[] }) {
-  const { role, session, isOM } = useAuth()
+  const { role, session, isOM, canWrite } = useAuth()
+  const outlets = useOutlets()
   const cfg = useConfig()
   const nav = useNavigate()
   const { rows } = useRequests()
@@ -20,7 +23,8 @@ export function WorkflowPanel({ workers }: { workers: Worker[] }) {
   const cur = workers.filter((w) => !isExited(w))
   const mine = rows.filter((r) => needsMyAction(r, role || '', me))
   const { pending: newUsers } = usePendingUsers()
-  const myCount = mine.length + newUsers.length
+  const incomplete = canWrite ? cur.filter((w) => !completeness(w, outlets).complete) : []
+  const myCount = mine.length + newUsers.length + incomplete.length
   const open = rows.filter((r) => OPEN_STATUSES.includes(r.status))
   const week = Date.now() - 14 * 86400000
   const tickets = rows.filter((r) => r.data.ticketBooked === true && new Date(r.updated_at).getTime() > week)
@@ -39,9 +43,15 @@ export function WorkflowPanel({ workers }: { workers: Worker[] }) {
           <div className="row gap-s wrap">{pending.slice(0, 30).map((w) => <Link key={w.id} to={`/workers/${w.id}?tab=passport`}><Chip tone="red">{w.fullName}</Chip></Link>)}</div>
         </Card>
       )}
+      {incomplete.length > 0 && (
+        <Card title={`📝 Incomplete profiles (${incomplete.length})`} actions={<Link className="link" to="/workers?gap=incomplete">See all →</Link>}>
+          <div id="incomplete-profiles" className="small">Saved as draft — some required fields are still missing. Tap a name to finish the profile.</div>
+          <div className="row gap-s wrap">{incomplete.slice(0, 30).map((w) => { const c = completeness(w, outlets); return <Link key={w.id} to={`/workers/${w.id}/edit`} title={c.missing.map((m) => m.label).join(', ')}><Chip tone="amber">{w.fullName || '(no name)'} · {c.done}/{c.total}</Chip></Link> })}</div>
+        </Card>
+      )}
       <div className="stats">
-        <Stat label="Needs my action" value={myCount} icon="check" tone={myCount ? 'orange' : 'green'} sub={newUsers.length ? `${newUsers.length} new user${newUsers.length > 1 ? 's' : ''} to approve` : undefined}
-          onClick={() => { if (newUsers.length && !mine.length) document.getElementById('pending-users')?.scrollIntoView({ behavior: 'smooth' }); else nav('/requests?tab=mine_action') }} />
+        <Stat label="Needs my action" value={myCount} icon="check" tone={myCount ? 'orange' : 'green'} sub={[newUsers.length ? `${newUsers.length} new user${newUsers.length > 1 ? 's' : ''} to approve` : '', incomplete.length ? `${incomplete.length} incomplete profile${incomplete.length > 1 ? 's' : ''}` : ''].filter(Boolean).join(' · ') || undefined}
+          onClick={() => { if (newUsers.length && !mine.length) { const el = document.getElementById('pending-users'); if (el) el.scrollIntoView({ behavior: 'smooth' }); else nav('/settings/users') } else if (incomplete.length && !mine.length) document.getElementById('incomplete-profiles')?.scrollIntoView({ behavior: 'smooth' }); else nav('/requests?tab=mine_action') }} />
         <Stat label="Open requests" value={open.length} icon="doc" tone="blue" onClick={() => nav('/requests?tab=open')} />
         <Stat label="Tickets booked (14 d)" value={tickets.length} icon="plane" tone="purple" onClick={() => nav('/requests?tab=all')} />
         <Stat label="Emergency proof pending" value={proof.length} icon="alert" tone={proof.some((p) => p.st === 'overdue') ? 'red' : 'amber'} onClick={() => nav('/reports?r=emergency')} />

@@ -7,6 +7,7 @@ import { loadSampleData } from '../lib/sample'
 import { OmDashboard, WorkflowPanel } from '../components/dashExtras'
 import { PendingUsersPanel } from '../components/userApprovals'
 import { useAuth } from '../lib/auth'
+import { missingLanguage } from '../lib/languages'
 import { fmtDate, fmtMonth, rm0, todayISO } from '../lib/util'
 
 export default function Dashboard() {
@@ -59,6 +60,7 @@ export default function Dashboard() {
       byStatus: by((w) => w.status).map((d) => ({ ...d, tone: d.label === 'Active-Working' ? 'green' : d.label === 'Absconded' ? 'red' : 'blue' })),
       months,
       exited: workers.length - cur.length,
+      noLang: cur.filter(missingLanguage).length,
     }
   }, [workers, alerts, outlets, s])
 
@@ -74,7 +76,7 @@ export default function Dashboard() {
             <div className="row gap-s wrap center">
               <Btn kind="primary" icon="plus" onClick={() => nav('/workers/new')}>Add first worker</Btn>
               <Btn icon="download" disabled={busy} onClick={async () => { setBusy(true); await loadSampleData(); setBusy(false) }}>Load sample data</Btn>
-              <Btn icon="gear" onClick={() => nav('/settings')}>Set up outlets</Btn>
+              <Btn icon="gear" onClick={() => nav('/settings/org')}>Set up outlets</Btn>
             </div>
           </Empty>
         </Card>
@@ -107,6 +109,13 @@ export default function Dashboard() {
         {canSeeSalary && <Stat label="Outstanding loans" value={rm0(k.loans)} icon="money" tone="pink" onClick={() => nav('/reports?r=loans')} />}
         {canSeeSalary && <Stat label="Monthly basic payroll" value={rm0(k.payroll)} icon="money" tone="teal" onClick={() => nav('/reports?r=payroll')} />}
       </div>
+
+      {canWrite && k.noLang > 0 && (
+        <div className="banner amber small datagap" role="status">
+          <span>🗣️ <strong>Data gap:</strong> {k.noLang} current worker{k.noLang === 1 ? ' has' : 's have'} no primary language yet. It is needed for the passport consent form in the worker's own language.</span>
+          <span><Btn small onClick={() => nav('/workers?gap=lang&status=__current')}>Review {k.noLang === 1 ? 'worker' : 'workers'}</Btn></span>
+        </div>
+      )}
 
       <div className="quick">
         {canWrite && <button onClick={() => nav('/workers/new')}><span>➕</span>Add worker</button>}

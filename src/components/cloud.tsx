@@ -15,6 +15,7 @@ import { useConfig } from '../lib/config'
 import { scopeLabel } from '../lib/companies'
 import { useSignOut } from './userMenu'
 import { PendingItem, ScopePicker, byLine } from './userApprovals'
+import { StatusChip, UserActionButtons, at, statusLine, useUserPerms } from './userActions'
 
 const LABEL = { synced: 'Synced', syncing: 'Syncing…', offline: 'Offline', error: 'Sync error', off: 'Not syncing' } as const
 
@@ -23,7 +24,7 @@ export function SyncPill() {
   const nav = useNavigate()
   const text = s.state === 'offline' && s.pending ? `Offline · ${s.pending} to send` : LABEL[s.state]
   return (
-    <button className={`sync-pill ${s.state}`} title={s.error || text} aria-label={`Cloud sync: ${text}`} onClick={() => { void syncNow(); nav('/settings') }}>
+    <button className={`sync-pill ${s.state}`} title={s.error || text} aria-label={`Cloud sync: ${text}`} onClick={() => { void syncNow(); nav('/settings/data') }}>
       <i /><span className="lbl">{text}</span>
     </button>
   )
@@ -110,7 +111,11 @@ export function UsersCard() {
     await load()
   }
   const pending = users.filter((u) => u.status === 'pending')
-  const others = users.filter((u) => u.status !== 'pending')
+  const others = users.filter((u) => u.status !== 'pending' && u.status !== 'deleted')
+  const deleted = users.filter((u) => u.status === 'deleted')
+  const [showDel, setShowDel] = useState(false)
+  const permsFor = useUserPerms(users)
+  const counts = { active: others.filter((u) => u.status === 'active').length, paused: others.filter((u) => u.status === 'paused').length }
   const roles = ROLES.filter((r) => isSuper || (r !== 'super_admin' && r !== 'hr_admin'))
   // what a company-limited HR Admin may hand out: only his own companies
   const allowed: string[] | '*' = isSuper || (!myCompanies.length && !myOutlets.length) ? '*' : myCompanies
@@ -119,6 +124,7 @@ export function UsersCard() {
       <p className="muted small">Staff create their own account on the sign-in page (“Create account”) and can pick their company / outlet there. New sign-ups appear on the dashboard under <strong>Needs my action</strong> and here — approve them, pick their role and the companies / outlets they work for.</p>
       <ul className="small muted role-help">{ROLES.map((r) => <li key={r}><strong>{ROLE_LABEL[r]}</strong>: {ROLE_HELP[r]}</li>)}</ul>
       {err && <p className="err">{err}</p>}
+      <div className="row gap-s wrap small"><Chip tone="green">Active {counts.active}</Chip><Chip tone="amber">Paused {counts.paused}</Chip><Chip tone="blue">Pending {pending.length}</Chip>{deleted.length > 0 && <Chip tone="red">Deleted {deleted.length}</Chip>}</div>
       {pending.length > 0 && <>
         <p className="warn small">{pending.length} person(s) waiting for approval</p>
         {canApproveUsers && <ul className="rows users">{pending.map((u) => <PendingItem key={u.id} u={u} companies={companies} outlets={outlets} />)}</ul>}
@@ -131,11 +137,13 @@ export function UsersCard() {
           const cos = u.company_ids || []
           const scoped = outs.length + cos.length > 0
           const by = byLine(u)
+          const sl = statusLine(u)
+          const may = permsFor(u)
           return (
             <li key={u.id} className="user-row">
               <div className="r-main">
                 <strong>{u.full_name || u.email}{u.id === session?.user.id ? ' (you)' : ''}</strong>
-                <small>{u.email} · <Chip tone={u.status === 'active' ? 'green' : 'gray'}>{u.status === 'active' ? 'Active' : u.rejected_at && !u.approved_at ? 'Rejected' : 'Switched off'}</Chip> <Chip tone={ROLE_TONE[role]}>{ROLE_LABEL[role]}</Chip></small>
+                <small>{u.email} · <StatusChip u={u} /> <Chip tone={ROLE_TONE[role]}>{ROLE_LABEL[role]}</Chip></small>
                 {role !== 'super_admin' && (
                   <small className={role === 'outlet_manager' && !scoped ? 'warn' : 'muted'}>
                     {role === 'outlet_manager' ? 'Outlets: ' : 'Sees: '}
@@ -143,18 +151,19 @@ export function UsersCard() {
                   </small>
                 )}
                 {by && <small className="muted">{by}</small>}
+                {sl && <small className={u.status === 'paused' ? 'warn' : 'muted'}>{sl}</small>}
+                {may.lastSuper && u.id !== session?.user.id && <small className="muted">Last active Super Admin — cannot be paused or deleted.</small>}
               </div>
               <div className="r-act">
                 <select aria-label={`Role for ${u.email}`} value={role} disabled={locked} onChange={(e) => update(u.id, { role: e.target.value as Role })}>
                   {(locked ? ROLES : roles).map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
                 </select>
                 {role !== 'super_admin' && !locked && u.id !== session?.user.id && <Btn small kind="ghost" icon="store" onClick={() => setOpen(open === u.id ? null : u.id)}>{role === 'outlet_manager' ? 'Outlets' : 'Companies'}</Btn>}
-                {!locked && u.status !== 'active' && <Btn small kind="primary" icon="check" onClick={() => update(u.id, { status: 'active' })}>Re-activate</Btn>}
-                {!locked && u.status === 'active' && u.id !== session?.user.id && <Btn small kind="ghost" icon="x" onClick={() => { if (confirm(`Switch off access for ${u.email}?`)) void update(u.id, { status: 'inactive' }) }}>Deactivate</Btn>}
+                <UserActionButtons u={u} may={may} onDone={load} />
               </div>
               {open === u.id && (
                 <div className="outlet-pick">
-                  {outlets.length === 0 && <p className="muted small">Add outlets first (Settings → Outlets).</p>}
+                  {outlets.length === 0 && <p className="muted small">Add outlets first (Settings → Companies & Outlets).</p>}
                   <p className="muted small">{role === 'outlet_manager' ? 'Tick his outlets.' : 'Tick a whole company or single outlets.'} {role !== 'outlet_manager' && (isSuper ? 'Nothing ticked = all companies.' : 'You can only give your own companies.')}</p>
                   <ScopePicker companies={companies} outlets={outlets} allowed={allowed} outletsOnly={role === 'outlet_manager'}
                     value={{ companies: cos, outlets: outs }} onChange={(v) => update(u.id, { company_ids: v.companies, outlet_ids: v.outlets })} />
@@ -164,6 +173,12 @@ export function UsersCard() {
           )
         })}
       </ul>
+      {deleted.length > 0 && <>
+        <button type="button" className="link small" onClick={() => setShowDel(!showDel)}>{showDel ? 'Hide deleted users' : `Deleted users (${deleted.length})`}</button>
+        {showDel && <ul className="rows compact">{deleted.map((u) => (
+          <li key={u.id}><div className="r-main"><strong>{u.full_name || u.email}</strong><small className="muted">Login removed by {u.deleted_by_name || '—'} · {at(u.deleted_at)} · history kept</small></div></li>
+        ))}</ul>}
+      </>}
     </Card>
   )
 }

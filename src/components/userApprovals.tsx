@@ -1,5 +1,6 @@
 /* "Needs my action": new sign-ups with quick Approve (role + companies/outlets) / Reject, plus a short history. */
 import { useState } from 'react'
+import { Link, useLocation } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { Btn, Card, Chip } from './ui'
 import { db } from '../lib/db'
@@ -7,7 +8,8 @@ import { useAuth } from '../lib/auth'
 import { useConfig } from '../lib/config'
 import { ROLES, ROLE_LABEL } from '../lib/workflow'
 import { companyName, outletCompany, ruleFor, scopeLabel, type Company } from '../lib/companies'
-import { approveUser, rejectUser, usePendingUsers } from '../lib/userApprovals'
+import { approveUser, usePendingUsers } from '../lib/userApprovals'
+import { userAdmin } from '../lib/userAdmin'
 import { fmtDate } from '../lib/util'
 import type { Profile, Role } from '../lib/supabase'
 import type { Outlet } from '../lib/types'
@@ -73,9 +75,13 @@ export function PendingItem({ u, companies, outlets }: { u: Profile; companies: 
     void run(() => approveUser(u.id, role, role === 'super_admin' ? [] : effective.companies, role === 'super_admin' ? [] : effective.outlets))
   }
   const reject = () => {
-    const reason = prompt(`Reject ${u.full_name || u.email}? Optional reason:`, '')
+    const reason = prompt(`Reject ${u.full_name || u.email}?\n\nThe request and its login are removed (it is noted in the audit log). Optional reason:`, '')
     if (reason === null) return
-    void run(() => rejectUser(u.id, reason.trim() || null))
+    void run(async () => { await userAdmin('reject_pending', u.id, { note: reason.trim() || undefined }) })
+  }
+  const remove = () => {
+    if (!confirm(`Delete the sign-up of ${u.email}?\n\nUse this for spam or duplicate sign-ups. The request and its login are removed; the email address can sign up again later.`)) return
+    void run(async () => { await userAdmin('delete_pending', u.id) })
   }
   return (
     <li className="pending-user">
@@ -91,6 +97,7 @@ export function PendingItem({ u, companies, outlets }: { u: Profile; companies: 
         {needsScope && <Btn small kind="ghost" icon="store" onClick={() => setOpen(!open)}>{empty ? (isSuper && !omScope ? 'All companies' : 'Choose…') : scopeLabel(companies, outlets, effective.companies, effective.outlets).slice(0, 40)}</Btn>}
         <Btn small kind="primary" icon="check" disabled={busy} onClick={approve}>Approve</Btn>
         <Btn small kind="ghost" icon="x" disabled={busy} onClick={reject}>Reject</Btn>
+        <Btn small kind="ghost" icon="trash" disabled={busy} onClick={remove} title="Delete this sign-up (spam / duplicate)">Delete</Btn>
       </div>
       {open && needsScope && (
         <div className="outlet-pick">
@@ -110,11 +117,12 @@ export function PendingUsersPanel() {
   const { pending, recent, error } = usePendingUsers()
   const outlets = useLiveQuery(() => db.outlets.toArray(), [], [] as Outlet[])
   const [hist, setHist] = useState(false)
+  const inSettings = useLocation().pathname.startsWith('/settings')
   if (!canApproveUsers || (!pending.length && !recent.length && !error)) return null
   const companies = cfg.companies.items
   return (
     <Card title={pending.length ? `👤 New users waiting for approval (${pending.length})` : '👤 New users'} className={pending.length ? 'card-alert' : ''}
-      actions={recent.length > 0 ? <button className="link" onClick={() => setHist(!hist)}>{hist ? 'Hide history' : `History (${recent.length})`}</button> : undefined}>
+      actions={<span className="row gap-s">{recent.length > 0 && <button className="link" onClick={() => setHist(!hist)}>{hist ? 'Hide history' : `History (${recent.length})`}</button>}{!inSettings && <Link className="link" to="/settings/users">All users →</Link>}</span>}>
       {error && <p className="err small">{error}</p>}
       {pending.length > 0 && <ul className="rows users">{pending.map((u) => <PendingItem key={u.id} u={u} companies={companies} outlets={outlets} />)}</ul>}
       {!pending.length && <p className="muted small">Nobody is waiting.</p>}

@@ -1,6 +1,6 @@
 /* Voluntary passport safekeeping — Passports Act 1966 s.12(1)(f): an employer may keep a worker's passport ONLY with
  * the worker's free consent, must return it on request, and may not charge for it. This module creates the bilingual
- * (English + Bahasa Malaysia) consent form and the release / return slips as PDFs. */
+ * consent form (English + the worker's primary language, else Bahasa Malaysia) and the release / return slips (EN + BM). */
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from 'pdf-lib'
 import { currentDocs, outletName } from './calc'
 import { getConfig } from './config'
@@ -8,6 +8,9 @@ import { companyName, outletCompany } from './companies'
 import { pdfLogoFor } from './logos'
 import type { MemoRec, Outlet, PassportMove, PassportSafe, Worker } from './types'
 import { fmtDate, todayISO } from './util'
+import { CONSENT_EN, consentLanguage, type ConsentKey, type ConsentText } from './consentText'
+import { langDef, langName } from './languages'
+import { ensureFonts, needsCanvas, renderText, scriptLang } from './scriptRender'
 
 export const CONSENT_LABEL: Record<string, string> = {
   not_issued: 'Not issued', pending: 'Pending signature', uploaded: 'Signed copy uploaded — HR to verify', signed: 'Signed', withdrawn: 'Withdrawn',
@@ -133,45 +136,180 @@ function header(w: Writer, company: string, title: string, titleMs: string, logo
 }
 const blob = async (pdf: PDFDocument) => new Blob([(await pdf.save()) as BlobPart], { type: 'application/pdf' })
 
-/* ---------- Consent form (one page per worker) ---------- */
-export async function consentPdf(workers: Worker[], outlets: Outlet[], company: string): Promise<Blob> {
-  const { pdf, f, logoFor } = await newDoc()
-  const cfg = getConfig().passport
-  const hrs = cfg.turnaroundHours || 24
-  const turn = hrs <= 24 ? `${hrs} hours` : `${Math.round(hrs / 24)} days`
-  const turnMs = hrs <= 24 ? `${hrs} jam` : `${Math.round(hrs / 24)} hari`
-  for (const wk of workers) {
-    const page = pdf.addPage(A4)
-    const w = new Writer(page, f)
-    header(w, companyOf(wk, outlets, company), 'VOLUNTARY PASSPORT SAFEKEEPING CONSENT', 'PERSETUJUAN SUKARELA PENYIMPANAN PASPORT', await logoFor(wk, outlets))
-    const p = passportOf(wk)
-    w.table([
-      ['Worker name / Nama pekerja', wk.fullName], ['Passport no. / No. pasport', p.no], ['Nationality / Warganegara', wk.nationality],
-      ['Passport expiry / Tamat tempoh', p.expiry ? fmtDate(p.expiry) : ''], ['Employee ID / No. pekerja', wk.workerNo],
-      ['Outlet / Cawangan', outletName(outlets, wk.outletId)], ['Job / Jawatan', wk.jobCategory || ''], ['Date / Tarikh', fmtDate(todayISO())],
-    ])
-    w.bi('I, the worker named above, of my own free will ask the company to keep my passport in its safe for safekeeping. I understand that:',
-      'Saya, pekerja yang dinamakan di atas, dengan kerelaan sendiri meminta syarikat menyimpan pasport saya di dalam peti keselamatannya. Saya faham bahawa:')
-    const pts: [string, string][] = [
-      ['1. This is voluntary. I am not forced, and my job does not depend on it.', '1. Ini adalah sukarela. Saya tidak dipaksa dan pekerjaan saya tidak bergantung kepadanya.'],
-      ['2. The passport remains my property (and the property of my government). The company only keeps it safely for me.', '2. Pasport kekal hak milik saya (dan kerajaan saya). Syarikat hanya menyimpannya dengan selamat untuk saya.'],
-      [`3. I can ask for my passport at any time, for any reason, and it will be returned to me within ${turn}.`, `3. Saya boleh meminta pasport saya pada bila-bila masa atas apa-apa sebab, dan ia akan dipulangkan kepada saya dalam tempoh ${turnMs}.`],
-      ['4. No deposit, fee or deduction is charged for keeping or returning the passport.', '4. Tiada deposit, bayaran atau potongan dikenakan untuk menyimpan atau memulangkan pasport.'],
-      ['5. I may withdraw this consent at any time; the passport will then be returned to me.', '5. Saya boleh menarik balik persetujuan ini pada bila-bila masa; pasport akan dipulangkan kepada saya.'],
-      ['6. Every release and return is recorded and signed on a slip; I may ask for a copy.', '6. Setiap pelepasan dan pemulangan direkodkan dan ditandatangani pada slip; saya boleh meminta salinannya.'],
-      ['7. I agree to receive work notices (leave, tickets, passport) by WhatsApp/SMS on my phone. I can stop this at any time.  [  ] Yes / Ya   [  ] No / Tidak',
-        '7. Saya bersetuju menerima notis kerja (cuti, tiket, pasport) melalui WhatsApp/SMS. Saya boleh menghentikannya pada bila-bila masa.'],
-    ]
-    pts.forEach(([en, ms]) => w.bi(en, ms, { indent: 8 }))
-    w.text('This form was explained to me in a language I understand. / Borang ini telah diterangkan kepada saya dalam bahasa yang saya fahami.', { size: 8.5, font: f.i, gap: 10 })
-    w.signBox([
-      ['Worker signature or right thumbprint', 'Tandatangan atau cap ibu jari kanan pekerja'],
-      [`Witness (${cfg.witnessTitle || 'Outlet Manager'})`, 'Saksi'],
-      ['HR (received & verified)', 'HR (diterima & disahkan)'],
-    ])
-    w.text('Reference: Passports Act 1966, s.12(1)(f). The company keeps the passport only with this consent.', { size: 7.5, color: [0.4, 0.4, 0.45] })
+/* ---------- Consent form: English + the worker's primary language (one form per worker) ---------- */
+type Lines = { size?: number; bold?: boolean; italic?: boolean; color?: [number, number, number]; indent?: number; gap?: number; lang?: string }
+type Cached = Map<string, Promise<{ img: Img; w: number; h: number }>>
+/** a Writer that can print any script (canvas-rendered, see scriptRender) and continues on a new page when full */
+class RichWriter extends Writer {
+  pdf: PDFDocument
+  cache: Cached
+  onNewPage?: (w: RichWriter) => void
+  constructor(pdf: PDFDocument, f: Fonts, cache: Cached) { super(pdf.addPage(A4), f); this.pdf = pdf; this.cache = cache }
+  ensure(h: number) {
+    if (this.y - h >= M - 8) return
+    this.page = this.pdf.addPage(A4); this.y = A4[1] - M
+    this.onNewPage?.(this)
   }
-  return blob(pdf)
+  /** image for text in a script — cached per document, so a bulk PDF re-uses the same image on every page */
+  img(t: string, o: { lang?: string; size: number; width: number; bold?: boolean; italic?: boolean; color?: [number, number, number] }) {
+    const key = JSON.stringify([t, o])
+    if (!this.cache.has(key)) this.cache.set(key, (async () => {
+      const r = renderText(t, o)
+      return { img: await this.pdf.embedPng(r.png), w: r.w, h: r.h }
+    })())
+    return this.cache.get(key)!
+  }
+  async lines(t: string, o: Lines = {}) {
+    if (!t) return
+    const size = o.size || 9.5, x = M + (o.indent || 0), width = A4[0] - x - M
+    const color = o.color || [0.1, 0.1, 0.12]
+    if (!needsCanvas(t) && !(o.lang && langDef(o.lang)?.font)) {
+      const font = o.bold ? this.f.b : o.italic ? this.f.i : this.f.r
+      for (const l of wrap(t, font, size, width)) {
+        this.ensure(size * 1.3)
+        this.page.drawText(l, { x, y: this.y, size, font, color: rgb(...color) })
+        this.y -= size * 1.3
+      }
+    } else {
+      const lang = o.lang && langDef(o.lang)?.font ? o.lang : scriptLang(t) || o.lang
+      const r = await this.img(t, { lang, size, width, bold: o.bold, color })
+      const adv = r.h - size * 0.3
+      this.ensure(adv) // a paragraph is never split; if it does not fit it moves to the next page whole
+      const rtl = !!langDef(lang)?.rtl
+      this.page.drawImage(r.img, { x: rtl ? x + width - r.w : x, y: this.y + size - r.h + size * 0.05, width: r.w, height: r.h })
+      this.y -= adv
+    }
+    this.y -= o.gap ?? 2
+  }
+  /** one short value at a position (worker names may be typed in their own script). Returns the height used. */
+  async cell(t: string, x: number, y: number, size: number, o: { bold?: boolean; maxW?: number; lang?: string; color?: [number, number, number]; italic?: boolean } = {}) {
+    const color = o.color || [0.1, 0.1, 0.12]
+    if (!needsCanvas(t) && !(o.lang && langDef(o.lang)?.font)) {
+      const font = o.bold ? this.f.b : o.italic ? this.f.i : this.f.r
+      let s = t
+      while (o.maxW && s.length > 3 && font.widthOfTextAtSize(s, size) > o.maxW) s = s.slice(0, -2)
+      this.page.drawText(s === t ? t : s.trimEnd() + '...', { x, y, size, font, color: rgb(...color) })
+      return size * 1.25
+    }
+    const r = await this.img(t, { lang: o.lang && langDef(o.lang)?.font ? o.lang : scriptLang(t), size, width: o.maxW || 300, bold: o.bold, color })
+    this.page.drawImage(r.img, { x, y: y + size - r.h + size * 0.05, width: r.w, height: r.h })
+    return r.h - size * 0.25
+  }
+}
+
+/** the turnaround in words, e.g. "24 hours" / "24 घण्टा" */
+const turnText = (hrs: number, t: ConsentText) => (hrs <= 24 ? t.hours.replace('{n}', String(hrs)) : t.days.replace('{n}', String(Math.round(hrs / 24))))
+
+/** Consent forms. Each worker's form is in English + his primary language — or English + Bahasa Malaysia when his
+ *  language is English, Malay, not recorded, or has no translation yet (a small note on the form says so). */
+export async function consentPdf(workers: Worker[], outlets: Outlet[], company: string): Promise<Blob> {
+  const doc = await newDoc()
+  const cache: Cached = new Map()
+  for (const wk of workers) {
+    // each form should fit on ONE page: long scripts (Tamil, Malayalam…) are tried on a scratch document at a slightly
+    // smaller type size first; the first scale that fits is then drawn into the real document
+    let k = 1
+    for (const t of [1, 0.94, 0.88, 0.82]) {
+      k = t
+      const scratch = await newDoc()
+      if ((await consentOne(scratch, new Map(), wk, outlets, company, t)) <= 1) break
+    }
+    await consentOne(doc, cache, wk, outlets, company, k)
+  }
+  return blob(doc.pdf)
+}
+
+/** draws one worker's consent form; returns the number of pages it used */
+async function consentOne(d: Awaited<ReturnType<typeof newDoc>>, cache: Cached, wk: Worker, outlets: Outlet[], company: string, k: number): Promise<number> {
+  const { pdf, f, logoFor } = d
+  const before = pdf.getPageCount()
+  const cfg = getConfig().passport
+  const overrides = getConfig().consent_translations || { items: {} }
+  const hrs = cfg.turnaroundHours || 24
+  const E = CONSENT_EN
+  const grey: [number, number, number] = [0.35, 0.35, 0.4]
+  {
+    const L = consentLanguage(wk.primaryLanguage, overrides)
+    const T = L.text, lang = L.code
+    const fontsOk = await ensureFonts(lang)
+    await ensureFonts(scriptLang(wk.fullName))
+    const sub: Lines = { size: 8.6 * k, italic: true, color: [0.27, 0.27, 0.33], lang }
+    const w = new RichWriter(pdf, f, cache)
+    w.onNewPage = (x) => { x.page.drawText(`${wk.workerNo} - consent form (continued)`, { x: M, y: x.y, size: 8, font: f.i, color: rgb(0.4, 0.4, 0.45) }); x.y -= 16 }
+    // header
+    const logo = await logoFor(wk, outlets)
+    if (logo) { const h = 36, wd = (logo.width / logo.height) * h; w.page.drawImage(logo, { x: A4[0] - M - wd, y: w.y - h + 10, width: wd, height: h }) }
+    await w.lines(companyOf(wk, outlets, company), { size: 12.5, bold: true, gap: 3 })
+    await w.lines(E.title, { size: 11.5, bold: true, gap: 0 })
+    await w.lines(T.title, { ...sub, size: 10 * k, gap: 4 * k })
+    w.rule(10 * k)
+    if (!fontsOk) await w.lines('Note: the font for the worker\u2019s language could not be loaded (offline?). Please reprint this form when online.', { size: 7.5, italic: true, color: [0.6, 0.3, 0.0], gap: 5 })
+    else if (L.fallback) await w.lines(`Note: ${L.fallback}`, { size: 7.5, italic: true, color: [0.55, 0.35, 0.05], gap: 5 })
+    // worker details — name across the page, the rest in two columns; English label with the translation beneath
+    const p = passportOf(wk)
+    const field = async (key: ConsentKey, v: string, x: number, valueX: number, valueW: number) => {
+      w.page.drawText(E[key], { x, y: w.y, size: 8.5, font: f.i, color: rgb(...grey) })
+      const th = await w.cell(T[key], x, w.y - 9.5, 7, { maxW: valueX - x - 6, lang, color: grey })
+      const vh = await w.cell(v || '-', valueX, w.y, 9.5, { bold: true, maxW: valueW })
+      return Math.max(9.5 + th, vh) + 5 * k
+    }
+    const colW = (A4[0] - 2 * M) / 2
+    w.y -= Math.max(await field('name', wk.fullName, M, M + 105, A4[0] - 2 * M - 105), 0)
+    const pairs: [ConsentKey, string][] = [
+      ['passportNo', p.no], ['nationality', wk.nationality], ['expiry', p.expiry ? fmtDate(p.expiry) : ''], ['workerNo', wk.workerNo],
+      ['outlet', outletName(outlets, wk.outletId)], ['job', wk.jobCategory || ''], ['date', fmtDate(todayISO())],
+    ]
+    for (let i = 0; i < pairs.length; i += 2) {
+      const a = await field(pairs[i][0], pairs[i][1], M, M + 105, colW - 110)
+      const b = pairs[i + 1] ? await field(pairs[i + 1][0], pairs[i + 1][1], M + colW, M + colW + 95, colW - 95) : 0
+      w.y -= Math.max(a, b)
+    }
+    w.y -= 4 * k
+    // the statement, paragraph by paragraph: English, then the translation
+    const en9 = 9.2 * k
+    await w.lines(E.intro, { size: en9, gap: 1 }); await w.lines(T.intro, { ...sub, gap: 5 * k })
+    const ps: ConsentKey[] = ['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7']
+    for (const [i, key] of ps.entries()) {
+      let en = `${i + 1}. ${E[key].replace('{time}', turnText(hrs, E))}`
+      let tr = `${i + 1}. ${T[key].replace('{time}', turnText(hrs, T))}`
+      if (key === 'p7') { en += `   [  ] ${E.yes}   [  ] ${E.no}`; tr += `   [  ] ${T.yes}   [  ] ${T.no}` }
+      w.ensure(30)
+      await w.lines(en, { size: en9, indent: 8, gap: 0.5 })
+      await w.lines(tr, { ...sub, indent: 8, gap: 4 * k })
+    }
+    await w.lines(E.explained, { size: 8.3 * k, italic: true, gap: 0 })
+    await w.lines(T.explained, { ...sub, size: 8 * k, gap: 7 * k })
+    // signature boxes (kept together on one page)
+    const labels: [string, string][] = [[E.signWorker, T.signWorker], [`${E.signWitness} (${cfg.witnessTitle || 'Outlet Manager'})`, T.signWitness], [E.signHr, T.signHr]]
+    const bh = 52 * Math.min(1, k + 0.04), gap = 12, bw = (A4[0] - 2 * M - gap * 2) / 3
+    const lh = langDef(lang)?.lineHeight || 1.4
+    // the box block: box + English label (≤2 lines) + translated label (≤2 lines) + name/date lines + their translations
+    w.ensure(bh + 10 + 18 + 7 * lh * 2 + 6 + 8 + 6.6 * lh + 4 + 8 + 6.6 * lh + 6)
+    const top = w.y
+    let below = 0
+    for (const [i, [en, tr]] of labels.entries()) {
+      const x = M + i * (bw + gap)
+      w.page.drawRectangle({ x, y: top - bh, width: bw, height: bh, borderColor: rgb(0.6, 0.6, 0.65), borderWidth: 0.7 })
+      let y = top - bh - 10
+      for (const l of wrap(en, f.b, 7.6, bw - 6)) { w.page.drawText(l, { x: x + 3, y, size: 7.6, font: f.b }); y -= 9 }
+      y -= await w.cell(tr, x + 3, y, 7, { maxW: bw - 6, lang, color: grey })
+      y -= 6
+      w.page.drawText(`${E.signName}: _______________________`, { x: x + 3, y, size: 7.4, font: f.r }); y -= 8
+      y -= await w.cell(`(${T.signName})`, x + 3, y, 6.6, { maxW: bw - 6, lang, color: grey }) + 4
+      w.page.drawText(`${E.signDate}: ____ / ____ / ______`, { x: x + 3, y, size: 7.4, font: f.r }); y -= 8
+      y -= await w.cell(`(${T.signDate})`, x + 3, y, 6.6, { maxW: bw - 6, lang, color: grey })
+      below = Math.max(below, top - y)
+    }
+    w.y = top - below - 6
+    await w.lines(E.reference, { size: 7.3, color: [0.4, 0.4, 0.45], gap: 0 })
+    await w.lines(T.reference, { ...sub, size: 7, gap: 3 })
+    const name = lang === 'ms' ? 'Bahasa Malaysia' : langName(lang)
+    const note = L.override?.checked
+      ? `Translation (${name}) reviewed by ${L.override.checkedBy || 'a native speaker'}. If anything is unclear, the English text applies.`
+      : `Translation (${name}) should be checked by a native speaker before use. If anything is unclear, the English text applies and HR must explain it.`
+    await w.lines(note, { size: 6.6, italic: true, color: [0.5, 0.5, 0.55], gap: 0 })
+  }
+  return pdf.getPageCount() - before
 }
 
 /* ---------- Release / return slip ---------- */

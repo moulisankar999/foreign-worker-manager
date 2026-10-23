@@ -8,6 +8,8 @@ import { scopeLabel } from '../lib/companies'
 import { ROLE_LABEL } from '../lib/workflow'
 import { getSyncStatus } from '../lib/sync'
 import { Icon } from './Icon'
+import { Modal } from './ui'
+import { SetPasswordForm } from '../pages/SetPassword'
 
 export const initialsOf = (name?: string | null, email?: string | null) => {
   const src = (name || '').trim() || (email || '').split('@')[0] || '?'
@@ -45,6 +47,8 @@ export function UserMenu() {
   const { profile } = useAuth()
   const { run, busy } = useSignOut()
   const [open, setOpen] = useState(false)
+  const [pwOpen, setPwOpen] = useState(false)
+  const [pwDone, setPwDone] = useState(false)
   const box = useRef<HTMLDivElement>(null)
   useEffect(() => {
     if (!open) return
@@ -69,11 +73,17 @@ export function UserMenu() {
               <small className="muted">{me.scope}</small>
             </div>
           </div>
-          <Link role="menuitem" to="/settings" className="umenu-item" onClick={() => setOpen(false)}><Icon name="gear" size={18} /> Account &amp; settings</Link>
+          <Link role="menuitem" to="/settings/account" className="umenu-item" onClick={() => setOpen(false)}><Icon name="gear" size={18} /> Account &amp; settings</Link>
+          <button role="menuitem" type="button" className="umenu-item" onClick={() => { setOpen(false); setPwDone(false); setPwOpen(true) }}><Icon name="lock" size={18} /> Change password</button>
           <button role="menuitem" type="button" className="umenu-item danger" disabled={busy} onClick={() => { void run() }}>
             <Icon name="exit" size={18} /> {busy ? 'Signing out…' : 'Switch user / Sign out'}
           </button>
         </div>
+      )}
+      {pwOpen && (
+        <Modal title="Change password" onClose={() => setPwOpen(false)}>
+          {pwDone ? <p className="ok">✅ Your password is changed. Use it next time you sign in.</p> : <SetPasswordForm mode="change" onDone={() => setPwDone(true)} onCancel={() => setPwOpen(false)} />}
+        </Modal>
       )}
     </div>
   )

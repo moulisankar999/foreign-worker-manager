@@ -50,7 +50,7 @@ export function ApprovalRulesCard() {
 }
 
 /* ---------------- HR Admin powers ---------------- */
-const FLAG_LABEL: Record<keyof HrAdminFlags, string> = { manageUsers: 'Approve users & set roles/outlets (except Super Admin)', deleteWorkers: 'Delete worker records', viewSalary: 'See salaries, loans & payroll', viewAudit: 'See the audit log' }
+const FLAG_LABEL: Record<keyof HrAdminFlags, string> = { manageUsers: 'Approve users & set roles/outlets (except Super Admin)', deleteWorkers: 'Delete worker records', viewSalary: 'See salaries, loans & payroll', viewAudit: 'See the audit log', resetPasswords: 'Reset passwords of users in their companies (never Super Admin / HR Admin)' }
 export function HrFlagsCard() {
   const { isSuper } = useAuth()
   const f = useConfig().hr_admin

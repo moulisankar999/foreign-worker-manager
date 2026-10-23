@@ -8,15 +8,18 @@ import { CONSENT_LABEL, CONSENT_TONE, consentOf, overdueDays } from '../lib/pass
 import { Avatar, Btn, Card, Chip, Empty, FormModal, KV, Tabs, docTone, sevTone, statusTone } from '../components/ui'
 import { ContractTab, DocumentsTab, FamilyTab, LeaveTab, LoansTab, MemoEditor, MemosTab, NotesTab, PayTab, setStatus } from '../components/sections'
 import { db } from '../lib/db'
+import { RemittanceTab } from '../components/remittance'
+import { completeness, fmtPhone } from '../lib/validate'
 import { LogoImg } from '../components/logos'
 import { outletLogo } from '../lib/logos'
 import { allowancesTotal, buildAlerts, currentBasic, currentDocs, docStatus, isExited, leaveBalanceNow, minContractEnd, outletName, outstanding, ticketInfo } from '../lib/calc'
 import { useOutlets, useSettings } from '../lib/hooks'
 import { buildICS } from '../lib/ics'
 import { STATUSES, type MemoRec, type WorkerStatus } from '../lib/types'
+import { missingLanguage, otherLanguagesText, primaryLangName } from '../lib/languages'
 import { age, download, fmtDate, rm, serviceText, todayISO } from '../lib/util'
 
-type Tab = 'overview' | 'vault' | 'requests' | 'passport' | 'remarks' | 'docs' | 'family' | 'contract' | 'pay' | 'loans' | 'leave' | 'memos' | 'notes'
+type Tab = 'overview' | 'vault' | 'requests' | 'passport' | 'remarks' | 'docs' | 'remit' | 'family' | 'contract' | 'pay' | 'loans' | 'leave' | 'memos' | 'notes'
 
 export default function WorkerDetail() {
   const { id } = useParams()
@@ -25,7 +28,7 @@ export default function WorkerDetail() {
   const outlets = useOutlets()
   const nav = useNavigate()
   const [sp, setSp] = useSearchParams()
-  const { canWrite, canSeeSalary } = useAuth()
+  const { canWrite, canSeeSalary, isHr } = useAuth()
   const tab = (sp.get('tab') as Tab) || 'overview'
   const setTab = (t: Tab) => setSp({ tab: t }, { replace: true })
   const [statusEdit, setStatusEdit] = useState(false)
@@ -38,6 +41,7 @@ export default function WorkerDetail() {
   const t = ticketInfo(w, s)
   const docs = currentDocs(w)
   const consent = consentOf(w)
+  const comp = completeness(w, outlets)
   const allTabs: { id: Tab; label: string; badge?: number }[] = [
     { id: 'overview', label: 'Overview', badge: alerts.filter((a) => a.severity === 'critical' || a.severity === 'high').length },
     { id: 'requests', label: 'Requests' },
@@ -50,6 +54,7 @@ export default function WorkerDetail() {
     { id: 'pay', label: 'Pay' },
     { id: 'loans', label: 'Loans' },
     { id: 'family', label: 'Family & address' },
+    ...(isHr ? [{ id: 'remit' as Tab, label: 'Remittance' }] : []),
     { id: 'memos', label: 'Memos', badge: w.memos.filter((m) => m.checklist.some((c) => !c.done)).length },
     { id: 'notes', label: 'Timeline' },
   ]
@@ -75,9 +80,11 @@ export default function WorkerDetail() {
             <div className="row gap-s wrap mt-s">
               {canWrite ? <button className="chip-btn" onClick={() => setStatusEdit(true)} aria-label="Change status"><Chip tone={statusTone(w.status)}>{w.status} ▾</Chip></button> : <Chip tone={statusTone(w.status)}>{w.status}</Chip>}
               {consent !== 'signed' && <button className="chip-btn" onClick={() => setTab('passport')}><Chip tone={CONSENT_TONE[consent]}>🛂 {CONSENT_LABEL[consent]}</Chip></button>}
+              {missingLanguage(w) && (canWrite ? <button className="chip-btn" onClick={() => nav(`/workers/${w.id}/edit`)} aria-label="Add language"><Chip tone="amber">🗣️ Language missing</Chip></button> : <Chip tone="amber">🗣️ Language missing</Chip>)}
               {t.eligible && <Chip tone="purple">✈ Ticket ×{t.balance}</Chip>}
               {canSeeSalary && outstanding(w) > 0 && <Chip tone="amber">Loan {rm(outstanding(w))}</Chip>}
-              {w.phoneMY && <a className="chip chip-gray" href={`tel:${w.phoneMY}`}>📞 {w.phoneMY}</a>}
+              {!comp.complete && (canWrite ? <button className="chip-btn" onClick={() => nav(`/workers/${w.id}/edit`)} title={`Missing: ${comp.missing.map((m) => m.label).join(', ')}`}><Chip tone="red">📝 Draft / Incomplete · {comp.done} of {comp.total}</Chip></button> : <Chip tone="red">📝 Incomplete profile</Chip>)}
+              {w.phoneMY && <a className="chip chip-gray" href={`tel:${w.phoneMY}`}>📞 {fmtPhone(w.phoneMY)}</a>}
             </div>
           </div>
         </div>
@@ -94,7 +101,7 @@ export default function WorkerDetail() {
           <div className="grid2">
             <Card title="Documents" actions={canWrite && <button className="link" onClick={() => setTab('docs')}>Manage →</button>}>
               {docs.length === 0 ? <p className="muted">No documents</p> : (
-                <ul className="rows compact">{docs.map((d) => <li key={d.id}><div className="r-main"><strong>{d.type === 'Other' ? d.label : d.type}</strong><small>{d.number || ''} · exp {fmtDate(d.expiryDate)}</small></div><Chip tone={docTone(docStatus(d, s))}>{docStatus(d, s)}</Chip></li>)}</ul>
+                <ul className="rows compact">{docs.map((d) => <li key={d.id}><div className="r-main"><strong>{d.type === 'Other' ? d.label : d.type}</strong><small>{d.number || ''} · exp {fmtDate(d.expiryDate)}{d.stage ? ` · ${d.stage}` : ''}</small></div><Chip tone={docTone(docStatus(d, s))}>{docStatus(d, s)}</Chip></li>)}</ul>
               )}
             </Card>
             <Card title="Summary">
@@ -110,7 +117,9 @@ export default function WorkerDetail() {
             <Card title="Personal">
               <KV items={[
                 ['Date of birth', w.dob ? `${fmtDate(w.dob)} (${age(w.dob)} yrs)` : '—'], ['Gender', w.gender], ['Religion', w.religion],
-                ['Phone (MY)', w.phoneMY], ['Phone (home)', w.phoneHome], ['Join date', fmtDate(w.joinDate)], ['Agent', w.agent],
+                ['Primary language', missingLanguage(w) ? '— missing' : `${primaryLangName(w)} (speaks${w.primaryRead ? ' · reads' : ''}${w.primaryWrite ? ' · writes' : ''})`],
+                ['Other languages', otherLanguagesText(w) || '—'],
+                ['Phone (MY)', w.phoneMY && fmtPhone(w.phoneMY)], ['Phone (home)', w.phoneHome && fmtPhone(w.phoneHome)], ['Join date', fmtDate(w.joinDate)], ['Agent', w.agent],
                 ['Next of kin', w.family.filter((f) => f.isNextOfKin).map((f) => `${f.name} (${f.relation}) ${f.phone || ''}`).join(', ')],
               ]} />
             </Card>
@@ -142,6 +151,7 @@ export default function WorkerDetail() {
       {tab === 'remarks' && <RemarksPanel w={w} />}
       {canWrite && tab === 'docs' && <DocumentsTab {...p} />}
       {canWrite && tab === 'family' && <FamilyTab {...p} />}
+      {isHr && tab === 'remit' && <RemittanceTab w={w} />}
       {canWrite && tab === 'contract' && <ContractTab {...p} />}
       {canWrite && tab === 'pay' && <PayTab {...p} />}
       {canWrite && tab === 'loans' && <LoansTab {...p} />}

@@ -4,7 +4,9 @@ import { Avatar, Btn, Chip, Empty, SelectFilter, Toolbar, docTone, statusTone } 
 import { currentDocs, docStatus, isOnLeave, outletName, ticketInfo } from '../lib/calc'
 import { useOutlets, useSettings, useWorkersLoaded } from '../lib/hooks'
 import { BUSINESS_TYPES, NATIONALITIES, STATUSES, type Worker } from '../lib/types'
+import { missingLanguage, primaryLangName, otherLanguagesText } from '../lib/languages'
 import { daysUntil, fmtDate, serviceText } from '../lib/util'
+import { completeness } from '../lib/validate'
 
 export function nextExpiry(w: Worker) {
   return currentDocs(w).filter((d) => d.expiryDate).sort((a, b) => a.expiryDate!.localeCompare(b.expiryDate!))[0]
@@ -12,7 +14,7 @@ export function nextExpiry(w: Worker) {
 
 export function matchesQuery(w: Worker, q: string, outletLabel: string) {
   if (!q) return true
-  const hay = [w.fullName, w.workerNo, w.nationality, w.jobCategory, w.phoneMY, w.status, outletLabel, ...w.documents.map((d) => d.number), ...w.family.map((f) => f.name)].join(' ').toLowerCase()
+  const hay = [w.fullName, w.workerNo, w.nationality, primaryLangName(w), otherLanguagesText(w), w.jobCategory, w.phoneMY, w.status, outletLabel, ...w.documents.map((d) => d.number), ...w.family.map((f) => f.name)].join(' ').toLowerCase()
   return q.toLowerCase().split(/\s+/).every((t) => hay.includes(t))
 }
 
@@ -27,6 +29,7 @@ export default function Workers() {
   const outlet = sp.get('outlet') || ''
   const type = sp.get('type') || ''
   const nat = sp.get('nat') || ''
+  const gap = sp.get('gap') || ''
   const [sort, setSort] = useState('name')
   const set = (k: string, v: string) => { const n = new URLSearchParams(sp); if (v) n.set(k, v); else n.delete(k); setSp(n, { replace: true }) }
 
@@ -34,11 +37,11 @@ export default function Workers() {
     const ws = (loaded ?? []).filter((w) =>
       matchesQuery(w, q, outletName(outlets, w.outletId)) &&
       (!status || (status === '__leave' ? isOnLeave(w) : status === '__current' ? !['Absconded', 'Resigned', 'Terminated', 'Contract Ended', 'Repatriated'].includes(w.status) : w.status === status)) &&
-      (!outlet || w.outletId === outlet) && (!type || w.businessType === type) && (!nat || w.nationality === nat))
+      (!outlet || w.outletId === outlet) && (!type || w.businessType === type) && (!nat || w.nationality === nat) && (gap !== 'lang' || missingLanguage(w)) && (gap !== 'incomplete' || !completeness(w, outlets).complete))
     const nx = (w: Worker) => nextExpiry(w)?.expiryDate || '9999'
     return ws.sort((a, b) =>
       sort === 'expiry' ? nx(a).localeCompare(nx(b)) : sort === 'join' ? a.joinDate.localeCompare(b.joinDate) : sort === 'id' ? a.workerNo.localeCompare(b.workerNo, undefined, { numeric: true }) : a.fullName.localeCompare(b.fullName))
-  }, [loaded, q, status, outlet, type, nat, sort, outlets])
+  }, [loaded, q, status, outlet, type, nat, gap, sort, outlets])
 
   return (
     <div className="page">
@@ -54,6 +57,7 @@ export default function Workers() {
         <SelectFilter label="Outlet" value={outlet} onChange={(v) => set('outlet', v)} options={outlets.map((o) => ({ value: o.id, label: o.name }))} />
         <SelectFilter label="Business" value={type} onChange={(v) => set('type', v)} options={[...BUSINESS_TYPES]} />
         <SelectFilter label="Nationality" value={nat} onChange={(v) => set('nat', v)} options={NATIONALITIES} />
+        <SelectFilter label="Data gaps" value={gap} onChange={(v) => set('gap', v)} options={[{ value: 'incomplete', label: 'Incomplete profile (draft)' }, { value: 'lang', label: 'Language missing' }]} />
         <label className="sel-f">
           <span className="sr">Sort</span>
           <select value={sort} onChange={(e) => setSort(e.target.value)} aria-label="Sort">
@@ -74,11 +78,12 @@ export default function Workers() {
                 <Link to={`/workers/${w.id}`}>
                   <Avatar name={w.fullName} photo={w.photo} />
                   <div className="wl-main">
-                    <div className="wl-top"><strong>{w.fullName}</strong><Chip tone={statusTone(w.status)}>{w.status}</Chip></div>
+                    <div className="wl-top"><strong>{w.fullName}</strong><Chip tone={statusTone(w.status)}>{w.status}</Chip>{!completeness(w, outlets).complete && <Chip tone="amber">Draft</Chip>}</div>
                     <small>{w.workerNo} · {w.nationality} · {w.jobCategory || '—'} · {outletName(outlets, w.outletId)}</small>
                     <div className="wl-chips">
                       {nx && st && <Chip tone={docTone(st)}>{nx.type === 'Other' ? nx.label : nx.type.split(' ')[0]} {fmtDate(nx.expiryDate)}{daysUntil(nx.expiryDate)! < 0 ? ' · expired' : ''}</Chip>}
                       {t.eligible && <Chip tone="purple">✈ Ticket ×{t.balance}</Chip>}
+                      {missingLanguage(w) && <Chip tone="amber">🗣️ Language missing</Chip>}
                       <Chip>{serviceText(w.joinDate)}</Chip>
                     </div>
                   </div>

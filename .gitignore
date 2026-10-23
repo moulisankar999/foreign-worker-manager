@@ -11,3 +11,5 @@ android-keystore/
 *.keystore
 release/
 backups/
+.demo-login
+screens/

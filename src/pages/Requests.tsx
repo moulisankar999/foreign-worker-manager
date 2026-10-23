@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { Btn, Card, Chip, Empty, KV, Modal, SelectFilter, Tabs, Toolbar } from '../components/ui'
+import { FilePick } from '../components/filePick'
 import { DocRowItem, UploadDoc } from '../components/vault'
 import { useAuth } from '../lib/auth'
 import { useConfig } from '../lib/config'
@@ -197,11 +198,11 @@ export function NewRequest() {
           {reason && <p className="banner small mt-s">📎 <strong>Proof needed:</strong> {reason.proof}. You can submit now and upload the proof within <strong>{reason.proofDays} days</strong> (it is marked “proof pending” until then).</p>}
           {type === 'emergency_leave' && (
             <div className="field full mt-s"><label>Flight ticket <span className="req">*</span></label>
-              <input type="file" accept="image/*,application/pdf" onChange={(e) => setTicket(e.target.files?.[0] || null)} />
+              <div className="row gap-s wrap"><FilePick name="ticket" onFiles={([f]) => setTicket(f)} />{ticket && <span className="small">📎 {ticket.name} <button type="button" className="link" onClick={() => setTicket(null)}>remove</button></span>}</div>
               <small className="hint">The worker or you book the ticket for emergency leave. HR decides whether it is reimbursed or taken from the ticket entitlement.</small></div>
           )}
           <div className="field full mt-s"><label>{type === 'emergency_leave' ? 'Proof documents (optional now)' : 'Attachments (optional)'}</label>
-            <input type="file" multiple accept="image/*,application/pdf" onChange={(e) => setFiles(Array.from(e.target.files || []))} /></div>
+            <div className="row gap-s wrap"><FilePick name="attachments" multiple onFiles={(f) => setFiles((p) => [...p, ...f])} />{files.map((f, i) => <span key={i} className="small">📎 {f.name} <button type="button" className="link" onClick={() => setFiles((p) => p.filter((_, j) => j !== i))}>remove</button></span>)}</div></div>
           {level && <p className="muted small mt-s">Approval path: <strong>{LEVEL_PATH[level]}</strong>{level === 'super_admin' && amount && t.amountKey ? ' (amount above HR Admin limit)' : ''}. HR Manager then applies it to the worker record.</p>}
           {msg && <p className="err" role="alert">{msg}</p>}
           <div className="row gap-s mt-s"><Btn kind="primary" icon="check" disabled={!!busy} onClick={submit}>{busy || 'Submit request'}</Btn></div>

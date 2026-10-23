@@ -32,7 +32,7 @@ export function CompaniesCard() {
     if (name && name !== c.name) void save(all.map((x) => (x.id === id ? { ...x, name } : x)))
   }
   const remove = (id: string) => {
-    if (outlets.some((o) => outletCompany(o) === id)) { alert('Move its outlets to another company first (Settings → Outlets → edit).'); return }
+    if (outlets.some((o) => outletCompany(o) === id)) { alert('Move its outlets to another company first (Settings → Companies & Outlets → edit).'); return }
     if (all.length <= 1) { alert('Keep at least one company.'); return }
     if (confirm('Delete this company?')) void save(all.filter((x) => x.id !== id))
   }

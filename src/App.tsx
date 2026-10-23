@@ -17,6 +17,7 @@ import Reports from './pages/Reports'
 import SettingsPage from './pages/Settings'
 import MemoPrint from './pages/MemoPrint'
 import Login, { Pending } from './pages/Login'
+import SetPasswordScreen, { RECOVERY_FLAG } from './pages/SetPassword'
 import { useAuth } from './lib/auth'
 import { LocalDataBanner, SyncPill } from './components/cloud'
 import RequestsPage, { NewRequest, RequestDetail } from './pages/Requests'
@@ -45,7 +46,9 @@ export default function App() {
   const { session, profile, loading } = useAuth()
   if (loading) return <div className="auth-wrap"><p className="muted">Loading…</p></div>
   if (!session) return <Login />
+  if (sessionStorage.getItem(RECOVERY_FLAG)) return <SetPasswordScreen mode="recovery" />
   if (!profile || profile.status !== 'active' || profile.id !== session.user.id) return <Pending />
+  if (profile.must_change_password) return <SetPasswordScreen mode="forced" />
   return <MainApp />
 }
 
@@ -122,6 +125,7 @@ function MainApp() {
             <Route path="/alerts" element={<Alerts />} />
             <Route path="/reports" element={<Reports />} />
             <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/settings/:tab" element={<SettingsPage />} />
             <Route path="/requests" element={<RequestsPage />} />
             <Route path="/requests/new" element={<NewRequest />} />
             <Route path="/requests/:id" element={<RequestDetail />} />

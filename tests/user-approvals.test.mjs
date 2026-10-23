@@ -45,6 +45,8 @@ await admin.from('app_config').upsert({ key: 'user_approvals', value: { hrAdmins
 await admin.from('app_config').update({ value: { manageUsers: true, deleteWorkers: false, viewSalary: true, viewAudit: true } }).eq('key', 'hr_admin')
 { // make sure the notification events used here are on, in-app only (providers stay off)
   const n = (await admin.from('app_config').select('value').eq('key', 'notifications').single()).data.value
+  // another suite may have reset the config to an older seed: re-add the event exactly as migration 007 does
+  n.events.user_approved_by_hr ||= { label: 'New user approved by an HR Admin', group: 'Users', critical: false, enabled: true, recipients: ['super_admin'], channels: { in_app: true, push: true }, worker: {}, title: '{{title}}', sms: '' }
   for (const k of ['user_awaiting_approval', 'user_approved_by_hr', 'request_submitted']) if (n.events[k]) n.events[k].enabled = true
   await admin.from('app_config').update({ value: n }).eq('key', 'notifications')
 }

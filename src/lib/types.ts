@@ -11,7 +11,13 @@ export type WorkerStatus = (typeof STATUSES)[number]
 export const EXITED_STATUSES: WorkerStatus[] = ['Absconded', 'Resigned', 'Terminated', 'Contract Ended', 'Repatriated']
 export const LEAVE_STATUSES: WorkerStatus[] = ['On Leave', 'Home Leave', 'Medical Leave']
 
-export const DOC_TYPES = ['Passport', 'Work Permit / PLKS (VP(TE))', 'FOMEMA Medical', 'Insurance (SPIKPA / Hospitalisation)', 'SOCSO / PERKESO', 'Levy Payment', 'Other'] as const
+/** display order = the numbered document list (1. Passport, 2. Work permit, ...) */
+export const DOC_TYPES = ['Passport', 'Work Permit / PLKS (VP(TE))', 'Visa / VDR', 'FOMEMA Medical', 'Insurance (SPIKPA / Hospitalisation)', 'Hostel / Accommodation', 'SOCSO / PERKESO', 'Levy Payment', 'Other'] as const
+export const DOC_SHORT: Record<string, string> = {
+  Passport: 'Passport', 'Work Permit / PLKS (VP(TE))': 'Work permit (PLKS)', 'Visa / VDR': 'Visa / VDR', 'FOMEMA Medical': 'FOMEMA',
+  'Insurance (SPIKPA / Hospitalisation)': 'Insurance (SPIKPA)', 'Hostel / Accommodation': 'Hostel', 'SOCSO / PERKESO': 'SOCSO / PERKESO', 'Levy Payment': 'Levy', Other: 'Other',
+}
+export const DOC_STAGES = ['In hand (valid)', 'Applied / in process', 'Renewal in progress', 'With immigration', 'With agent', 'Not applicable']
 export const REQUIRED_DOCS = ['Passport', 'Work Permit / PLKS (VP(TE))', 'FOMEMA Medical', 'Insurance (SPIKPA / Hospitalisation)']
 
 export const RELATIONS = ['Wife', 'Husband', 'Son', 'Daughter', 'Father', 'Mother', 'Brother', 'Sister', 'Other']
@@ -25,7 +31,9 @@ export const EXIT_TYPES: WorkerStatus[] = ['Resigned', 'Terminated', 'Contract E
 /** dataUrl = copy on this device; path = file in the private cloud bucket */
 export interface Attachment { name: string; type: string; dataUrl?: string; path?: string }
 
-export interface DocRec { id: string; type: string; label?: string; number?: string; issueDate?: string; expiryDate?: string; remarks?: string; attachment?: Attachment }
+export interface DocRec { id: string; type: string; label?: string; number?: string; issueDate?: string; expiryDate?: string; issuePlace?: string; stage?: string; remarks?: string; attachment?: Attachment }
+/** remittance account the worker uses (HR / Super Admin only; stripped server-side for other roles) */
+export interface RemitRec { id: string; provider: string; providerOther?: string; memberId?: string; beneficiaryName?: string; relationship?: string; country?: string; bankOrWallet?: string; accountNo?: string; isPrimary?: boolean; notes?: string }
 export interface FamilyRec { id: string; relation: string; name: string; dob?: string; phone?: string; address?: string; isEmergency?: boolean; isNextOfKin?: boolean }
 export interface IncrementRec { id: string; date: string; oldPay: number; newPay: number; reason?: string }
 export interface AllowanceRec { id: string; name: string; amount: number }
@@ -63,6 +71,12 @@ export interface Worker {
   phoneMY?: string
   phoneHome?: string
   email?: string
+  /** language codes from lib/languages.ts ('other' + primaryLanguageOther for a typed-in language) */
+  primaryLanguage?: string
+  primaryLanguageOther?: string
+  primaryRead?: boolean
+  primaryWrite?: boolean
+  languages?: { lang: string; other?: string; speak: boolean; read: boolean; write: boolean }[]
   outletId?: string
   businessType?: string
   jobCategory?: string
@@ -84,6 +98,7 @@ export interface Worker {
   allowances: AllowanceRec[]
   bankName?: string
   bankAccount?: string
+  remittance?: RemitRec[]
   loans: LoanRec[]
   deductions: DeductionRec[]
   annualLeaveDays?: number

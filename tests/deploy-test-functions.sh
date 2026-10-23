@@ -8,10 +8,10 @@ LIVE=gnepquxtwkyffjmoydnv
 [ -n "$TEST_PROJECT_REF" ] && [ "$TEST_PROJECT_REF" != "$LIVE" ] || { echo "refusing: TEST_PROJECT_REF missing or live"; exit 1; }
 T=$(mktemp -d); trap 'rm -rf $T' EXIT
 mkdir -p $T/supabase/functions/mock-provider && cp tests/mock-provider/index.ts $T/supabase/functions/mock-provider/
-cp -r supabase/functions/notify-dispatch supabase/functions/whatsapp-webhook supabase/functions/wa-admin supabase/functions/_shared $T/supabase/functions/
+cp -r supabase/functions/notify-dispatch supabase/functions/whatsapp-webhook supabase/functions/wa-admin supabase/functions/user-admin supabase/functions/_shared $T/supabase/functions/
 cd $T
 npx supabase functions deploy mock-provider --project-ref $TEST_PROJECT_REF --use-api --no-verify-jwt >/dev/null
-for f in notify-dispatch whatsapp-webhook wa-admin; do npx supabase functions deploy $f --project-ref $TEST_PROJECT_REF --use-api --no-verify-jwt >/dev/null; done
+for f in notify-dispatch whatsapp-webhook wa-admin user-admin; do npx supabase functions deploy $f --project-ref $TEST_PROJECT_REF --use-api --no-verify-jwt >/dev/null; done
 M=https://$TEST_PROJECT_REF.supabase.co/functions/v1/mock-provider
 npx supabase secrets set --project-ref $TEST_PROJECT_REF \
   CRON_SECRET="$TEST_CRON_SECRET" ONEWAYSMS_MT_URL="$M/sms" ONEWAYSMS_USER=mock-user ONEWAYSMS_PASS=mock-pass ONEWAYSMS_SENDER=MOCK \
