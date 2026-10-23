@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { Avatar, Btn, Card, FormGrid, KV, type FieldDef } from '../components/ui'
 import { db, saveWorker } from '../lib/db'
+import { useAuth } from '../lib/auth'
+import { inScope } from '../lib/companies'
 import { useJobs, useOutlets, useSettings } from '../lib/hooks'
 import { BUSINESS_TYPES, GENDERS, NATIONALITIES, RELATIONS, RELIGIONS, SKILL_LEVELS, STATUSES, type DocRec, type Worker, type WorkerStatus } from '../lib/types'
 import { addMonths, fmtDate, resizeImage, rm, todayISO, uid } from '../lib/util'
@@ -22,6 +24,7 @@ export default function WorkerForm() {
   const [step, setStep] = useState(0)
   const [v, setV] = useState<V>({ status: 'Active-Working', joinDate: todayISO(), nationality: '', skillLevel: '' })
   const [orig, setOrig] = useState<Worker | null>(null)
+  const { role, myCompanies, myOutlets } = useAuth()
   const [err, setErr] = useState('')
 
   useEffect(() => {
@@ -52,7 +55,7 @@ export default function WorkerForm() {
     { key: 'phoneHome', label: 'Phone (home country)', type: 'tel' },
   ]
   const job: FieldDef[] = [
-    { key: 'outletId', label: 'Outlet / business unit', type: 'select', options: outlets.map((o) => ({ value: o.id, label: `${o.name} (${o.type})` })), hint: outlets.length ? undefined : 'Add outlets in Settings first (optional)' },
+    { key: 'outletId', label: 'Outlet / business unit', type: 'select', options: outlets.filter((o) => inScope(role, myCompanies, myOutlets, o.id, outlets) || o.id === (v.outletId as string | undefined)).map((o) => ({ value: o.id, label: `${o.name} (${o.type})` })), hint: outlets.length ? undefined : 'Add outlets in Settings first (optional)' },
     { key: 'businessType', label: 'Business type', type: 'select', options: [...BUSINESS_TYPES] },
     { key: 'jobCategory', label: 'Job / skill category', type: 'select', options: jobOptions },
     { key: 'skillLevel', label: 'Skill level', type: 'select', options: SKILL_LEVELS },

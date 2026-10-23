@@ -5,6 +5,11 @@ import { db, exportBackup, importBackup } from '../lib/db'
 import { AccountCard, PhoneAlertsCard, UsersCard } from '../components/cloud'
 import { ApprovalRulesCard, AuditCard, EmergencyReasonsCard, HrFlagsCard, MyAlertsCard, NotificationsCard, PassportSettingsCard, VaultSettingsCard } from '../components/adminSettings'
 import { useAuth } from '../lib/auth'
+import { LogoEdit, LogoImg } from '../components/logos'
+import { outletLogo } from '../lib/logos'
+import { CompaniesCard, UserApprovalRulesCard } from '../components/companies'
+import { useConfig } from '../lib/config'
+import { companyName, DEFAULT_COMPANY_ID, outletCompany } from '../lib/companies'
 import { clearDeviceCopy, syncNow } from '../lib/sync'
 import { buildAlerts } from '../lib/calc'
 import { useJobs, useOutlets, useSettings, useWorkers } from '../lib/hooks'
@@ -24,7 +29,10 @@ export default function SettingsPage() {
   const jobs = useJobs()
   const workers = useWorkers()
   const loc = useLocation()
-  const { canWrite, isAdmin, isHr, isSuper } = useAuth()
+  const { canWrite, isAdmin, isHr, isSuper, myCompanies } = useAuth()
+  const companies = useConfig().companies.items
+  // a company-limited HR person can only add outlets to his own companies; only the Super Admin moves outlets between companies
+  const coOptions = companies.filter((c) => isSuper || !myCompanies.length || myCompanies.includes(c.id)).map((c) => ({ value: c.id, label: c.name }))
   const [policy, setPolicy] = useState(false)
   const [outlet, setOutlet] = useState<V | null>(null)
   const [job, setJob] = useState<V | null>(null)
@@ -76,6 +84,8 @@ export default function SettingsPage() {
       <PhoneAlertsCard />
       <MyAlertsCard />
       {isAdmin && <UsersCard />}
+      {isSuper && <UserApprovalRulesCard />}
+      {isHr && <CompaniesCard />}
       {isSuper && <NotificationsCard />}
       {isHr && <ApprovalRulesCard />}
       {isSuper && <HrFlagsCard />}
@@ -94,13 +104,14 @@ export default function SettingsPage() {
         </dl>
       </Card>
 
-      <Card title={`Outlets / business units (${outlets.length})`} actions={canWrite && <Btn kind="primary" small icon="plus" onClick={() => setOutlet({ type: 'Restaurant' })}>Add outlet</Btn>}>
+      <Card title={`Outlets / business units (${outlets.length})`} actions={canWrite && <Btn kind="primary" small icon="plus" onClick={() => setOutlet({ type: 'Restaurant', companyId: coOptions[0]?.value || DEFAULT_COMPANY_ID })}>Add outlet</Btn>}>
         {outlets.length === 0 ? <p className="muted">No outlets yet. Add your restaurants, shops, hotels…</p> : (
           <ul className="rows">
             {outlets.map((o) => (
               <li key={o.id}>
-                <div className="r-main"><strong>{o.name}</strong><small>{o.type}{o.manager ? ` · ${o.manager}` : ''} · {workers.filter((w) => w.outletId === o.id).length} workers</small></div>
-                <div className="r-act"><Btn small kind="ghost" icon="edit" title="Edit outlet" onClick={() => setOutlet(o as unknown as V)} /></div>
+                <LogoImg path={outletLogo(o)} size={36} title={o.name} />
+                <div className="r-main"><strong>{o.name}</strong><small>{companies.length > 1 ? `${companyName(companies, outletCompany(o))} · ` : ''}{o.type}{o.manager ? ` · ${o.manager}` : ''} · {workers.filter((w) => w.outletId === o.id).length} workers</small></div>
+                <div className="r-act"><LogoEdit kind="outlet" id={o.id} path={o.logo} name={o.name} /><Btn small kind="ghost" icon="edit" title="Edit outlet" onClick={() => setOutlet(o as unknown as V)} /></div>
               </li>
             ))}
           </ul>
@@ -165,10 +176,11 @@ export default function SettingsPage() {
           }} />
       )}
       {outlet && (
-        <FormModal title={outlet.id ? 'Edit outlet' : 'Add outlet'} initial={outlet} onClose={() => setOutlet(null)}
-          fields={[{ key: 'name', label: 'Outlet name', required: true, full: true }, { key: 'type', label: 'Business type', type: 'select', options: [...BUSINESS_TYPES], required: true }, { key: 'manager', label: 'Manager / PIC' }, { key: 'address', label: 'Address', type: 'textarea' }]}
+        <FormModal title={outlet.id ? 'Edit outlet' : 'Add outlet'} initial={{ ...outlet, companyId: outlet.companyId || DEFAULT_COMPANY_ID }} onClose={() => setOutlet(null)}
+          fields={[{ key: 'name', label: 'Outlet name', required: true, full: true },
+            ...(isSuper || !outlet.id ? [{ key: 'companyId', label: 'Company', type: 'select' as const, options: coOptions, required: true }] : []), { key: 'type', label: 'Business type', type: 'select', options: [...BUSINESS_TYPES], required: true }, { key: 'manager', label: 'Manager / PIC' }, { key: 'address', label: 'Address', type: 'textarea' }]}
           onDelete={outlet.id ? () => { if (workers.some((w) => w.outletId === outlet.id)) alert('Workers are assigned to this outlet; they will show “—”.'); db.outlets.delete(String(outlet.id)) } : undefined}
-          onSave={(v) => db.outlets.put({ id: (outlet.id as string) || uid(), name: String(v.name), type: v.type as BusinessType, manager: v.manager as string, address: v.address as string }).then(() => {})} />
+          onSave={(v) => db.outlets.put({ id: (outlet.id as string) || uid(), name: String(v.name), type: v.type as BusinessType, manager: v.manager as string, address: v.address as string, companyId: String(v.companyId || outlet.companyId || DEFAULT_COMPANY_ID), ...(outlet.logo ? { logo: String(outlet.logo) } : {}) }).then(() => {})} />
       )}
       {job && (
         <FormModal title={job.id ? 'Edit category' : 'Add category'} initial={job} onClose={() => setJob(null)}

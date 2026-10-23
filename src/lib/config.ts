@@ -4,6 +4,7 @@ import { useSyncExternalStore } from 'react'
 import { supabase } from './supabase'
 import { DEFAULT_EMERGENCY_REASONS, DEFAULT_HR_FLAGS, DEFAULT_VAULT, defaultRules, type ApprovalRules, type EmergencyReason, type HrAdminFlags, type VaultConfig } from './workflow'
 import { DEFAULT_NOTIFY, type NotifyConfig } from './notifyEvents'
+import { DEFAULT_COMPANIES, DEFAULT_USER_APPROVALS, type CompaniesConfig, type UserApprovalsConfig } from './companies'
 
 export interface PassportConfig { turnaroundHours: number; overdueGraceDays: number; logo?: string; companyShort?: string; witnessTitle?: string }
 export const DEFAULT_PASSPORT: PassportConfig = { turnaroundHours: 24, overdueGraceDays: 0, witnessTitle: 'Outlet Manager' }
@@ -16,10 +17,13 @@ export interface AppConfig {
   notifications: NotifyConfig
   passport: PassportConfig
   wa_templates: { items: Record<string, { status: string; reason?: string | null }>; syncedAt: string | null }
+  companies: CompaniesConfig
+  user_approvals: UserApprovalsConfig
 }
 const DEFAULTS: AppConfig = {
   approval_rules: defaultRules(), hr_admin: DEFAULT_HR_FLAGS, vault: DEFAULT_VAULT, emergency_reasons: DEFAULT_EMERGENCY_REASONS,
   notifications: DEFAULT_NOTIFY, passport: DEFAULT_PASSPORT, wa_templates: { items: {}, syncedAt: null },
+  companies: DEFAULT_COMPANIES, user_approvals: DEFAULT_USER_APPROVALS,
 }
 const CACHE = 'fwm-config'
 let cfg: AppConfig = load()
@@ -36,6 +40,8 @@ function merge(raw: Partial<Record<keyof AppConfig, unknown>>): AppConfig {
   }
   const n = out.notifications as NotifyConfig
   out.notifications = { ...DEFAULT_NOTIFY, ...n, enabled: { ...DEFAULT_NOTIFY.enabled, ...(n.enabled || {}) }, events: { ...DEFAULT_NOTIFY.events, ...(n.events || {}) } }
+  const c = out.companies as CompaniesConfig
+  if (!Array.isArray(c.items) || !c.items.length) out.companies = DEFAULT_COMPANIES
   return out as unknown as AppConfig
 }
 function load(): AppConfig {

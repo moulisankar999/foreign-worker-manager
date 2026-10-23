@@ -28,6 +28,12 @@ A mobile-first web app (PWA) **and Android app** for managing **foreign workers 
 - New sign-ups stay **Waiting** until a Super Admin approves them. At least one active Super Admin must always exist.
 - Offline sync works as before for workers, outlets, jobs, settings and remarks. Requests and the document vault need a connection.
 
+### Companies, new-user approvals and logos (v1.1.1)
+- **Companies:** the Super Admin manages companies (Settings → Companies). Each outlet belongs to one company; existing outlets were put in **Main company**, which you can rename. HR Admin, HR Manager and Outlet Manager accounts can be limited to companies and/or outlets. Accounts with no limits still see everything.
+- **New sign-ups:** a sign-up can pick a company/outlet (optional). Pending users show under **Needs my action** with a badge and notification: **Approve** (role + scope) or **Reject**. The Super Admin sees all pending users. Sign-ups with no company are shown to the Super Admin only.
+- **HR Admin approvals:** per HR Admin, the Super Admin can switch on *Allow HR Admin to approve new users*, then choose which companies he may manage and which roles he may grant (default Outlet Manager and Viewer). HR Admin can be granted only if the Super Admin enables it; Super Admin never can. Approvals are recorded ("Approved by <name> (HR Admin)"), audited and reported to the Super Admin. The server enforces all of this.
+- **Logos:** each company and outlet can have a logo. PNG, JPEG or SVG files are resized in the browser to 512 px or less and saved as PNG/JPEG of about 200 KB at most. Super Admin, HR Admin and HR Manager can upload logos, within their scope. Logos are stored in a private bucket that only signed-in users of that company/outlet can read. They are cached for offline use and the Android app. They appear in the app header, lists, worker profile, memos and PDFs (passport consent form, slips). The login page stays generic.
+
 ### Requests and approvals
 - Outlet managers raise **27 request types** from the **Requests** tab or the shortcut tiles on their **My outlet** dashboard. The types are grouped as:
   - **Leave:** annual, MC, emergency, home leave, checkout memo

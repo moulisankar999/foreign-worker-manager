@@ -384,6 +384,7 @@ export async function clearDeviceCopy() {
   dirty = {}
   saveDirty()
   localStorage.removeItem(CURSOR)
+  try { if ('caches' in window) await caches.delete('fwm-logos-v1') } catch { /* ignore */ }
 }
 
 /* ---------- One-time migration of data entered before cloud sync ---------- */

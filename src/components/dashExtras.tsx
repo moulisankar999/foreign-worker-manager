@@ -7,6 +7,8 @@ import { CONSENT_LABEL, CONSENT_TONE, consentOf, custodyOf, overdueDays } from '
 import { proofState, refNo, useRequests } from '../lib/requests'
 import { OPEN_STATUSES, REQUEST_TYPE, STATUS_LABEL, STATUS_TONE, needsMyAction } from '../lib/workflow'
 import type { Worker } from '../lib/types'
+import { PendingUsersPanel } from './userApprovals'
+import { usePendingUsers } from '../lib/userApprovals'
 
 /** Requests, flight tickets, emergency-leave proof and passport consent — shared by the HR and Outlet-Manager dashboards. */
 export function WorkflowPanel({ workers }: { workers: Worker[] }) {
@@ -17,6 +19,8 @@ export function WorkflowPanel({ workers }: { workers: Worker[] }) {
   const me = session?.user.id || ''
   const cur = workers.filter((w) => !isExited(w))
   const mine = rows.filter((r) => needsMyAction(r, role || '', me))
+  const { pending: newUsers } = usePendingUsers()
+  const myCount = mine.length + newUsers.length
   const open = rows.filter((r) => OPEN_STATUSES.includes(r.status))
   const week = Date.now() - 14 * 86400000
   const tickets = rows.filter((r) => r.data.ticketBooked === true && new Date(r.updated_at).getTime() > week)
@@ -36,13 +40,15 @@ export function WorkflowPanel({ workers }: { workers: Worker[] }) {
         </Card>
       )}
       <div className="stats">
-        <Stat label="Needs my action" value={mine.length} icon="check" tone={mine.length ? 'orange' : 'green'} onClick={() => nav('/requests?tab=mine_action')} />
+        <Stat label="Needs my action" value={myCount} icon="check" tone={myCount ? 'orange' : 'green'} sub={newUsers.length ? `${newUsers.length} new user${newUsers.length > 1 ? 's' : ''} to approve` : undefined}
+          onClick={() => { if (newUsers.length && !mine.length) document.getElementById('pending-users')?.scrollIntoView({ behavior: 'smooth' }); else nav('/requests?tab=mine_action') }} />
         <Stat label="Open requests" value={open.length} icon="doc" tone="blue" onClick={() => nav('/requests?tab=open')} />
         <Stat label="Tickets booked (14 d)" value={tickets.length} icon="plane" tone="purple" onClick={() => nav('/requests?tab=all')} />
         <Stat label="Emergency proof pending" value={proof.length} icon="alert" tone={proof.some((p) => p.st === 'overdue') ? 'red' : 'amber'} onClick={() => nav('/reports?r=emergency')} />
         <Stat label="Consent pending" value={pending.length} icon="alert" tone={pending.length ? 'red' : 'green'} sub={!isOM ? `${notIssued.length} not issued · ${toVerify.length} to verify` : undefined} onClick={() => nav('/reports?r=passport')} />
         <Stat label="Passports with worker (released)" value={out.length} icon="doc" tone={overdue.length ? 'red' : 'gray'} sub={overdue.length ? `${overdue.length} overdue` : undefined} onClick={() => nav('/reports?r=passport')} />
       </div>
+      <div id="pending-users"><PendingUsersPanel /></div>
       {tickets.length > 0 && (
         <Card title="✈️ Ticket booked — download">
           <ul className="rows">{tickets.slice(0, 8).map((r) => (

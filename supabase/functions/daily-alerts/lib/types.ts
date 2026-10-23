@@ -118,7 +118,7 @@ export interface PassportSafe {
   moves?: PassportMove[]
 }
 
-export interface Outlet { id: string; name: string; type: BusinessType; address?: string; manager?: string }
+export interface Outlet { id: string; name: string; type: BusinessType; address?: string; manager?: string; companyId?: string; logo?: string }
 export interface JobCategory { id: string; name: string; businessType: BusinessType }
 
 export interface Settings {

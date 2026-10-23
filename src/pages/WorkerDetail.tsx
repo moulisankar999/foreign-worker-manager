@@ -8,6 +8,8 @@ import { CONSENT_LABEL, CONSENT_TONE, consentOf, overdueDays } from '../lib/pass
 import { Avatar, Btn, Card, Chip, Empty, FormModal, KV, Tabs, docTone, sevTone, statusTone } from '../components/ui'
 import { ContractTab, DocumentsTab, FamilyTab, LeaveTab, LoansTab, MemoEditor, MemosTab, NotesTab, PayTab, setStatus } from '../components/sections'
 import { db } from '../lib/db'
+import { LogoImg } from '../components/logos'
+import { outletLogo } from '../lib/logos'
 import { allowancesTotal, buildAlerts, currentBasic, currentDocs, docStatus, isExited, leaveBalanceNow, minContractEnd, outletName, outstanding, ticketInfo } from '../lib/calc'
 import { useOutlets, useSettings } from '../lib/hooks'
 import { buildICS } from '../lib/ics'
@@ -67,7 +69,7 @@ export default function WorkerDetail() {
         <div className="hero-r">
           <Avatar name={w.fullName} photo={w.photo} size={72} />
           <div className="grow">
-            <h2>{w.fullName}</h2>
+            <h2 className="row gap-s">{w.fullName}<LogoImg path={outletLogo(outlets.find((o) => o.id === w.outletId))} size={28} fallback={false} /></h2>
             <p className="muted">{w.workerNo} · {w.nationality} · {w.jobCategory || '—'} ({w.skillLevel || '—'})</p>
             <p className="muted">{outletName(outlets, w.outletId)} · {w.businessType || '—'} · {serviceText(w.joinDate, w.exitDate)} service</p>
             <div className="row gap-s wrap mt-s">

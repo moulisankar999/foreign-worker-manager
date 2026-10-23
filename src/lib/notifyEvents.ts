@@ -86,6 +86,7 @@ export const DEFAULT_NOTIFY: NotifyConfig = {
     doc_expired: R('Document expired', 'Documents', ['hr_manager', 'hr_admin', 'outlet_manager'], all, '❗ {{doc}} of {{worker}} EXPIRED', '{{doc}} of worker {{workerNo}} EXPIRED on {{date}}. Please act in FW Manager app.', { critical: true , wa: 'fwm_document_expired' }),
     remark_added: R('Remark added by outlet manager', 'Workers', ['hr_manager'], { in_app: true, whatsapp: true }, 'New remark on {{worker}}', 'New remark on worker {{workerNo}}. Please open FW Manager app.', { wa: 'fwm_remark_added' }),
     user_awaiting_approval: R('New user awaiting approval', 'Users', ['user_admins'], iae, '{{title}} is waiting for access', 'A new user is waiting for access. Please open FW Manager app.', { wa: 'fwm_user_waiting' }),
+    user_approved_by_hr: R('New user approved by an HR Admin', 'Users', ['super_admin'], ia, '{{title}}', ''),
     daily_digest: R('Daily digest', 'Digest', [], { email: true }, '{{company}} daily summary', '', { wa: 'fwm_daily_digest' }),
   },
 }

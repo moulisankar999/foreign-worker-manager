@@ -5,6 +5,7 @@ import { currentBasic, isExited, isOnLeave, outletName, outstanding, ticketInfo 
 import { useAlerts, useOutlets, useSettings, useWorkersLoaded } from '../lib/hooks'
 import { loadSampleData } from '../lib/sample'
 import { OmDashboard, WorkflowPanel } from '../components/dashExtras'
+import { PendingUsersPanel } from '../components/userApprovals'
 import { useAuth } from '../lib/auth'
 import { fmtDate, fmtMonth, rm0, todayISO } from '../lib/util'
 
@@ -66,6 +67,7 @@ export default function Dashboard() {
     return (
       <div className="page">
         <h1>Welcome 👋</h1>
+        <PendingUsersPanel />
         <Card>
           <Empty icon="users" title="No workers yet">
             <p className="muted">Add your outlets in Settings, then add workers. Or explore with fake demo data first.</p>

@@ -3,6 +3,8 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { db } from '../lib/db'
+import { LogoImg } from '../components/logos'
+import { outletLogo } from '../lib/logos'
 import { currentBasic, latestDoc, leaveBalanceNow, minContractEnd, outletName, ticketInfo } from '../lib/calc'
 import { useOutlets, useSettings } from '../lib/hooks'
 import { fmtDate, rm, serviceText } from '../lib/util'
@@ -31,7 +33,7 @@ export default function MemoPrint() {
       </div>
       <article className="memo">
         <header className="memo-h">
-          <div><h1>{s.companyName}</h1><p>{outletName(outlets, w.outletId)} · {w.businessType || ''}</p></div>
+          <div className="row gap-s"><LogoImg path={outletLogo(outlets.find((o) => o.id === w.outletId))} size={48} fallback={false} /><div><h1>{s.companyName}</h1><p>{outletName(outlets, w.outletId)} · {w.businessType || ''}</p></div></div>
           <div className="memo-k"><h2>{m.kind.toUpperCase()} MEMO</h2><p>Date: {fmtDate(m.date)}</p><p>Ref: {w.workerNo}-{m.id.slice(0, 6).toUpperCase()}</p></div>
         </header>
         <table className="memo-t">

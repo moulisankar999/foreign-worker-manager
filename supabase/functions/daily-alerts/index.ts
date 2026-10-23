@@ -55,12 +55,14 @@ Deno.serve(async (req) => {
 
   // --- load data (service role bypasses RLS) ---
   const workers: Worker[] = []
+  const outletCo = new Map<string, string>() // outlet -> company
   let settings: Settings = DEFAULT_SETTINGS
   for (let from = 0; ; from += 1000) {
-    const { data, error } = await db.from('records').select('entity,data').eq('deleted', false).in('entity', ['workers', 'settings']).range(from, from + 999)
+    const { data, error } = await db.from('records').select('entity,data').eq('deleted', false).in('entity', ['workers', 'settings', 'outlets']).range(from, from + 999)
     if (error) return json({ error: error.message }, 500)
     for (const r of data) {
       if (r.entity === 'workers') workers.push(r.data as Worker)
+      else if (r.entity === 'outlets') { const o = r.data as { id: string; companyId?: string }; outletCo.set(o.id, o.companyId || 'main') }
       else if ((r.data as Settings).id === 'app') settings = { ...DEFAULT_SETTINGS, ...(r.data as Settings) }
     }
     if (data.length < 1000) break
@@ -69,13 +71,16 @@ Deno.serve(async (req) => {
     w.documents ||= []; w.leaves ||= []; w.loans ||= []; w.deductions ||= []; w.memos ||= []; w.increments ||= []; w.family ||= []
   }
   const day = todayISO()
-  // alerts are scoped per user: an outlet manager only hears about workers in his outlets
+  // alerts are scoped per user (same rule as the database's scope_ok): an outlet manager only hears about his
+  // outlets; staff limited to companies / outlets only about those; Super Admin and unlimited staff about everyone
   const cache = new Map<string, { urgent: ReturnType<typeof buildAlerts>; digest: string; msg: ReturnType<typeof summary> }>()
-  const forUser = async (role: string, outlets: string[] | null) => {
-    const key = role === 'outlet_manager' ? 'om:' + [...(outlets || [])].sort().join(',') : 'all'
+  const forUser = async (role: string, outlets: string[] | null, companies: string[] | null) => {
+    const os = outlets || [], cs = companies || []
+    const all = role === 'super_admin' || role === 'admin' || (['hr_admin', 'hr_manager', 'viewer', 'manager'].includes(role) && !os.length && !cs.length)
+    const key = all ? 'all' : 's:' + [...os].sort().join(',') + '|' + [...cs].sort().join(',')
     let c = cache.get(key)
     if (!c) {
-      const ws = role === 'outlet_manager' ? workers.filter((w) => (outlets || []).includes(w.outletId)) : workers
+      const ws = all ? workers : workers.filter((w) => !!w.outletId && (os.includes(w.outletId) || cs.includes(outletCo.get(w.outletId) || 'main')))
       const urgent = buildAlerts(ws, settings).filter((a) => a.severity === 'critical' || a.severity === 'high')
       c = { urgent, digest: await sha(urgent.map((a) => a.id).sort().join('|')), msg: summary(urgent) }
       cache.set(key, c)
@@ -84,7 +89,7 @@ Deno.serve(async (req) => {
   }
 
   // --- recipients: active users with a subscription ---
-  let pq = db.from('profiles').select('id,role,outlet_ids').eq('status', 'active')
+  let pq = db.from('profiles').select('id,role,outlet_ids,company_ids').eq('status', 'active')
   if (onlyUser) pq = pq.eq('id', onlyUser)
   const { data: users } = await pq
   const ids = (users || []).map((u) => u.id)
@@ -95,7 +100,7 @@ Deno.serve(async (req) => {
     const uid = u.id
     const mine = (subs || []).filter((s) => s.user_id === uid)
     if (!mine.length) continue
-    const { urgent, digest, msg } = await forUser(u.role, u.outlet_ids)
+    const { urgent, digest, msg } = await forUser(u.role, u.outlet_ids, u.company_ids)
     if (!test) {
       if (!urgent.length) { skipped++; continue } // nothing urgent: stay quiet
       const { data: already } = await db.from('alert_log').select('user_id').eq('user_id', uid).eq('day', day).eq('digest', digest).maybeSingle()

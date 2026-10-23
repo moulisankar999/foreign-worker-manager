@@ -3,6 +3,7 @@ import type { Session } from '@supabase/supabase-js'
 import { supabase, type Profile, type Role } from './supabase'
 import { clearDeviceCopy, startSync, stopSync } from './sync'
 import { startConfig, stopConfig, useConfig } from './config'
+import { ruleFor } from './companies'
 
 export interface Perms {
   role: Role | null
@@ -17,6 +18,9 @@ export interface Perms {
   canRequest: boolean // raise requests, add remarks
   canSeeAudit: boolean
   myOutlets: string[]
+  myCompanies: string[]
+  /** Super Admin, or an HR Admin the Super Admin allowed to approve new sign-ups */
+  canApproveUsers: boolean
 }
 interface AuthCtx extends Perms {
   session: Session | null
@@ -72,7 +76,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const ch = supabase.channel('my-profile').on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${session.user.id}` }, () => { void loadProfile(session) }).subscribe()
     return () => { void supabase.removeChannel(ch) }
   }, [active, session?.user.id]) // eslint-disable-line react-hooks/exhaustive-deps
-  const outletKey = (profile?.outlet_ids || []).join(',')
+  // the sync scope: re-download workers when the role, outlets or companies change
+  const outletKey = (profile?.outlet_ids || []).join(',') + (profile?.company_ids?.length ? '/' + profile.company_ids.join(',') : '')
   useEffect(() => {
     if (active && session && role) { startConfig(); void startSync(session.user.id, role, outletKey) }
     else { stopSync(); stopConfig() }
@@ -99,6 +104,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     canRequest: isSuper || isHrAdmin || role === 'hr_manager' || role === 'outlet_manager',
     canSeeAudit: isSuper || (isHrAdmin && flags.viewAudit),
     myOutlets: profile?.outlet_ids || [],
+    myCompanies: profile?.company_ids || [],
+    canApproveUsers: isSuper || (isHrAdmin && !!session && ruleFor(cfg.user_approvals, session.user.id).enabled),
   }
   return (
     <Ctx.Provider value={{ session, profile, loading, ...perms, refreshProfile: () => loadProfile(session), signOut }}>

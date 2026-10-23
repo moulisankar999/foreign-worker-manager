@@ -4,6 +4,8 @@
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from 'pdf-lib'
 import { currentDocs, outletName } from './calc'
 import { getConfig } from './config'
+import { companyName, outletCompany } from './companies'
+import { pdfLogoFor } from './logos'
 import type { MemoRec, Outlet, PassportMove, PassportSafe, Worker } from './types'
 import { fmtDate, todayISO } from './util'
 
@@ -96,7 +98,28 @@ async function newDoc() {
       logo = l.startsWith('data:image/png') ? await pdf.embedPng(bytes) : await pdf.embedJpg(bytes)
     } catch { logo = null }
   }
-  return { pdf, f, logo }
+  return { pdf, f, logo, logoFor: workerLogo(pdf, logo) }
+}
+type Img = Awaited<ReturnType<PDFDocument['embedPng']>>
+/** the worker's outlet logo → company logo → the default (Settings → passport form logo) */
+function workerLogo(pdf: PDFDocument, fallback: Img | null) {
+  const done = new Map<string, Img | null>()
+  return async (wk: Worker, outlets: Outlet[]): Promise<Img | null> => {
+    const o = outlets.find((x) => x.id === wk.outletId)
+    const key = o?.id || ''
+    if (!done.has(key)) {
+      let img: Img | null = null
+      try { const l = await pdfLogoFor(o); if (l) img = l.png ? await pdf.embedPng(l.bytes) : await pdf.embedJpg(l.bytes) } catch { img = null }
+      done.set(key, img)
+    }
+    return done.get(key) || fallback
+  }
+}
+/** with more than one company, a worker's documents carry the name of his own company */
+function companyOf(wk: Worker, outlets: Outlet[], company: string) {
+  const items = getConfig().companies.items
+  if (items.length < 2) return company
+  return companyName(items, outletCompany(outlets.find((o) => o.id === wk.outletId))) || company
 }
 function header(w: Writer, company: string, title: string, titleMs: string, logo: Awaited<ReturnType<PDFDocument['embedPng']>> | null) {
   if (logo) {
@@ -112,7 +135,7 @@ const blob = async (pdf: PDFDocument) => new Blob([(await pdf.save()) as BlobPar
 
 /* ---------- Consent form (one page per worker) ---------- */
 export async function consentPdf(workers: Worker[], outlets: Outlet[], company: string): Promise<Blob> {
-  const { pdf, f, logo } = await newDoc()
+  const { pdf, f, logoFor } = await newDoc()
   const cfg = getConfig().passport
   const hrs = cfg.turnaroundHours || 24
   const turn = hrs <= 24 ? `${hrs} hours` : `${Math.round(hrs / 24)} days`
@@ -120,7 +143,7 @@ export async function consentPdf(workers: Worker[], outlets: Outlet[], company: 
   for (const wk of workers) {
     const page = pdf.addPage(A4)
     const w = new Writer(page, f)
-    header(w, company, 'VOLUNTARY PASSPORT SAFEKEEPING CONSENT', 'PERSETUJUAN SUKARELA PENYIMPANAN PASPORT', logo)
+    header(w, companyOf(wk, outlets, company), 'VOLUNTARY PASSPORT SAFEKEEPING CONSENT', 'PERSETUJUAN SUKARELA PENYIMPANAN PASPORT', await logoFor(wk, outlets))
     const p = passportOf(wk)
     w.table([
       ['Worker name / Nama pekerja', wk.fullName], ['Passport no. / No. pasport', p.no], ['Nationality / Warganegara', wk.nationality],
@@ -153,13 +176,13 @@ export async function consentPdf(workers: Worker[], outlets: Outlet[], company: 
 
 /* ---------- Release / return slip ---------- */
 export async function slipPdf(wk: Worker, m: PassportMove, outlets: Outlet[], company: string): Promise<Blob> {
-  const { pdf, f, logo } = await newDoc()
+  const { pdf, f, logoFor } = await newDoc()
   const page = pdf.addPage(A4)
   const w = new Writer(page, f)
   const rel = m.kind === 'release'
   const title = rel ? 'PASSPORT RELEASE SLIP' : m.kind === 'return' ? 'PASSPORT RETURN SLIP' : 'PASSPORT DEPOSIT SLIP'
   const titleMs = rel ? 'SLIP PELEPASAN PASPORT' : m.kind === 'return' ? 'SLIP PEMULANGAN PASPORT' : 'SLIP SIMPANAN PASPORT'
-  header(w, company, title, titleMs, logo)
+  header(w, companyOf(wk, outlets, company), title, titleMs, await logoFor(wk, outlets))
   const p = passportOf(wk)
   w.table([
     ['Worker / Pekerja', `${wk.fullName} (${wk.workerNo})`], ['Passport no. / No. pasport', p.no], ['Outlet / Cawangan', outletName(outlets, wk.outletId)],
@@ -177,9 +200,9 @@ export const nextCustody = (ps: PassportSafe | undefined) => (ps?.custody === 'i
 
 /* ---------- Checkout / return / exit memo (auto-saved to the vault when a memo is saved) ---------- */
 export async function memoPdf(wk: Worker, m: MemoRec, outlets: Outlet[], company: string): Promise<Blob> {
-  const { pdf, f, logo } = await newDoc()
+  const { pdf, f, logoFor } = await newDoc()
   let w = new Writer(pdf.addPage(A4), f)
-  header(w, company, m.kind.toUpperCase() + ' MEMO', m.kind === 'Exit Clearance' ? 'MEMO PELEPASAN KERJA' : m.kind === 'Return from Leave' ? 'MEMO KEMBALI DARI CUTI' : 'MEMO KELUAR CUTI', logo)
+  header(w, companyOf(wk, outlets, company), m.kind.toUpperCase() + ' MEMO', m.kind === 'Exit Clearance' ? 'MEMO PELEPASAN KERJA' : m.kind === 'Return from Leave' ? 'MEMO KEMBALI DARI CUTI' : 'MEMO KELUAR CUTI', await logoFor(wk, outlets))
   w.table([
     ['Worker / Pekerja', `${wk.fullName} (${wk.workerNo})`], ['Passport no. / No. pasport', passportOf(wk).no], ['Outlet / Cawangan', outletName(outlets, wk.outletId)],
     ['Memo date / Tarikh', fmtDate(m.date)], [m.kind === 'Return from Leave' ? 'Reported back / Kembali' : 'Last working day / Hari terakhir', m.lastWorkingDay ? fmtDate(m.lastWorkingDay) : ''],

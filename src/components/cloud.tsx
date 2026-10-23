@@ -11,6 +11,9 @@ import { currentSubscription, disablePush, enablePush, isIOS, isStandalone, push
 import { isNative } from '../lib/platform'
 import { enableNativeAlerts, permissionState, reschedule, scheduleInfo, sendTestNotification } from '../lib/localNotify'
 import { useSettings, useWorkers } from '../lib/hooks'
+import { useConfig } from '../lib/config'
+import { scopeLabel } from '../lib/companies'
+import { PendingItem, ScopePicker, byLine } from './userApprovals'
 
 const LABEL = { synced: 'Synced', syncing: 'Syncing…', offline: 'Offline', error: 'Sync error', off: 'Not syncing' } as const
 
@@ -87,7 +90,8 @@ const ROLE_TONE: Record<string, string> = { super_admin: 'purple', hr_admin: 'bl
 const roleName = (r?: string) => ROLE_LABEL[normRole(r) || ''] || '—'
 
 export function UsersCard() {
-  const { session, isSuper } = useAuth()
+  const { session, isSuper, myCompanies, myOutlets, canApproveUsers } = useAuth()
+  const companies = useConfig().companies.items
   const [users, setUsers] = useState<Profile[]>([])
   const [err, setErr] = useState('')
   const [open, setOpen] = useState<string | null>(null)
@@ -96,48 +100,65 @@ export function UsersCard() {
     const { data, error } = await supabase.from('profiles').select('*').order('created_at')
     if (error) setErr(error.message); else { setUsers(data as Profile[]); setErr('') }
   }
-  useEffect(() => { void load() }, [])
+  useEffect(() => {
+    void load()
+    const ch = supabase.channel('users-card').on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => { void load() }).subscribe()
+    return () => { void supabase.removeChannel(ch) }
+  }, [])
   const update = async (id: string, patch: Partial<Profile>) => {
     const { error } = await supabase.from('profiles').update(patch).eq('id', id)
     if (error) alert(/at least one active/i.test(error.message) ? 'You need at least one active Super Admin.' : error.message.replace(/^.*?ERROR:\s*/, ''))
     await load()
   }
   const pending = users.filter((u) => u.status === 'pending')
+  const others = users.filter((u) => u.status !== 'pending')
   const roles = ROLES.filter((r) => isSuper || (r !== 'super_admin' && r !== 'hr_admin'))
+  // what a company-limited HR Admin may hand out: only his own companies
+  const allowed: string[] | '*' = isSuper || (!myCompanies.length && !myOutlets.length) ? '*' : myCompanies
   return (
     <Card title={`Users (${users.length})`} actions={<Btn small kind="ghost" icon="upload" title="Refresh" onClick={load} />}>
-      <p className="muted small">Staff create their own account on the sign-in page (“Create account”). They appear here as <strong>Waiting</strong> — approve them, pick their role and (for outlet managers) their outlets.</p>
+      <p className="muted small">Staff create their own account on the sign-in page (“Create account”) and can pick their company / outlet there. New sign-ups appear on the dashboard under <strong>Needs my action</strong> and here — approve them, pick their role and the companies / outlets they work for.</p>
       <ul className="small muted role-help">{ROLES.map((r) => <li key={r}><strong>{ROLE_LABEL[r]}</strong>: {ROLE_HELP[r]}</li>)}</ul>
-      {pending.length > 0 && <p className="warn small">{pending.length} person(s) waiting for approval</p>}
       {err && <p className="err">{err}</p>}
+      {pending.length > 0 && <>
+        <p className="warn small">{pending.length} person(s) waiting for approval</p>
+        {canApproveUsers && <ul className="rows users">{pending.map((u) => <PendingItem key={u.id} u={u} companies={companies} outlets={outlets} />)}</ul>}
+      </>}
       <ul className="rows users">
-        {users.map((u) => {
+        {others.map((u) => {
           const role = normRole(u.role) || 'viewer'
           const locked = !isSuper && (role === 'super_admin' || role === 'hr_admin')
           const outs = u.outlet_ids || []
+          const cos = u.company_ids || []
+          const scoped = outs.length + cos.length > 0
+          const by = byLine(u)
           return (
             <li key={u.id} className="user-row">
               <div className="r-main">
                 <strong>{u.full_name || u.email}{u.id === session?.user.id ? ' (you)' : ''}</strong>
-                <small>{u.email} · <Chip tone={u.status === 'active' ? 'green' : u.status === 'pending' ? 'amber' : 'gray'}>{u.status === 'pending' ? 'Waiting' : u.status === 'active' ? 'Active' : 'Switched off'}</Chip> <Chip tone={ROLE_TONE[role]}>{ROLE_LABEL[role]}</Chip></small>
-                {role === 'outlet_manager' && <small className={outs.length ? 'muted' : 'warn'}>Outlets: {outs.length ? outs.map((id) => outlets.find((o) => o.id === id)?.name || id).join(', ') : 'none yet — he will see no workers'}</small>}
+                <small>{u.email} · <Chip tone={u.status === 'active' ? 'green' : 'gray'}>{u.status === 'active' ? 'Active' : u.rejected_at && !u.approved_at ? 'Rejected' : 'Switched off'}</Chip> <Chip tone={ROLE_TONE[role]}>{ROLE_LABEL[role]}</Chip></small>
+                {role !== 'super_admin' && (
+                  <small className={role === 'outlet_manager' && !scoped ? 'warn' : 'muted'}>
+                    {role === 'outlet_manager' ? 'Outlets: ' : 'Sees: '}
+                    {scoped ? scopeLabel(companies, outlets, cos, outs) : role === 'outlet_manager' ? 'none yet — he will see no workers' : 'all companies'}
+                  </small>
+                )}
+                {by && <small className="muted">{by}</small>}
               </div>
               <div className="r-act">
                 <select aria-label={`Role for ${u.email}`} value={role} disabled={locked} onChange={(e) => update(u.id, { role: e.target.value as Role })}>
                   {(locked ? ROLES : roles).map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
                 </select>
-                {role === 'outlet_manager' && !locked && <Btn small kind="ghost" icon="store" onClick={() => setOpen(open === u.id ? null : u.id)}>Outlets</Btn>}
-                {!locked && u.status !== 'active' && <Btn small kind="primary" icon="check" onClick={() => update(u.id, { status: 'active' })}>Approve</Btn>}
+                {role !== 'super_admin' && !locked && u.id !== session?.user.id && <Btn small kind="ghost" icon="store" onClick={() => setOpen(open === u.id ? null : u.id)}>{role === 'outlet_manager' ? 'Outlets' : 'Companies'}</Btn>}
+                {!locked && u.status !== 'active' && <Btn small kind="primary" icon="check" onClick={() => update(u.id, { status: 'active' })}>Re-activate</Btn>}
                 {!locked && u.status === 'active' && u.id !== session?.user.id && <Btn small kind="ghost" icon="x" onClick={() => { if (confirm(`Switch off access for ${u.email}?`)) void update(u.id, { status: 'inactive' }) }}>Deactivate</Btn>}
               </div>
               {open === u.id && (
                 <div className="outlet-pick">
                   {outlets.length === 0 && <p className="muted small">Add outlets first (Settings → Outlets).</p>}
-                  {outlets.map((o) => (
-                    <label key={o.id} className="check">
-                      <input type="checkbox" checked={outs.includes(o.id)} onChange={(e) => update(u.id, { outlet_ids: e.target.checked ? [...outs, o.id] : outs.filter((x) => x !== o.id) })} /> {o.name}
-                    </label>
-                  ))}
+                  <p className="muted small">{role === 'outlet_manager' ? 'Tick his outlets.' : 'Tick a whole company or single outlets.'} {role !== 'outlet_manager' && (isSuper ? 'Nothing ticked = all companies.' : 'You can only give your own companies.')}</p>
+                  <ScopePicker companies={companies} outlets={outlets} allowed={allowed} outletsOnly={role === 'outlet_manager'}
+                    value={{ companies: cos, outlets: outs }} onChange={(v) => update(u.id, { company_ids: v.companies, outlet_ids: v.outlets })} />
                 </div>
               )}
             </li>

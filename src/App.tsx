@@ -1,7 +1,10 @@
 import { useEffect, useState } from 'react'
 import { NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { Icon } from './components/Icon'
-import { useAlerts, useSettings, useWorkers } from './lib/hooks'
+import { useAlerts, useOutlets, useSettings, useWorkers } from './lib/hooks'
+import { headerLogo } from './lib/logos'
+import { useConfig } from './lib/config'
+import { LogoImg } from './components/logos'
 import { isNative } from './lib/platform'
 import { rescheduleSoon } from './lib/localNotify'
 import { notifyOnOpen } from './lib/notify'
@@ -23,6 +26,7 @@ import { DocumentLibrary } from './components/vault'
 import { useInbox } from './lib/inbox'
 import { useRequests } from './lib/requests'
 import { needsMyAction } from './lib/workflow'
+import { usePendingUsers } from './lib/userApprovals'
 import { IS_TEST_BUILD } from './lib/supabase'
 
 const NAV = [
@@ -45,11 +49,15 @@ export default function App() {
 }
 
 function MainApp() {
-  const { canWrite, role, session } = useAuth()
+  const { canWrite, role, session, myCompanies, myOutlets } = useAuth()
+  const allOutlets = useOutlets()
+  useConfig() // re-render when a company logo changes
+  const myLogo = headerLogo(role, myCompanies, myOutlets, allOutlets)
   const inbox = useInbox()
   const { rows: reqs } = useRequests()
   const myReq = reqs.filter((r) => needsMyAction(r, role || '', session?.user.id || '')).length
-  const badge = (to: string) => (to === '/alerts' ? urgent : to === '/requests' ? myReq : 0)
+  const { pending: newUsers } = usePendingUsers()
+  const badge = (to: string) => (to === '/alerts' ? urgent : to === '/requests' ? myReq : to === '/' || to === '/settings' || to === '/more' ? newUsers.length : 0)
   const alerts = useAlerts()
   const settings = useSettings()
   const urgent = alerts.filter((a) => a.severity === 'critical' || a.severity === 'high').length
@@ -69,7 +77,7 @@ function MainApp() {
     <div className="shell">
       <aside className="side">
         <div className="brand">
-          <img src={`${import.meta.env.BASE_URL}icon.svg`} alt="" width={34} height={34} />
+          {myLogo ? <LogoImg path={myLogo} size={34} /> : <img src={`${import.meta.env.BASE_URL}icon.svg`} alt="" width={34} height={34} />}
           <div>
             <strong>FW Manager</strong>
             <small>{settings.companyName}</small>
@@ -88,6 +96,7 @@ function MainApp() {
       </aside>
       <div className="main">
         <header className="top">
+          {myLogo && <span className="top-logo"><LogoImg path={myLogo} size={32} fallback={false} /></span>}
           <form className="gsearch" role="search" onSubmit={(e) => { e.preventDefault(); nav(`/workers?q=${encodeURIComponent(q)}`) }}>
             <Icon name="search" size={18} />
             <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name, ID, passport, permit no…" aria-label="Global search" />

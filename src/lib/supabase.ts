@@ -27,4 +27,7 @@ export type Role = 'super_admin' | 'hr_admin' | 'hr_manager' | 'outlet_manager' 
 export interface Profile {
   id: string; email: string | null; full_name: string | null; role: Role; status: 'active' | 'pending' | 'inactive'; created_at: string
   outlet_ids?: string[]; phone?: string | null; notify_optout?: string[]; wa_optin?: boolean; wa_optin_at?: string | null
+  company_ids?: string[]; requested_company_id?: string | null; requested_outlet_id?: string | null
+  approved_by?: string | null; approved_by_name?: string | null; approved_by_role?: string | null; approved_at?: string | null
+  rejected_by?: string | null; rejected_by_name?: string | null; rejected_by_role?: string | null; rejected_at?: string | null; reject_reason?: string | null
 }
