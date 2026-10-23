@@ -2,7 +2,7 @@
 
 A mobile-first web app (PWA) **and Android app** for managing **foreign workers in Malaysia**: passports, PLKS work permits, FOMEMA, insurance, leave, return flight tickets, pay increments, loans, prorated exit penalties and printable checkout memos. It covers multiple business units: restaurants, convenience shops, central store, accounting, management, hotels and jewellery shops.
 
-**Live app:** https://moulisankar999.github.io/foreign-worker-manager/
+**Live app:** https://fw.sunrisebayumas.com/ (the old address https://moulisankar999.github.io/foreign-worker-manager/ redirects here)
 
 > **First time:** open the link and tap **Create account**. The **first person to create an account becomes the Super Admin**. Everyone after that waits until a Super Admin approves them in **Settings → Users**.
 
@@ -234,10 +234,10 @@ Notifications on iPhone use the same on-phone reminders as Android, so no extra 
 npm install
 npm run dev       # development
 npm run build     # production build in dist/
-npm run preview   # serve the build on http://localhost:4180/foreign-worker-manager/
+npm run preview   # serve the build on http://localhost:4180/
 ```
 
-Stack: Vite + React + TypeScript (strict), Dexie (IndexedDB, offline copy), Supabase (Postgres + RLS, Auth, Realtime, Storage, Edge Functions, pg_cron), HashRouter, and a hand-written service worker (offline cache + push) that respects the `/foreign-worker-manager/` base path.
+Stack: Vite + React + TypeScript (strict), Dexie (IndexedDB, offline copy), Supabase (Postgres + RLS, Auth, Realtime, Storage, Edge Functions, pg_cron), HashRouter, and a hand-written service worker (offline cache + push) that works relative to the base path (`/` on the custom domain).
 
 ### Backend layout (`supabase/`)
 - `migrations/001_init.sql`: `profiles` (roles), `records` (one row per worker/outlet/job/settings: `entity`, `id`, `data jsonb`, `deleted`, `client_ts`, `server_ts`), a last-write-wins trigger, RLS policies, `push_subscriptions`, `alert_log`, and the private `attachments` bucket and its policies
@@ -261,22 +261,22 @@ Every automated test runs against a separate Supabase **test** project. Each scr
 - `tests/sms-rules.test.mjs`: the SMS message rules
 - `tests/ui-smoke.test.mjs`: a browser smoke test of a build pointed at the test project with `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` The browser only uses the public project URL, the anon key and the VAPID **public** key (`src/lib/supabase.ts`).
 
-## Deploy (GitHub Pages)
-The production build is published to the `gh-pages` branch:
+## Deploy (GitHub Pages, custom domain)
+The app is served at **https://fw.sunrisebayumas.com/**. The domain is a DNS CNAME to `moulisankar999.github.io`, and HTTPS is enforced in the Pages settings. The production build is published to the `gh-pages` branch. `public/CNAME` is copied into every build, so redeploys keep the custom domain.
 ```bash
 npm run build
 cd dist && touch .nojekyll && git init -b gh-pages && git add -A && git commit -m deploy \
   && git push -f https://github.com/moulisankar999/foreign-worker-manager.git gh-pages
 ```
+Build settings (all optional; the defaults are shown):
+- `VITE_BASE=/`: the web path. Use `/foreign-worker-manager/` only if you ever go back to the github.io project address and remove `public/CNAME`.
+- `VITE_APP_PUBLIC_URL=https://fw.sunrisebayumas.com/`: the default app link for messages.
 
-### Custom domain (later)
-The base path and public link are build settings, so moving to a custom domain needs a rebuild and no code changes:
-```bash
-VITE_BASE=/ VITE_APP_PUBLIC_URL=https://fw.sunrisebayumas.com/ npm run build
-```
+Notes:
 - The manifest, service worker, push links and icons are all relative to the base path.
-- Notification links in email and WhatsApp come from **Settings → Notifications → General → App link used in messages**. Update that field after the switch. The `APP_PUBLIC_URL` function secret is an optional fallback.
-- Login uses email and password with no redirect, but also add the new domain under Supabase **Auth → URL configuration** (Site URL and Redirect URLs).
+- Links in email, SMS and WhatsApp messages use **Settings → Notifications → General → App link used in messages** (now `https://fw.sunrisebayumas.com/`). The `APP_PUBLIC_URL` function secret is an optional fallback.
+- Supabase **Auth → URL configuration** uses the custom domain as the Site URL. The Redirect URLs list both the custom domain and the old github.io address.
+- The Android/iOS apps bundle their own copy of the web app and are not affected by the domain.
 
 ## Notes
 - The penalty and leave rules are generic defaults. Check them against your employment contracts and the Malaysian Employment Act.

@@ -3,7 +3,7 @@
 // Usage:  WA_BUSINESS_ACCOUNT_ID=... WA_ACCESS_TOKEN=... node scripts/wa-templates.mjs [status|submit] [appUrl]
 // The token is read from the environment only — never put it in a file in this repo.
 import { readFileSync } from 'node:fs'
-const [action = 'status', appUrl = 'https://moulisankar999.github.io/foreign-worker-manager/'] = process.argv.slice(2)
+const [action = 'status', appUrl = 'https://fw.sunrisebayumas.com/'] = process.argv.slice(2)
 const { WA_BUSINESS_ACCOUNT_ID: waba, WA_ACCESS_TOKEN: token, WA_GRAPH_VERSION: ver = 'v26.0', WA_GRAPH_URL: host = 'https://graph.facebook.com' } = process.env
 if (!waba || !token) { console.error('Set WA_BUSINESS_ACCOUNT_ID and WA_ACCESS_TOKEN'); process.exit(1) }
 const url = `${host}/${ver}/${waba}/message_templates`

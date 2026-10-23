@@ -39,7 +39,7 @@ Deno.serve(async (req) => {
   try {
     if (action === 'submit') {
       const { data: cfg } = await db.from('app_config').select('value').eq('key', 'notifications').maybeSingle()
-      const app = (cfg?.value?.appUrl || Deno.env.get('APP_PUBLIC_URL') || 'https://moulisankar999.github.io/foreign-worker-manager/').replace(/\/?$/, '/')
+      const app = (cfg?.value?.appUrl || Deno.env.get('APP_PUBLIC_URL') || 'https://fw.sunrisebayumas.com/').replace(/\/?$/, '/')
       const have = (await status()).items
       const results: Record<string, string> = {}
       for (const t of (WA as any).templates) {
