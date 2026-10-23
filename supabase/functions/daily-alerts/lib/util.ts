@@ -44,7 +44,8 @@ export function daysBetweenInclusive(a?: string, b?: string) {
   return n === null ? 0 : n + 1
 }
 export function addMonths(s: string, months: number) {
-  const d = parseISO(s)!
+  const d = parseISO(s)
+  if (!d) return '' // missing/invalid date: no result instead of a crash
   const day = d.getDate()
   const r = new Date(d.getFullYear(), d.getMonth() + months, 1)
   const last = new Date(r.getFullYear(), r.getMonth() + 1, 0).getDate()

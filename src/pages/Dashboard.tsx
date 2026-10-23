@@ -4,6 +4,8 @@ import { BarList, Btn, Card, Chip, ColumnChart, Empty, Stat, sevTone } from '../
 import { currentBasic, isExited, isOnLeave, outletName, outstanding, ticketInfo } from '../lib/calc'
 import { useAlerts, useOutlets, useSettings, useWorkersLoaded } from '../lib/hooks'
 import { loadSampleData } from '../lib/sample'
+import { OmDashboard, WorkflowPanel } from '../components/dashExtras'
+import { useAuth } from '../lib/auth'
 import { fmtDate, fmtMonth, rm0, todayISO } from '../lib/util'
 
 export default function Dashboard() {
@@ -14,6 +16,7 @@ export default function Dashboard() {
   const alerts = useAlerts()
   const nav = useNavigate()
   const [busy, setBusy] = useState(false)
+  const { isOM, canWrite, canSeeSalary } = useAuth()
 
   const k = useMemo(() => {
     const cur = workers.filter((w) => !isExited(w))
@@ -58,7 +61,8 @@ export default function Dashboard() {
     }
   }, [workers, alerts, outlets, s])
 
-  if (loaded && workers.length === 0)
+  if (isOM) return <OmDashboard workers={workers} />
+  if (loaded && workers.length === 0 && canWrite)
     return (
       <div className="page">
         <h1>Welcome 👋</h1>
@@ -84,9 +88,10 @@ export default function Dashboard() {
           <p className="muted">{s.companyName} · {k.total} current workers{k.exited ? ` · ${k.exited} exited` : ''}</p>
         </div>
         <div className="row gap-s wrap">
-          <Btn kind="primary" icon="plus" onClick={() => nav('/workers/new')}>Add worker</Btn>
+          {canWrite && <Btn kind="primary" icon="plus" onClick={() => nav('/workers/new')}>Add worker</Btn>}
         </div>
       </div>
+      <WorkflowPanel workers={workers} />
 
       <div className="stats">
         <Stat label="Total workers" value={k.total} icon="users" onClick={() => nav('/workers')} />
@@ -97,17 +102,18 @@ export default function Dashboard() {
         <Stat label="Expiring ≤ 60 days" value={k.d60} icon="cal" tone="amber" onClick={() => nav('/alerts')} />
         <Stat label="Expiring ≤ 90 days" value={k.d90} icon="cal" tone="yellow" onClick={() => nav('/alerts')} />
         <Stat label="Flight ticket eligible" value={k.tickets} icon="plane" tone="purple" onClick={() => nav('/reports?r=tickets')} />
-        <Stat label="Outstanding loans" value={rm0(k.loans)} icon="money" tone="pink" onClick={() => nav('/reports?r=loans')} />
-        <Stat label="Monthly basic payroll" value={rm0(k.payroll)} icon="money" tone="teal" onClick={() => nav('/reports?r=payroll')} />
+        {canSeeSalary && <Stat label="Outstanding loans" value={rm0(k.loans)} icon="money" tone="pink" onClick={() => nav('/reports?r=loans')} />}
+        {canSeeSalary && <Stat label="Monthly basic payroll" value={rm0(k.payroll)} icon="money" tone="teal" onClick={() => nav('/reports?r=payroll')} />}
       </div>
 
       <div className="quick">
-        <button onClick={() => nav('/workers/new')}><span>➕</span>Add worker</button>
+        {canWrite && <button onClick={() => nav('/workers/new')}><span>➕</span>Add worker</button>}
+        <button onClick={() => nav('/requests/new')}><span>📝</span>New request</button>
         <button onClick={() => nav('/alerts')}><span>🔔</span>Alerts</button>
         <button onClick={() => nav('/reports?r=expiry')}><span>📄</span>Expiry report</button>
         <button onClick={() => nav('/reports?r=leave')}><span>🏖️</span>Leave balances</button>
         <button onClick={() => nav('/reports?r=tickets')}><span>✈️</span>Flight tickets</button>
-        <button onClick={() => nav('/settings#backup')}><span>💾</span>Backup</button>
+        <button onClick={() => nav('/reports?r=passport')}><span>🛂</span>Passport register</button>
       </div>
 
       <div className="grid2">
@@ -134,7 +140,7 @@ export default function Dashboard() {
         <Card title="By outlet"><BarList data={k.byOutlet} /></Card>
         <Card title="By status"><BarList data={k.byStatus} onClick={(l) => nav(`/workers?status=${encodeURIComponent(l)}`)} /></Card>
       </div>
-      <p className="muted small center">Data is stored only in this browser. <Link to="/settings#backup">Back up regularly</Link>. Today: {fmtDate(todayISO())}</p>
+      <p className="muted small center">Data syncs to the company cloud and stays available offline on this device. Today: {fmtDate(todayISO())}</p>
     </div>
   )
 }

@@ -98,7 +98,7 @@ export function ticketInfo(w: Worker, s: Settings): TicketInfo {
   const every = Math.max(1, s.ticketEveryMonths)
   const served = Math.max(0, monthsBetween(w.joinDate, w.exitDate || todayISO()))
   const earned = Math.floor(served / every)
-  const trips = w.leaves.filter((l) => l.type === 'Home Leave' && l.status === 'Approved' && l.ticketProvided && (l.ticketPaidBy || 'Company') !== 'Worker')
+  const trips = w.leaves.filter((l) => l.status === 'Approved' && (l.ticketFromEntitlement || (l.type === 'Home Leave' && l.ticketProvided && (l.ticketPaidBy || 'Company') !== 'Worker' && l.ticketFromEntitlement !== false)))
   const used = trips.length
   const balance = Math.max(0, earned - used)
   const lastTrip = trips.map((t) => t.from).sort().pop()
@@ -197,6 +197,18 @@ export function buildAlerts(workers: Worker[], s: Settings): Alert[] {
           if (!w.memos.some((m) => m.leaveId === l.id && m.kind === 'Home Leave Checkout')) push({ id: `nomemo-${l.id}`, category: 'Checkout memo', title: 'Checkout memo not prepared', detail: `Home leave from ${fmtDate(l.from)} (${dueText(n)})`, date: l.from, days: n, severity: 'high' })
         }
       }
+    }
+    // passport safekeeping (Passports Act 1966 s.12(1)(f))
+    const ps = w.passportSafe
+    const consent = ps?.consent || 'not_issued'
+    const custody = ps?.custody || 'with_worker'
+    if (custody === 'in_safe' && consent !== 'signed' && consent !== 'uploaded') push({ id: `ppnoconsent-${w.id}`, category: 'Passport consent', title: 'Passport in safe WITHOUT signed consent', detail: 'Return it to the worker or get the consent form signed now', days: null, severity: 'critical' })
+    else if (consent === 'pending') push({ id: `pppending-${w.id}`, category: 'Passport consent', title: 'Passport consent PENDING', detail: `Form issued ${fmtDate(ps?.issuedAt)} — collect the signed form and upload it`, days: null, severity: 'high' })
+    else if (consent === 'uploaded') push({ id: `ppverify-${w.id}`, category: 'Passport consent', title: 'Signed consent to verify', detail: 'HR Manager: check the scan and mark Signed', days: null, severity: 'medium' })
+    if (custody === 'released') {
+      const rel = [...(ps?.moves || [])].reverse().find((m) => m.kind === 'release')
+      const n = daysUntil(rel?.expectedReturn)
+      if (n !== null && n < 0 && consent === 'signed') push({ id: `ppoverdue-${w.id}`, category: 'Passport return', title: 'Passport not returned to safe', detail: `Expected back ${fmtDate(rel?.expectedReturn)} (${dueText(n)}) — worker keeps it unless he returns it voluntarily`, date: rel?.expectedReturn, days: n, severity: 'high' })
     }
     const bal = outstanding(w)
     if (bal > 0) push({ id: `loan-${w.id}`, category: 'Loan / advance', title: 'Outstanding loan / advance', detail: `${rm(bal)} balance`, days: null, severity: 'info' })

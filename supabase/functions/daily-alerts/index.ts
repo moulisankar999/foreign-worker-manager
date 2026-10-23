@@ -10,7 +10,8 @@ import { todayISO } from './lib/util.ts'
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
 const SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 const CRON_SECRET = Deno.env.get('CRON_SECRET') || ''
-webpush.setVapidDetails(Deno.env.get('VAPID_SUBJECT')!, Deno.env.get('VAPID_PUBLIC_KEY')!, Deno.env.get('VAPID_PRIVATE_KEY')!)
+const HAS_VAPID = !!(Deno.env.get('VAPID_SUBJECT') && Deno.env.get('VAPID_PUBLIC_KEY') && Deno.env.get('VAPID_PRIVATE_KEY'))
+if (HAS_VAPID) webpush.setVapidDetails(Deno.env.get('VAPID_SUBJECT')!, Deno.env.get('VAPID_PUBLIC_KEY')!, Deno.env.get('VAPID_PRIVATE_KEY')!)
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -36,6 +37,7 @@ function summary(urgent: Alert[]) {
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
+  if (!HAS_VAPID) return json({ skipped: 'push not configured (VAPID keys missing)' })
   const db = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } })
 
   // --- who is calling? ---
@@ -66,23 +68,34 @@ Deno.serve(async (req) => {
   for (const w of workers) { // tolerate partially filled records
     w.documents ||= []; w.leaves ||= []; w.loans ||= []; w.deductions ||= []; w.memos ||= []; w.increments ||= []; w.family ||= []
   }
-  const alerts = buildAlerts(workers, settings)
-  const urgent = alerts.filter((a) => a.severity === 'critical' || a.severity === 'high')
   const day = todayISO()
-  const digest = await sha(urgent.map((a) => a.id).sort().join('|'))
-  const msg = summary(urgent)
+  // alerts are scoped per user: an outlet manager only hears about workers in his outlets
+  const cache = new Map<string, { urgent: ReturnType<typeof buildAlerts>; digest: string; msg: ReturnType<typeof summary> }>()
+  const forUser = async (role: string, outlets: string[] | null) => {
+    const key = role === 'outlet_manager' ? 'om:' + [...(outlets || [])].sort().join(',') : 'all'
+    let c = cache.get(key)
+    if (!c) {
+      const ws = role === 'outlet_manager' ? workers.filter((w) => (outlets || []).includes(w.outletId)) : workers
+      const urgent = buildAlerts(ws, settings).filter((a) => a.severity === 'critical' || a.severity === 'high')
+      c = { urgent, digest: await sha(urgent.map((a) => a.id).sort().join('|')), msg: summary(urgent) }
+      cache.set(key, c)
+    }
+    return c
+  }
 
   // --- recipients: active users with a subscription ---
-  let pq = db.from('profiles').select('id').eq('status', 'active')
+  let pq = db.from('profiles').select('id,role,outlet_ids').eq('status', 'active')
   if (onlyUser) pq = pq.eq('id', onlyUser)
   const { data: users } = await pq
   const ids = (users || []).map((u) => u.id)
   const { data: subs } = ids.length ? await db.from('push_subscriptions').select('*').in('user_id', ids) : { data: [] }
 
   let sent = 0, skipped = 0, failed = 0, removed = 0
-  for (const uid of ids) {
+  for (const u of users || []) {
+    const uid = u.id
     const mine = (subs || []).filter((s) => s.user_id === uid)
     if (!mine.length) continue
+    const { urgent, digest, msg } = await forUser(u.role, u.outlet_ids)
     if (!test) {
       if (!urgent.length) { skipped++; continue } // nothing urgent: stay quiet
       const { data: already } = await db.from('alert_log').select('user_id').eq('user_id', uid).eq('day', day).eq('digest', digest).maybeSingle()
@@ -102,5 +115,5 @@ Deno.serve(async (req) => {
     }
     if (ok && !test) await db.from('alert_log').insert({ user_id: uid, day, digest })
   }
-  return json({ day, workers: workers.length, alerts: alerts.length, urgent: urgent.length, recipients: ids.length, subscriptions: subs?.length || 0, sent, skipped, failed, removed, test })
+  return json({ day, workers: workers.length, scopes: cache.size, recipients: ids.length, subscriptions: subs?.length || 0, sent, skipped, failed, removed, test })
 })

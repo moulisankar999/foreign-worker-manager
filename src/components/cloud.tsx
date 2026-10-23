@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { Btn, Card, Chip } from './ui'
 import { db } from '../lib/db'
-import { useAuth } from '../lib/auth'
+import { normRole, useAuth } from '../lib/auth'
+import { ROLES, ROLE_HELP, ROLE_LABEL } from '../lib/workflow'
 import { supabase, type Profile, type Role } from '../lib/supabase'
 import { discardLocalData, localOnlyData, syncNow, uploadLocalData, useSyncStatus, type LocalOnly } from '../lib/sync'
 import { currentSubscription, disablePush, enablePush, isIOS, isStandalone, pushSupported, sendTestPush } from '../lib/push'
@@ -58,13 +59,15 @@ export function LocalDataBanner({ compact }: { compact?: boolean }) {
 }
 
 export function AccountCard() {
-  const { session, profile, signOut } = useAuth()
+  const { session, profile, signOut, myOutlets } = useAuth()
   const s = useSyncStatus()
+  const outlets = useLiveQuery(() => db.outlets.toArray(), [], [])
+  const outletName = (id: string) => outlets.find((o) => o.id === id)?.name || id
   return (
     <Card title="Account & cloud sync">
       <dl className="kv">
         <div><dt>Signed in as</dt><dd>{profile?.full_name ? `${profile.full_name} · ` : ''}{session?.user.email}</dd></div>
-        <div><dt>Access</dt><dd><Chip tone={profile?.role === 'admin' ? 'purple' : profile?.role === 'manager' ? 'teal' : 'gray'}>{roleName(profile?.role)}</Chip></dd></div>
+        <div><dt>Access</dt><dd><Chip tone={ROLE_TONE[normRole(profile?.role) || ''] || 'gray'}>{roleName(profile?.role)}</Chip>{myOutlets.length > 0 && <small className="muted"> · outlets: {myOutlets.map((id) => outletName(id)).join(', ')}</small>}</dd></div>
         <div><dt>Sync</dt><dd>{LABEL[s.state]}{s.pending ? ` · ${s.pending} change(s) waiting` : ''}{s.lastSync ? ` · last ${new Date(s.lastSync).toLocaleTimeString()}` : ''}{s.state === 'error' && s.error ? ` — ${s.error}` : ''}</dd></div>
       </dl>
       <p className="muted small">Your data is saved in the secure cloud and shared live with your team. The app also works offline and sends changes when you are back online.</p>
@@ -80,12 +83,15 @@ export function AccountCard() {
   )
 }
 
-const roleName = (r?: string) => ({ admin: 'Admin (full control)', manager: 'Manager (add & edit)', viewer: 'Viewer (read only)' })[r || ''] || '—'
+const ROLE_TONE: Record<string, string> = { super_admin: 'purple', hr_admin: 'blue', hr_manager: 'teal', outlet_manager: 'amber', viewer: 'gray' }
+const roleName = (r?: string) => ROLE_LABEL[normRole(r) || ''] || '—'
 
 export function UsersCard() {
-  const { session } = useAuth()
+  const { session, isSuper } = useAuth()
   const [users, setUsers] = useState<Profile[]>([])
   const [err, setErr] = useState('')
+  const [open, setOpen] = useState<string | null>(null)
+  const outlets = useLiveQuery(() => db.outlets.toArray(), [], [])
   const load = async () => {
     const { data, error } = await supabase.from('profiles').select('*').order('created_at')
     if (error) setErr(error.message); else { setUsers(data as Profile[]); setErr('') }
@@ -93,31 +99,50 @@ export function UsersCard() {
   useEffect(() => { void load() }, [])
   const update = async (id: string, patch: Partial<Profile>) => {
     const { error } = await supabase.from('profiles').update(patch).eq('id', id)
-    if (error) alert(error.message.includes('at least one active admin') ? 'You need at least one active Admin.' : error.message)
+    if (error) alert(/at least one active/i.test(error.message) ? 'You need at least one active Super Admin.' : error.message.replace(/^.*?ERROR:\s*/, ''))
     await load()
   }
   const pending = users.filter((u) => u.status === 'pending')
+  const roles = ROLES.filter((r) => isSuper || (r !== 'super_admin' && r !== 'hr_admin'))
   return (
     <Card title={`Users (${users.length})`} actions={<Btn small kind="ghost" icon="upload" title="Refresh" onClick={load} />}>
-      <p className="muted small">Staff create their own account on the sign-in page (“Create account”). They appear here as <strong>Waiting</strong> — approve them and pick their access. Admin = everything incl. users · Manager = add & edit data · Viewer = read only.</p>
+      <p className="muted small">Staff create their own account on the sign-in page (“Create account”). They appear here as <strong>Waiting</strong> — approve them, pick their role and (for outlet managers) their outlets.</p>
+      <ul className="small muted role-help">{ROLES.map((r) => <li key={r}><strong>{ROLE_LABEL[r]}</strong>: {ROLE_HELP[r]}</li>)}</ul>
       {pending.length > 0 && <p className="warn small">{pending.length} person(s) waiting for approval</p>}
       {err && <p className="err">{err}</p>}
       <ul className="rows users">
-        {users.map((u) => (
-          <li key={u.id}>
-            <div className="r-main">
-              <strong>{u.full_name || u.email}{u.id === session?.user.id ? ' (you)' : ''}</strong>
-              <small>{u.email} · <Chip tone={u.status === 'active' ? 'green' : u.status === 'pending' ? 'amber' : 'gray'}>{u.status === 'pending' ? 'Waiting' : u.status === 'active' ? 'Active' : 'Switched off'}</Chip></small>
-            </div>
-            <div className="r-act">
-              <select aria-label={`Access for ${u.email}`} value={u.role} onChange={(e) => update(u.id, { role: e.target.value as Role })}>
-                <option value="admin">Admin</option><option value="manager">Manager</option><option value="viewer">Viewer</option>
-              </select>
-              {u.status !== 'active' && <Btn small kind="primary" icon="check" onClick={() => update(u.id, { status: 'active' })}>Approve</Btn>}
-              {u.status === 'active' && u.id !== session?.user.id && <Btn small kind="ghost" icon="x" onClick={() => { if (confirm(`Switch off access for ${u.email}?`)) void update(u.id, { status: 'inactive' }) }}>Deactivate</Btn>}
-            </div>
-          </li>
-        ))}
+        {users.map((u) => {
+          const role = normRole(u.role) || 'viewer'
+          const locked = !isSuper && (role === 'super_admin' || role === 'hr_admin')
+          const outs = u.outlet_ids || []
+          return (
+            <li key={u.id} className="user-row">
+              <div className="r-main">
+                <strong>{u.full_name || u.email}{u.id === session?.user.id ? ' (you)' : ''}</strong>
+                <small>{u.email} · <Chip tone={u.status === 'active' ? 'green' : u.status === 'pending' ? 'amber' : 'gray'}>{u.status === 'pending' ? 'Waiting' : u.status === 'active' ? 'Active' : 'Switched off'}</Chip> <Chip tone={ROLE_TONE[role]}>{ROLE_LABEL[role]}</Chip></small>
+                {role === 'outlet_manager' && <small className={outs.length ? 'muted' : 'warn'}>Outlets: {outs.length ? outs.map((id) => outlets.find((o) => o.id === id)?.name || id).join(', ') : 'none yet — he will see no workers'}</small>}
+              </div>
+              <div className="r-act">
+                <select aria-label={`Role for ${u.email}`} value={role} disabled={locked} onChange={(e) => update(u.id, { role: e.target.value as Role })}>
+                  {(locked ? ROLES : roles).map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
+                </select>
+                {role === 'outlet_manager' && !locked && <Btn small kind="ghost" icon="store" onClick={() => setOpen(open === u.id ? null : u.id)}>Outlets</Btn>}
+                {!locked && u.status !== 'active' && <Btn small kind="primary" icon="check" onClick={() => update(u.id, { status: 'active' })}>Approve</Btn>}
+                {!locked && u.status === 'active' && u.id !== session?.user.id && <Btn small kind="ghost" icon="x" onClick={() => { if (confirm(`Switch off access for ${u.email}?`)) void update(u.id, { status: 'inactive' }) }}>Deactivate</Btn>}
+              </div>
+              {open === u.id && (
+                <div className="outlet-pick">
+                  {outlets.length === 0 && <p className="muted small">Add outlets first (Settings → Outlets).</p>}
+                  {outlets.map((o) => (
+                    <label key={o.id} className="check">
+                      <input type="checkbox" checked={outs.includes(o.id)} onChange={(e) => update(u.id, { outlet_ids: e.target.checked ? [...outs, o.id] : outs.filter((x) => x !== o.id) })} /> {o.name}
+                    </label>
+                  ))}
+                </div>
+              )}
+            </li>
+          )
+        })}
       </ul>
     </Card>
   )

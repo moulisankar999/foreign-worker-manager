@@ -16,13 +16,24 @@ import MemoPrint from './pages/MemoPrint'
 import Login, { Pending } from './pages/Login'
 import { useAuth } from './lib/auth'
 import { LocalDataBanner, SyncPill } from './components/cloud'
+import RequestsPage, { NewRequest, RequestDetail } from './pages/Requests'
+import Inbox from './pages/Inbox'
+import More from './pages/More'
+import { DocumentLibrary } from './components/vault'
+import { useInbox } from './lib/inbox'
+import { useRequests } from './lib/requests'
+import { needsMyAction } from './lib/workflow'
+import { IS_TEST_BUILD } from './lib/supabase'
 
 const NAV = [
   { to: '/', label: 'Home', icon: 'home', end: true },
   { to: '/workers', label: 'Workers', icon: 'users' },
-  { to: '/alerts', label: 'Alerts', icon: 'bell' },
-  { to: '/reports', label: 'Reports', icon: 'chart' },
-  { to: '/settings', label: 'Settings', icon: 'gear' },
+  { to: '/requests', label: 'Requests', icon: 'check' },
+  { to: '/documents', label: 'Documents', icon: 'doc', desk: true },
+  { to: '/alerts', label: 'Alerts', icon: 'alert' },
+  { to: '/reports', label: 'Reports', icon: 'chart', desk: true },
+  { to: '/settings', label: 'Settings', icon: 'gear', desk: true },
+  { to: '/more', label: 'More', icon: 'more', mobile: true },
 ]
 
 export default function App() {
@@ -34,7 +45,11 @@ export default function App() {
 }
 
 function MainApp() {
-  const { canWrite, profile } = useAuth()
+  const { canWrite, role, session } = useAuth()
+  const inbox = useInbox()
+  const { rows: reqs } = useRequests()
+  const myReq = reqs.filter((r) => needsMyAction(r, role || '', session?.user.id || '')).length
+  const badge = (to: string) => (to === '/alerts' ? urgent : to === '/requests' ? myReq : 0)
   const alerts = useAlerts()
   const settings = useSettings()
   const urgent = alerts.filter((a) => a.severity === 'critical' || a.severity === 'high').length
@@ -61,11 +76,11 @@ function MainApp() {
           </div>
         </div>
         <nav aria-label="Main">
-          {NAV.map((n) => (
+          {NAV.filter((n) => !n.mobile).map((n) => (
             <NavLink key={n.to} to={n.to} end={n.end} className={({ isActive }) => (isActive ? 'on' : '')}>
               <Icon name={n.icon} />
               <span>{n.label === 'Home' ? 'Dashboard' : n.label}</span>
-              {n.to === '/alerts' && urgent > 0 && <span className="badge">{urgent}</span>}
+              {badge(n.to) > 0 && <span className="badge">{badge(n.to)}</span>}
             </NavLink>
           ))}
         </nav>
@@ -78,13 +93,14 @@ function MainApp() {
             <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name, ID, passport, permit no…" aria-label="Global search" />
           </form>
           <SyncPill />
-          <NavLink to="/alerts" className="top-bell" aria-label={`Alerts (${urgent} urgent)`}>
+          <NavLink to="/inbox" className="top-bell" aria-label={`Notifications (${inbox.unread} unread)`}>
             <Icon name="bell" />
-            {urgent > 0 && <span className="badge">{urgent}</span>}
+            {inbox.unread > 0 && <span className="badge">{inbox.unread}</span>}
           </NavLink>
         </header>
         <main className="content">
-          {profile?.role === 'viewer' && <p className="banner small" style={{ marginBottom: 12 }}>You have <strong>view-only</strong> access. Ask an Admin for Manager access to add or edit.</p>}
+          {IS_TEST_BUILD && <p className="banner small warn" style={{ marginBottom: 12 }}>TEST BUILD — connected to the test project, not live data.</p>}
+          {role === 'viewer' && <p className="banner small" style={{ marginBottom: 12 }}>You have <strong>view-only</strong> access. Ask your Super Admin for more access to add or edit.</p>}
           {loc.pathname === '/' && <div style={{ marginBottom: 12 }}><LocalDataBanner compact /></div>}
           <Routes>
             <Route path="/" element={<Dashboard />} />
@@ -95,16 +111,22 @@ function MainApp() {
             <Route path="/alerts" element={<Alerts />} />
             <Route path="/reports" element={<Reports />} />
             <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/requests" element={<RequestsPage />} />
+            <Route path="/requests/new" element={<NewRequest />} />
+            <Route path="/requests/:id" element={<RequestDetail />} />
+            <Route path="/documents" element={<DocumentLibrary />} />
+            <Route path="/inbox" element={<Inbox />} />
+            <Route path="/more" element={<More />} />
             <Route path="*" element={<Dashboard />} />
           </Routes>
         </main>
       </div>
       <nav className="bottom" aria-label="Main mobile">
-        {NAV.map((n) => (
+        {NAV.filter((n) => !n.desk).map((n) => (
           <NavLink key={n.to} to={n.to} end={n.end} className={({ isActive }) => (isActive ? 'on' : '')}>
             <span className="bi">
               <Icon name={n.icon} size={22} />
-              {n.to === '/alerts' && urgent > 0 && <span className="badge">{urgent}</span>}
+              {badge(n.to) > 0 && <span className="badge">{badge(n.to)}</span>}
             </span>
             <span>{n.label}</span>
           </NavLink>

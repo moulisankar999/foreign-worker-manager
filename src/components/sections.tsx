@@ -468,6 +468,21 @@ function LeaveAutoDays({ v, set, bal, t }: { v: V; set: (p: V) => void; bal: num
 }
 
 /* ---------------- Memos ---------------- */
+const MEMO_CAT: Record<MemoRec['kind'], string> = { 'Home Leave Checkout': 'Checkout memo', 'Return from Leave': 'Return memo', 'Exit Clearance': 'Exit clearance memo' }
+/** Each save stores a PDF copy in the worker's document vault (new version of the same memo). Best effort: offline or local-only use just skips it. */
+async function saveMemoToVault(w: Worker, m: MemoRec) {
+  try {
+    if (!navigator.onLine) return
+    const [{ memoPdf }, { uploadDoc }, { db }, { supabase }] = await Promise.all([import('../lib/passport'), import('../lib/vault'), import('../lib/db'), import('../lib/supabase')])
+    if (!(await supabase.auth.getSession()).data.session) return
+    const outlets = await db.outlets.toArray()
+    const s = await db.settings.get('app')
+    const blob = await memoPdf(w, m, outlets, s?.companyName || 'Company')
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(m.id)
+    await uploadDoc({ workerId: w.id, category: MEMO_CAT[m.kind], title: `${m.kind} memo ${m.date}`, issueDate: m.date, groupId: isUuid ? m.id : undefined, source: 'memo' }, { blob, name: `${m.kind.replace(/\s+/g, '-').toLowerCase()}-${w.workerNo}-${m.date}.pdf`, pages: 1 })
+  } catch (e) { console.warn('Memo PDF not saved to vault', e) }
+}
+
 export function MemoEditor({ w, init, onClose }: { w: Worker; init: Partial<MemoRec>; onClose: () => void }) {
   const nav = useNavigate()
   const kind = init.kind || 'Home Leave Checkout'
@@ -479,6 +494,7 @@ export function MemoEditor({ w, init, onClose }: { w: Worker; init: Partial<Memo
   const save = async (print: boolean) => {
     await upd(w, (x) => { x.memos = x.memos.some((y) => y.id === m.id) ? x.memos.map((y) => (y.id === m.id ? m : y)) : [...x.memos, m] })
     onClose()
+    void saveMemoToVault(w, m)
     if (print) nav(`/print/memo/${w.id}/${m.id}`)
   }
   return (

@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom'
 import { Btn, Card, Chip, FormModal, type FieldDef } from '../components/ui'
 import { db, exportBackup, importBackup } from '../lib/db'
 import { AccountCard, PhoneAlertsCard, UsersCard } from '../components/cloud'
+import { ApprovalRulesCard, AuditCard, EmergencyReasonsCard, HrFlagsCard, MyAlertsCard, NotificationsCard, PassportSettingsCard, VaultSettingsCard } from '../components/adminSettings'
 import { useAuth } from '../lib/auth'
 import { clearDeviceCopy, syncNow } from '../lib/sync'
 import { buildAlerts } from '../lib/calc'
@@ -23,7 +24,7 @@ export default function SettingsPage() {
   const jobs = useJobs()
   const workers = useWorkers()
   const loc = useLocation()
-  const { canWrite, isAdmin } = useAuth()
+  const { canWrite, isAdmin, isHr, isSuper } = useAuth()
   const [policy, setPolicy] = useState(false)
   const [outlet, setOutlet] = useState<V | null>(null)
   const [job, setJob] = useState<V | null>(null)
@@ -73,7 +74,15 @@ export default function SettingsPage() {
 
       <AccountCard />
       <PhoneAlertsCard />
+      <MyAlertsCard />
       {isAdmin && <UsersCard />}
+      {isSuper && <NotificationsCard />}
+      {isHr && <ApprovalRulesCard />}
+      {isSuper && <HrFlagsCard />}
+      {isHr && <EmergencyReasonsCard />}
+      {isHr && <PassportSettingsCard />}
+      {isHr && <VaultSettingsCard />}
+      <AuditCard />
 
       <Card title="Company & policy" actions={canWrite && <Btn small icon="edit" onClick={() => setPolicy(true)}>Edit</Btn>}>
         <dl className="kv">

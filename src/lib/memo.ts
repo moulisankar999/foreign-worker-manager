@@ -11,7 +11,7 @@ export function defaultChecklist(kind: MemoRec['kind']): ChecklistItem[] {
       'Outstanding loan / advance settled or deducted',
       'Final salary computed and paid',
       'Prorated early-termination penalty applied (if any)',
-      'Passport with worker (returned / in worker custody)',
+      'Passport returned to worker (kept by worker or company safe (with consent))',
       'Return flight ticket booked',
       'Work permit / PLKS cancellation submitted (Immigration / FWCMS)',
       'Levy refund / cancellation processed',
@@ -24,7 +24,7 @@ export function defaultChecklist(kind: MemoRec['kind']): ChecklistItem[] {
   if (kind === 'Return from Leave')
     return items([
       'Reported back to work on date',
-      'Passport sighted (remains with worker)',
+      'Passport sighted — worker or company safe (with consent)',
       'Work permit still valid',
       'FOMEMA / insurance still valid',
       'Accommodation re-assigned',
@@ -36,7 +36,7 @@ export function defaultChecklist(kind: MemoRec['kind']): ChecklistItem[] {
     'Leave approved by manager',
     'Return flight ticket booked (to & from)',
     'Return date confirmed with worker',
-    'Passport with worker for travel',
+    'Passport with worker for travel (released from safe if kept with consent)',
     'Work permit valid beyond return date',
     'FOMEMA / insurance valid beyond return date',
     'Salary paid up to last working day',

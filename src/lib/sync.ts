@@ -1,4 +1,6 @@
 /* Offline-first two-way sync between Dexie (this device) and Supabase `records` (cloud).
+ * All reads/writes go through security-definer RPCs (pull_records / push_records), so the server decides
+ * what each role may see (outlet managers: only their outlets' workers, no salary data) and change.
  * - Every local change to workers/outlets/jobs/settings is tracked in a small "dirty" list (localStorage).
  * - push(): uploads dirty rows (last-write-wins on client_ts, enforced by a DB trigger).
  * - pull(): downloads rows changed since the last cursor (server_ts) and applies them locally.
@@ -11,8 +13,9 @@ import { supabase } from './supabase'
 import { isNative, openExternal, shareFile } from './platform'
 import { type DocRec, type Worker } from './types'
 
-export type Entity = 'workers' | 'outlets' | 'jobs' | 'settings'
-export const ENTITIES: Entity[] = ['workers', 'outlets', 'jobs', 'settings']
+export type Entity = 'workers' | 'outlets' | 'jobs' | 'settings' | 'remarks'
+export const ENTITIES: Entity[] = ['workers', 'outlets', 'jobs', 'settings', 'remarks']
+const MASTER: Entity[] = ['workers', 'outlets', 'jobs', 'settings']
 const DIRTY = 'fwm-dirty'
 const CURSOR = 'fwm-cursor'
 const SYNC_USER = 'fwm-sync-user'
@@ -23,6 +26,7 @@ export interface SyncStatus { state: SyncState; pending: number; lastSync?: stri
 
 let active = false
 let canWrite = false
+let canRemark = false
 let pushing = false
 let pulling: Promise<void> | null = null
 let pushTimer: ReturnType<typeof setTimeout> | undefined
@@ -54,7 +58,7 @@ const splitKey = (k: string) => { const i = k.indexOf(':'); return [k.slice(0, i
 
 /** Run local writes that came FROM the cloud (they must not be pushed back). */
 export async function remoteTx(fn: () => Promise<void>) {
-  await db.transaction('rw', [db.workers, db.outlets, db.jobs, db.settings, db.synced], async () => {
+  await db.transaction('rw', [db.workers, db.outlets, db.jobs, db.settings, db.remarks, db.synced], async () => {
     (Dexie.currentTransaction as unknown as { __remote?: boolean }).__remote = true
     await fn()
   })
@@ -63,7 +67,7 @@ export async function remoteTx(fn: () => Promise<void>) {
 function track(e: Entity, id: unknown) {
   const tx = Dexie.currentTransaction as unknown as { __remote?: boolean } | null
   if (tx?.__remote || !active) return
-  if (!canWrite) throw new Error('View-only access: your account cannot change data. Ask an admin for Manager access.')
+  if (e === 'remarks' ? !canRemark : !canWrite) throw new Error('View-only access: your role cannot change this. Raise a request instead.')
   dirty[keyOf(e, id)] = new Date().toISOString()
   saveDirty()
   schedulePush()
@@ -169,6 +173,14 @@ export async function openAttachment(a: NonNullable<DocRec['attachment']>) {
 
 /* ---------- Pull / apply ---------- */
 interface Row { entity: Entity; id: string; data: Record<string, unknown>; deleted: boolean; client_ts: string; server_ts: string }
+/** roles without salary access get worker rows without pay fields: keep the shape the app expects */
+function normWorker(d: Record<string, unknown>): Worker {
+  const arr = ['documents', 'family', 'increments', 'allowances', 'loans', 'deductions', 'leaves', 'memos', 'notes', 'statusHistory']
+  const w = { ...d } as Record<string, unknown>
+  for (const k of arr) if (!Array.isArray(w[k])) w[k] = []
+  if (typeof w.initialBasicPay !== 'number') w.initialBasicPay = 0
+  return w as unknown as Worker
+}
 
 async function applyRows(rows: Row[]) {
   if (!rows.length) return
@@ -188,8 +200,8 @@ async function applyRows(rows: Row[]) {
       if (kn && kn.ts >= ts) continue // already have this version
       const t = db.table(r.entity)
       if (r.deleted) await t.delete(r.id)
-      else if (r.entity === 'workers') await t.put(mergeLocalAttachments(r.data as unknown as Worker, await db.workers.get(r.id)))
-      else await t.put(r.data)
+      else if (r.entity === 'workers') await t.put(mergeLocalAttachments(normWorker(r.data), await db.workers.get(r.id)))
+      else await t.put({ ...(r.data as object), id: (r.data as { id?: string })?.id || r.id }) // row id is authoritative
       await db.synced.put({ key: k, ts })
     }
   })
@@ -205,9 +217,9 @@ export function pull(): Promise<void> {
     // small overlap protects against rows committed slightly out of order
     let cursor = saved ? new Date(ms(saved) - 30000).toISOString() : '1970-01-01T00:00:00Z'
     for (;;) {
-      const { data, error } = await supabase.from('records').select('entity,id,data,deleted,client_ts,server_ts').gt('server_ts', cursor).order('server_ts').limit(500)
+      const { data, error } = await supabase.rpc('pull_records', { p_since: cursor, p_limit: 500 })
       if (error) throw error
-      await applyRows(data as Row[])
+      await applyRows((data || []) as Row[])
       if (data.length) {
         cursor = data[data.length - 1].server_ts
         if (!saved || ms(cursor) > ms(saved)) localStorage.setItem(CURSOR, cursor)
@@ -221,7 +233,7 @@ export function pull(): Promise<void> {
 
 /* ---------- Push ---------- */
 export async function push() {
-  if (!active || !canWrite || pushing) return
+  if (!active || !(canWrite || canRemark) || pushing) return
   const keys = Object.keys(dirty)
   if (!keys.length) return
   pushing = true
@@ -241,11 +253,21 @@ export async function push() {
         sent[k] = ts
       }
       if (!rows.length) continue
-      const { error } = await supabase.from('records').upsert(rows, { onConflict: 'entity,id' })
+      const { data, error } = await supabase.rpc('push_records', { p_rows: rows })
       if (error) throw error
-      await db.synced.bulkPut(Object.entries(sent).map(([key, ts]) => ({ key, ts: ms(ts) })))
+      const rejected = ((data as { rejected?: { entity: string; id: string; reason: string }[] })?.rejected || [])
+      const bad = new Set(rejected.map((x) => keyOf(x.entity, x.id)))
+      await db.synced.bulkPut(Object.entries(sent).filter(([k]) => !bad.has(k)).map(([key, ts]) => ({ key, ts: ms(ts) })))
+      // rejected (no permission / not your outlet): drop the local change and take the cloud copy again
       for (const [k, ts] of Object.entries(sent)) if (dirty[k] === ts) delete dirty[k]
       saveDirty()
+      if (rejected.length) {
+        await db.synced.bulkDelete([...bad])
+        lastRejected = rejected
+        setStatus({ error: `${rejected.length} change(s) refused: ${rejected[0].reason}` })
+        localStorage.removeItem(CURSOR)
+        schedulePull(200)
+      }
     }
     setStatus({ state: Object.keys(dirty).length ? 'syncing' : 'synced', lastSync: new Date().toISOString(), error: undefined })
   } finally {
@@ -253,6 +275,9 @@ export async function push() {
   }
   if (Object.keys(dirty).length) schedulePush(1500)
 }
+
+let lastRejected: { entity: string; id: string; reason: string }[] = []
+export const rejectedChanges = () => lastRejected
 
 export async function syncNow() {
   if (!active) return
@@ -270,16 +295,17 @@ async function reconcile() {
   if (!active || !canWrite) return
   const server = new Set<string>()
   for (let from = 0; ; from += 1000) {
-    const { data, error } = await supabase.from('records').select('entity,id').order('entity').order('id').range(from, from + 999)
+    const { data, error } = await supabase.rpc('record_keys').order('entity').order('id').range(from, from + 999)
     if (error) throw error
-    data.forEach((r) => server.add(keyOf(r.entity, r.id)))
-    if (data.length < 1000) break
+    const keys = (data || []) as unknown as { entity: string; id: string }[]
+    keys.forEach((r) => server.add(keyOf(r.entity, r.id)))
+    if (keys.length < 1000) break
   }
   // only rows that were synced before (never auto-upload pre-cloud local data)
   const syncedKeys = new Set((await db.synced.toCollection().primaryKeys()) as string[])
   const now = new Date().toISOString()
   let n = 0
-  for (const e of ENTITIES) {
+  for (const e of MASTER) {
     const ids = (await db.table(e).toCollection().primaryKeys()) as string[]
     for (const id of ids) {
       const k = keyOf(e, id)
@@ -300,13 +326,27 @@ async function seedJobsIfEmpty() {
 const onOnline = () => { void syncNow() }
 const onVisible = () => { if (document.visibilityState === 'visible') void syncNow() }
 
-export async function startSync(userId: string, role: string) {
+export async function startSync(userId: string, role: string, outlets = '') {
   if (active) stopSync()
-  canWrite = role === 'admin' || role === 'manager'
-  if (localStorage.getItem(SYNC_USER) !== userId) {
-    // different account on this device: download everything again
+  canWrite = ['super_admin', 'hr_admin', 'hr_manager', 'admin', 'manager'].includes(role)
+  canRemark = canWrite || role === 'outlet_manager'
+  const scope = `${userId}|${role}|${outlets}`
+  const prev = localStorage.getItem(SYNC_USER)
+  if (prev !== scope) {
+    // different account, role or outlets on this device: what this user may see changed → download again
     localStorage.removeItem(CURSOR)
-    localStorage.setItem(SYNC_USER, userId)
+    localStorage.setItem(SYNC_USER, scope)
+    if (prev && prev.split('|')[0] === userId) {
+      await remoteTx(async () => {
+        const keep = new Set(Object.keys(dirty))
+        await db.synced.where('key').startsWith('workers:').delete()
+        await db.synced.where('key').startsWith('remarks:').delete()
+        for (const e of ['workers', 'remarks'] as Entity[]) {
+          const ids = ((await db.table(e).toCollection().primaryKeys()) as string[]).filter((id) => !keep.has(keyOf(e, id)))
+          await db.table(e).bulkDelete(ids)
+        }
+      })
+    }
   }
   active = true
   setStatus({ state: navigator.onLine ? 'syncing' : 'offline' })
@@ -315,7 +355,7 @@ export async function startSync(userId: string, role: string) {
   interval = setInterval(() => { void syncNow() }, 60000)
   channel = supabase
     .channel('records-live')
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'records' }, () => schedulePull())
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'sync_ticks' }, () => schedulePull())
     .subscribe((st) => { if (st === 'SUBSCRIBED') schedulePull(0) })
   if (navigator.onLine) {
     try {
@@ -339,7 +379,7 @@ export function stopSync() {
 /** Wipe this device's copy (cloud data is untouched). */
 export async function clearDeviceCopy() {
   await remoteTx(async () => {
-    await Promise.all([db.workers.clear(), db.outlets.clear(), db.jobs.clear(), db.settings.clear(), db.synced.clear()])
+    await Promise.all([db.workers.clear(), db.outlets.clear(), db.jobs.clear(), db.settings.clear(), db.remarks.clear(), db.synced.clear()])
   })
   dirty = {}
   saveDirty()
@@ -362,7 +402,7 @@ export async function localOnlyData(): Promise<LocalOnly> {
   return { workers, outlets, jobs, dupJobs, settings }
 }
 export async function uploadLocalData() {
-  if (!canWrite) throw new Error('Only Admin or Manager can upload data')
+  if (!canWrite) throw new Error('Only HR staff can upload data')
   const lo = await localOnlyData()
   const now = new Date().toISOString()
   const workers = await db.workers.bulkGet(lo.workers)

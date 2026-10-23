@@ -48,9 +48,11 @@ const all = iae
 const R = (label: string, group: string, recipients: Recipient[], channels: EventRule['channels'], title: string, sms: string, extra: Partial<EventRule> = {}): EventRule =>
   ({ label, group, critical: false, enabled: true, recipients, channels, worker: {}, title, sms, ...extra })
 export const NOTIFY_VARS = ['worker', 'workerNo', 'outlet', 'type', 'ref', 'status', 'by', 'comment', 'title', 'days', 'doc', 'date', 'link', 'company', 'count']
+// same expression as src/lib/appUrl.ts (kept import-free so node tests can load this file directly)
+const APP_PUBLIC_URL: string = (import.meta.env?.VITE_APP_PUBLIC_URL || 'https://moulisankar999.github.io/foreign-worker-manager/').replace(/\/?$/, '/')
 export const DEFAULT_NOTIFY: NotifyConfig = {
   enabled: { in_app: true, push: true, email: false, sms: false, whatsapp: false },
-  appUrl: 'https://moulisankar999.github.io/foreign-worker-manager/',
+  appUrl: APP_PUBLIC_URL,
   smsSender: 'FWM',
   email: { fromName: 'FW Manager', fromEmail: '' },
   quietHours: { enabled: true, start: '22:00', end: '07:00' },

@@ -6,17 +6,46 @@ import { matchesQuery } from './Workers'
 import { allowancesTotal, currentBasic, currentDocs, docStatus, isExited, latestDoc, leaveBalances, loanBalance, minContractEnd, outletName, proratedPenalty, sortedIncrements, ticketInfo } from '../lib/calc'
 import { useOutlets, useSettings, useWorkers } from '../lib/hooks'
 import { BUSINESS_TYPES, NATIONALITIES, type Outlet, type Settings, type Worker } from '../lib/types'
+import { useAuth } from '../lib/auth'
+import { updateWorker } from '../lib/db'
+import { useConfig } from '../lib/config'
+import { CONSENT_LABEL, CUSTODY_LABEL, consentPdf, consentOf, custodyOf, lastRelease, overdueDays, passportOf } from '../lib/passport'
+import { proofDue, proofState, refNo, useRequests } from '../lib/requests'
+import { STATUS_LABEL, type EmergencyReason, type RequestRow } from '../lib/workflow'
 import { daysUntil, download, fmtDate, monthsBetween, rm, serviceText, toCSV, todayISO } from '../lib/util'
 
 type Fmt = 'date' | 'rm' | 'num' | 'text'
 interface Col { key: string; label: string; fmt?: Fmt }
 type Row = Record<string, string | number | undefined> & { _wid?: string }
-interface Report { id: string; name: string; desc: string; cols: Col[]; rows: (ws: Worker[], o: Outlet[], s: Settings, opt: { within: string }) => Row[]; scope?: 'all' | 'current' }
+interface Report { id: string; name: string; desc: string; cols: Col[]; rows: (ws: Worker[], o: Outlet[], s: Settings, opt: { within: string; reqs: RequestRow[]; reasons: EmergencyReason[] }) => Row[]; scope?: 'all' | 'current' }
 
 const base = (w: Worker, o: Outlet[]) => ({ _wid: w.id, id: w.workerNo, name: w.fullName, outlet: outletName(o, w.outletId) })
 const WC: Col[] = [{ key: 'id', label: 'ID' }, { key: 'name', label: 'Worker' }, { key: 'outlet', label: 'Outlet' }]
 
+const PAY_REPORTS = ['loans', 'deductions', 'increments', 'payroll', 'exits']
 const REPORTS: Report[] = [
+  {
+    id: 'passport', name: 'Passport consent & custody', desc: 'Passports Act 1966 s.12(1)(f) — safekeeping consent status and where each passport is (worker or company safe with consent)', scope: 'current',
+    cols: [...WC, { key: 'pp', label: 'Passport' }, { key: 'ppx', label: 'Expiry', fmt: 'date' }, { key: 'consent', label: 'Consent' }, { key: 'issued', label: 'Form issued', fmt: 'date' }, { key: 'signed', label: 'Signed', fmt: 'date' }, { key: 'custody', label: 'Passport is' }, { key: 'rel', label: 'Released', fmt: 'date' }, { key: 'exp', label: 'Expected back', fmt: 'date' }, { key: 'od', label: 'Days overdue', fmt: 'num' }],
+    rows: (ws, o) => ws.map((w) => { const p = passportOf(w); const c = consentOf(w); const cu = custodyOf(w); const lr = cu === 'released' ? lastRelease(w) : undefined
+      return { ...base(w, o), pp: p.no, ppx: p.expiry, consent: CONSENT_LABEL[c], _c: c, issued: w.passportSafe?.issuedAt, signed: w.passportSafe?.signedAt, custody: CUSTODY_LABEL[cu], rel: lr?.date, exp: lr?.expectedReturn, od: overdueDays(w) || undefined } })
+      .sort((a, b) => ['pending', 'uploaded', 'not_issued', 'withdrawn', 'signed'].indexOf(String(a._c)) - ['pending', 'uploaded', 'not_issued', 'withdrawn', 'signed'].indexOf(String(b._c))),
+  },
+  {
+    id: 'passmoves', name: 'Passport movement register', desc: 'Every deposit, release and return of a passport, with reason and who handled it',
+    cols: [...WC, { key: 'date', label: 'Date', fmt: 'date' }, { key: 'kind', label: 'Movement' }, { key: 'reason', label: 'Reason' }, { key: 'exp', label: 'Expected back', fmt: 'date' }, { key: 'by', label: 'By' }],
+    rows: (ws, o) => ws.flatMap((w) => (w.passportSafe?.moves || []).map((m) => ({ ...base(w, o), date: m.date, kind: m.kind === 'release' ? 'Released to worker' : m.kind === 'deposit' ? 'Deposited in safe' : 'Returned to safe', reason: m.reason, exp: m.expectedReturn, by: m.by }))).sort((a, b) => String(b.date).localeCompare(String(a.date))),
+  },
+  {
+    id: 'emergency', name: 'Emergency leave', desc: 'Emergency leave requests with reason, family member, ticket and proof status',
+    cols: [...WC, { key: 'ref', label: 'Ref' }, { key: 'from', label: 'From', fmt: 'date' }, { key: 'to', label: 'To', fmt: 'date' }, { key: 'reason', label: 'Reason' }, { key: 'rel', label: 'Family member' }, { key: 'proof', label: 'Proof' }, { key: 'due', label: 'Proof due', fmt: 'date' }, { key: 'ticket', label: 'Ticket' }, { key: 'cost', label: 'Ticket cost', fmt: 'rm' }, { key: 'dec', label: 'Ticket decision' }, { key: 'status', label: 'Status' }],
+    rows: (ws, o, _s, { reqs, reasons }) => reqs.filter((r) => r.type === 'emergency_leave').flatMap((r) => {
+      const w = ws.find((x) => x.id === r.worker_id); if (!w) return []
+      const days = Number(r.data.proofDays) || reasons.find((x) => x.key === r.data.reasonKey)?.proofDays || 14
+      const ps = proofState(r, r.data.proofReceived ? 1 : 0, days)
+      return [{ ...base(w, o), ref: refNo(r), from: String(r.data.from || ''), to: String(r.data.to || ''), reason: String(r.data.reasonLabel || r.data.reasonKey || ''), rel: String(r.data.relationship || ''), proof: ps === 'pending' ? 'proof pending' : ps, due: ps === 'pending' || ps === 'overdue' ? proofDue(r, days) : undefined, ticket: r.data.ticketBooked ? 'Attached' : 'Missing', cost: Number(r.data.ticketCost) || undefined, dec: String(r.result?.ticketDecision || '').replace('_', ' '), status: STATUS_LABEL[r.status] }]
+    }),
+  },
   {
     id: 'expiry', name: 'Expiry report', desc: 'Latest passport, permit, FOMEMA, insurance & other document expiries', scope: 'current',
     cols: [...WC, { key: 'doc', label: 'Document' }, { key: 'no', label: 'Number' }, { key: 'exp', label: 'Expiry', fmt: 'date' }, { key: 'days', label: 'Days left', fmt: 'num' }, { key: 'st', label: 'Status' }],
@@ -104,9 +133,13 @@ export default function Reports() {
   const ws = useWorkers()
   const outlets = useOutlets()
   const s = useSettings()
+  const { canSeeSalary, canWrite, profile } = useAuth()
+  const { rows: reqs } = useRequests()
+  const reasons = useConfig().emergency_reasons
+  const list = REPORTS.filter((r) => canSeeSalary || !PAY_REPORTS.includes(r.id))
   const [sp, setSp] = useSearchParams()
   const rid = sp.get('r') || 'expiry'
-  const rep = REPORTS.find((r) => r.id === rid) || REPORTS[0]
+  const rep = list.find((r) => r.id === rid) || list.find((r) => r.id === 'expiry')!
   const [outlet, setOutlet] = useState('')
   const [type, setType] = useState('')
   const [nat, setNat] = useState('')
@@ -118,7 +151,7 @@ export default function Reports() {
   const rows = useMemo(() => {
     const sc = scope || rep.scope || 'all'
     const filtered = ws.filter((w) => (!outlet || w.outletId === outlet) && (!type || w.businessType === type) && (!nat || w.nationality === nat) && (sc === 'all' || (sc === 'current' ? !isExited(w) : isExited(w))) && matchesQuery(w, q, outletName(outlets, w.outletId)))
-    const r = rep.rows(filtered, outlets, s, { within })
+    const r = rep.rows(filtered, outlets, s, { within, reqs, reasons })
     if (!sort) return r
     return [...r].sort((a, b) => {
       if (a.outlet === 'TOTAL') return 1
@@ -126,7 +159,7 @@ export default function Reports() {
       const x = a[sort.k], y = b[sort.k]
       return (typeof x === 'number' && typeof y === 'number' ? x - y : String(x ?? '').localeCompare(String(y ?? ''), undefined, { numeric: true })) * sort.d
     })
-  }, [ws, outlets, s, rep, outlet, type, nat, scope, q, within, sort])
+  }, [ws, outlets, s, rep, outlet, type, nat, scope, q, within, sort, reqs, reasons])
 
   const csv = () => download(`${rep.id}-${todayISO()}.csv`, toCSV(rows.map((r) => Object.fromEntries(rep.cols.map((c) => [c.label, c.fmt === 'date' ? (r[c.key] ? fmtDate(String(r[c.key])) : '') : c.fmt === 'rm' && r[c.key] !== undefined ? Number(r[c.key]).toFixed(2) : r[c.key] ?? '']))), rep.cols.map((c) => c.label)), 'text/csv')
   const totals = rep.cols.filter((c) => c.fmt === 'rm' && rep.id !== 'payroll').map((c) => [c.label, rows.reduce((a, r) => a + Number(r[c.key] || 0), 0)] as const)
@@ -137,7 +170,7 @@ export default function Reports() {
         <div><h1>Reports</h1><p className="muted">Filter, sort (tap a column), print or export CSV</p></div>
       </div>
       <div className="rep-tabs no-print">
-        {REPORTS.map((r) => <button key={r.id} className={r.id === rep.id ? 'on' : ''} onClick={() => { setSp({ r: r.id }, { replace: true }); setSort(null) }}>{r.name}</button>)}
+        {list.map((r) => <button key={r.id} className={r.id === rep.id ? 'on' : ''} onClick={() => { setSp({ r: r.id }, { replace: true }); setSort(null) }}>{r.name}</button>)}
       </div>
       <Toolbar>
         <div className="search no-print"><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filter workers…" aria-label="Filter workers" /></div>
@@ -157,6 +190,17 @@ export default function Reports() {
           </label>
         )}
         <span className="spacer" />
+        {rep.id === 'passport' && canWrite && <Btn small icon="doc" onClick={async () => {
+          const ids = new Set(rows.map((r) => r._wid))
+          const target = ws.filter((w) => ids.has(w.id) && consentOf(w) !== 'signed')
+          if (!target.length) return alert('Everyone in this list has signed consent.')
+          if (!confirm(`Create bilingual consent forms for ${target.length} workers (not yet signed)? Workers not yet issued a form are marked “Pending”.`)) return
+          try {
+            download(`passport-consent-forms-${todayISO()}.pdf`, await consentPdf(target, outlets, s.companyName), 'application/pdf')
+            const by = profile?.full_name || profile?.email || 'HR'
+            for (const w of target) if (consentOf(w) === 'not_issued' || consentOf(w) === 'withdrawn') await updateWorker(w.id, (x) => { x.passportSafe = { ...(x.passportSafe || { consent: 'not_issued' }), consent: 'pending', issuedAt: todayISO(), issuedBy: by } })
+          } catch (e) { alert((e as Error).message) }
+        }}>Bulk consent forms</Btn>}
         <Btn small icon="print" onClick={() => printPage()}>Print</Btn>
         <Btn small kind="primary" icon="download" onClick={csv}>CSV</Btn>
       </Toolbar>
@@ -177,7 +221,7 @@ export default function Reports() {
                 <tr key={i} className={r.outlet === 'TOTAL' ? 'tot' : ''}>
                   {rep.cols.map((c) => (
                     <td key={c.key} className={c.fmt === 'rm' || c.fmt === 'num' ? 'num' : ''}>
-                      {c.key === 'name' && r._wid ? <Link to={`/workers/${r._wid}`}>{show(r[c.key])}</Link> : c.key === 'st' || c.key === 'days' ? <span className={c.key === 'days' && Number(r.days) < 0 ? 'neg' : r.st === 'Expired' ? 'neg' : r.st === 'Expiring soon' ? 'warn-t' : ''}>{show(r[c.key], c.fmt)}</span> : show(r[c.key], c.fmt)}
+                      {c.key === 'name' && r._wid ? <Link to={`/workers/${r._wid}`}>{show(r[c.key])}</Link> : c.key === 'st' || c.key === 'days' || c.key === 'consent' || c.key === 'proof' || c.key === 'od' ? <span className={(c.key === 'days' && Number(r.days) < 0) || r.st === 'Expired' || (c.key === 'consent' && r._c === 'pending') || (c.key === 'proof' && r.proof === 'overdue') || c.key === 'od' ? 'neg' : r.st === 'Expiring soon' || (c.key === 'proof' && r.proof === 'proof pending') ? 'warn-t' : ''}>{show(r[c.key], c.fmt)}</span> : show(r[c.key], c.fmt)}
                     </td>
                   ))}
                 </tr>

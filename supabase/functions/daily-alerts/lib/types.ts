@@ -36,6 +36,11 @@ export interface LeaveRec {
   id: string; type: string; from: string; to: string; days: number; status: string; approvedBy?: string; remarks?: string
   appliedOn?: string; returned?: boolean; returnedOn?: string
   ticketProvided?: boolean; ticketDetails?: string; ticketCost?: number; ticketPaidBy?: string
+  /** counts against the worker's company return-ticket entitlement (home leave, or emergency leave when HR decides so) */
+  ticketFromEntitlement?: boolean
+  requestId?: string; ticketDocId?: string; ticketStatus?: 'needed' | 'booked'
+  emergencyReason?: string; relationship?: string; proofStatus?: 'pending' | 'received' | 'waived'
+  ticketDecision?: 'reimburse' | 'entitlement' | 'worker_pays'
 }
 export interface ChecklistItem { label: string; done: boolean; remarks?: string }
 export interface MemoRec {
@@ -87,8 +92,30 @@ export interface Worker {
   memos: MemoRec[]
   notes: NoteRec[]
   exitDate?: string
+  passportSafe?: PassportSafe
+  waOptIn?: boolean // worker agreed to WhatsApp messages (consent form / onboarding)
+  waOptInAt?: string
+  waOptOutVia?: string
   createdAt: string
   updatedAt: string
+}
+
+/** Remark on a worker by an outlet manager / HR (a separate synced record so outlet managers can add them without editing the worker). */
+export interface Remark { id: string; workerId: string; text: string; kind?: 'remark' | 'performance' | 'incident' | 'praise'; at: string; by?: string; byId?: string; byRole?: string }
+
+export type ConsentStatus = 'not_issued' | 'pending' | 'uploaded' | 'signed' | 'withdrawn'
+export interface PassportMove {
+  id: string; kind: 'deposit' | 'release' | 'return'; date: string; by?: string; reason?: string; expectedReturn?: string
+  requestId?: string; slipDocId?: string; remarks?: string
+}
+/** Voluntary passport safekeeping (Passports Act 1966 s.12(1)(f): employers may not withhold a passport without consent). */
+export interface PassportSafe {
+  consent: ConsentStatus
+  issuedAt?: string; issuedBy?: string
+  uploadedAt?: string; uploadedBy?: string; consentDocId?: string
+  signedAt?: string; verifiedBy?: string; withdrawnAt?: string; withdrawnReason?: string
+  custody?: 'with_worker' | 'in_safe' | 'released'
+  moves?: PassportMove[]
 }
 
 export interface Outlet { id: string; name: string; type: BusinessType; address?: string; manager?: string }

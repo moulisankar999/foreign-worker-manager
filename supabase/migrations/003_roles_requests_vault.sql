@@ -396,6 +396,8 @@ begin
   if lvl not in ('hr_manager','hr_admin','super_admin') then lvl := 'hr_admin'; end if;
   lim := nullif(t->>'limit', '')::numeric;
   if lvl = 'hr_admin' and lim is not null and p_amount is not null and p_amount > lim then lvl := 'super_admin'; end if;
+  -- company rule: loans and salary increments always need the Super Admin
+  if p_type in ('loan', 'salary_increment') then lvl := 'super_admin'; end if;
   return lvl;
 end $$;
 

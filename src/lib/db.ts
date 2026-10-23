@@ -1,5 +1,5 @@
 import Dexie, { type Table } from 'dexie'
-import { BUSINESS_TYPES, DEFAULT_JOBS, DEFAULT_SETTINGS, type JobCategory, type Outlet, type Settings, type Worker } from './types'
+import { BUSINESS_TYPES, DEFAULT_JOBS, DEFAULT_SETTINGS, type JobCategory, type Outlet, type Remark, type Settings, type Worker } from './types'
 import { uid } from './util'
 
 class FwmDB extends Dexie {
@@ -8,6 +8,7 @@ class FwmDB extends Dexie {
   jobs!: Table<JobCategory, string>
   settings!: Table<Settings, string>
   synced!: Table<{ key: string; ts: number }, string>
+  remarks!: Table<Remark, string>
   constructor() {
     super('foreign-worker-manager')
     this.version(1).stores({
@@ -18,6 +19,8 @@ class FwmDB extends Dexie {
     })
     // v2: remembers which records (and which version) came from / went to the cloud
     this.version(2).stores({ synced: 'key' })
+    // v3: outlet-manager remarks on workers (synced like workers)
+    this.version(3).stores({ remarks: 'id, workerId, at' })
   }
 }
 

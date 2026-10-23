@@ -88,6 +88,7 @@ export function ruleFor(rules: ApprovalRules | undefined, type: string): TypeRul
 /** who must give the final approval (same rule as the database function request_required_level) */
 export function requiredLevel(rules: ApprovalRules | undefined, type: string, amount?: number | null): Level {
   const r = ruleFor(rules, type)
+  if (type === 'loan' || type === 'salary_increment') return 'super_admin' // company rule, also enforced by the database
   if (r.level === 'hr_admin' && r.limit !== null && r.limit !== undefined && amount !== null && amount !== undefined && Number(amount) > Number(r.limit)) return 'super_admin'
   return r.level
 }
@@ -129,7 +130,8 @@ export function availableActions(r: RequestRow, role: string, userId: string): s
   const mine = r.created_by === userId
   const open = OPEN_STATUSES.includes(r.status)
   const stage = STAGE_RANK[r.status]
-  if (stage && rank >= stage) {
+  // chain: HR manager reviews → HR admin → Super Admin; Super Admin may act at any stage
+  if (stage && (role === 'super_admin' || rank === stage)) {
     if (!mine || role === 'super_admin') {
       if (rank >= RANK[r.required_level]) out.push('approve')
       else out.push('forward')

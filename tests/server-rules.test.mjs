@@ -164,6 +164,12 @@ try {
   await S.c.from('app_config').update({ value: rules }).eq('key', 'approval_rules')
   const a6 = await create('om1', 'salary_advance', 'W1', 800)
   check('edited limit takes effect', a6.data?.required_level === 'hr_admin')
+  rules.types.loan.level = 'hr_manager'
+  await S.c.from('app_config').update({ value: rules }).eq('key', 'approval_rules')
+  const a7 = await create('om1', 'loan', 'W1', 100)
+  check('loan stays super admin even if the matrix is edited', a7.data?.required_level === 'super_admin')
+  rules.types.loan.level = 'super_admin'
+  await S.c.from('app_config').update({ value: rules }).eq('key', 'approval_rules')
 
   // emergency leave
   let em = await create('om1', 'emergency_leave', 'W1', null, { from: '2026-11-01', to: '2026-11-14' })
