@@ -19,5 +19,19 @@ Deno.serve(async (req) => {
     if (req.headers.get('api-key') !== 'mock-brevo-key') return new Response(JSON.stringify({ code: 'unauthorized', message: 'Key not found' }), { status: 401 })
     return new Response(JSON.stringify({ messageId: '<mock-' + crypto.randomUUID() + '@mock>' }), { status: 201, headers: { 'Content-Type': 'application/json' } })
   }
+  // Meta Graph API (WhatsApp Cloud API): /graph/{ver}/{phone_id}/messages and /graph/{ver}/{waba}/message_templates
+  if (path.startsWith('/graph/')) {
+    const J = (b: unknown, status = 200) => new Response(JSON.stringify(b), { status, headers: { 'Content-Type': 'application/json' } })
+    if (req.headers.get('authorization') !== 'Bearer mock-wa-token') return J({ error: { code: 190, message: 'Invalid OAuth access token' } }, 401)
+    if (path.endsWith('/messages')) {
+      const m = JSON.parse(body || '{}')
+      if (String(m.to).endsWith('0000')) return J({ error: { code: 131026, message: 'Message undeliverable' } }, 400) // "not on WhatsApp"
+      return J({ messaging_product: 'whatsapp', contacts: [{ input: m.to, wa_id: m.to }], messages: [{ id: 'wamid.MOCK' + crypto.randomUUID().replaceAll('-', ''), message_status: 'accepted' }] })
+    }
+    if (path.endsWith('/message_templates')) {
+      if (req.method === 'POST') return J({ id: String(Date.now()), status: 'PENDING', category: 'UTILITY' })
+      return J({ data: [{ name: 'hello_world', language: 'en_US', status: 'APPROVED', category: 'UTILITY', id: '1' }, { name: 'fwm_ticket_ready', language: 'en', status: 'APPROVED', category: 'UTILITY', id: '2' }] })
+    }
+  }
   return new Response('not found', { status: 404 })
 })

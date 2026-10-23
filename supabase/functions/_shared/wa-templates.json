@@ -1,0 +1,988 @@
+{
+ "version": 1,
+ "note": "WhatsApp Cloud API message templates (category UTILITY). Submit from Settings > Notifications > WhatsApp templates, or with scripts/wa-templates.mjs. __APP_URL__ is replaced by the app URL. The 'fwm' key is app metadata and is not sent to Meta.",
+ "templates": [
+  {
+   "name": "fwm_request_submitted",
+   "language": "en",
+   "category": "UTILITY",
+   "components": [
+    {
+     "type": "BODY",
+     "text": "New {{1}} request {{2}} for worker {{3}} ({{4}}) is waiting for your review in FW Manager.",
+     "example": {
+      "body_text": [
+       [
+        "Annual leave",
+        "R-1042",
+        "FW0001",
+        "Outlet KLCC"
+       ]
+      ]
+     }
+    },
+    {
+     "type": "BUTTONS",
+     "buttons": [
+      {
+       "type": "URL",
+       "text": "Open FW Manager",
+       "url": "__APP_URL__?go={{1}}",
+       "example": [
+        "__APP_URL__?go=requests/8f2c1d"
+       ]
+      }
+     ]
+    }
+   ],
+   "fwm": {
+    "params": [
+     "type",
+     "ref",
+     "workerNo",
+     "outlet"
+    ],
+    "button": true,
+    "note": "request submitted / resubmitted"
+   }
+  },
+  {
+   "name": "fwm_request_approved",
+   "language": "en",
+   "category": "UTILITY",
+   "components": [
+    {
+     "type": "BODY",
+     "text": "Request {{1}} ({{2}}) for worker {{3}} has been approved. HR will update the worker record.",
+     "example": {
+      "body_text": [
+       [
+        "R-1042",
+        "Annual leave",
+        "FW0001"
+       ]
+      ]
+     }
+    },
+    {
+     "type": "BUTTONS",
+     "buttons": [
+      {
+       "type": "URL",
+       "text": "Open FW Manager",
+       "url": "__APP_URL__?go={{1}}",
+       "example": [
+        "__APP_URL__?go=requests/8f2c1d"
+       ]
+      }
+     ]
+    }
+   ],
+   "fwm": {
+    "params": [
+     "ref",
+     "type",
+     "workerNo"
+    ],
+    "button": true,
+    "note": ""
+   }
+  },
+  {
+   "name": "fwm_request_rejected",
+   "language": "en",
+   "category": "UTILITY",
+   "components": [
+    {
+     "type": "BODY",
+     "text": "Request {{1}} ({{2}}) for worker {{3}} was not approved. Reason: {{4}}. Open FW Manager for details.",
+     "example": {
+      "body_text": [
+       [
+        "R-1042",
+        "Salary advance",
+        "FW0001",
+        "Over the monthly limit"
+       ]
+      ]
+     }
+    },
+    {
+     "type": "BUTTONS",
+     "buttons": [
+      {
+       "type": "URL",
+       "text": "Open FW Manager",
+       "url": "__APP_URL__?go={{1}}",
+       "example": [
+        "__APP_URL__?go=requests/8f2c1d"
+       ]
+      }
+     ]
+    }
+   ],
+   "fwm": {
+    "params": [
+     "ref",
+     "type",
+     "workerNo",
+     "comment"
+    ],
+    "button": true,
+    "note": ""
+   }
+  },
+  {
+   "name": "fwm_request_needs_info",
+   "language": "en",
+   "category": "UTILITY",
+   "components": [
+    {
+     "type": "BODY",
+     "text": "Request {{1}} ({{2}}) was returned for more information: {{3}}. Please update and resubmit it in FW Manager.",
+     "example": {
+      "body_text": [
+       [
+        "R-1042",
+        "Annual leave",
+        "Please add the leave dates"
+       ]
+      ]
+     }
+    },
+    {
+     "type": "BUTTONS",
+     "buttons": [
+      {
+       "type": "URL",
+       "text": "Open FW Manager",
+       "url": "__APP_URL__?go={{1}}",
+       "example": [
+        "__APP_URL__?go=requests/8f2c1d"
+       ]
+      }
+     ]
+    }
+   ],
+   "fwm": {
+    "params": [
+     "ref",
+     "type",
+     "comment"
+    ],
+    "button": true,
+    "note": ""
+   }
+  },
+  {
+   "name": "fwm_request_completed",
+   "language": "en",
+   "category": "UTILITY",
+   "components": [
+    {
+     "type": "BODY",
+     "text": "Request {{1}} ({{2}}) for worker {{3}} has been completed and recorded.",
+     "example": {
+      "body_text": [
+       [
+        "R-1042",
+        "Annual leave",
+        "FW0001"
+       ]
+      ]
+     }
+    },
+    {
+     "type": "BUTTONS",
+     "buttons": [
+      {
+       "type": "URL",
+       "text": "Open FW Manager",
+       "url": "__APP_URL__?go={{1}}",
+       "example": [
+        "__APP_URL__?go=requests/8f2c1d"
+       ]
+      }
+     ]
+    }
+   ],
+   "fwm": {
+    "params": [
+     "ref",
+     "type",
+     "workerNo"
+    ],
+    "button": true,
+    "note": ""
+   }
+  },
+  {
+   "name": "fwm_approval_pending",
+   "language": "en",
+   "category": "UTILITY",
+   "components": [
+    {
+     "type": "BODY",
+     "text": "Approval needed: request {{1}} ({{2}}) for worker {{3}} is waiting for your decision since {{4}}. Please review it in FW Manager.",
+     "example": {
+      "body_text": [
+       [
+        "R-1042",
+        "Salary advance",
+        "FW0001",
+        "21 Oct 2026"
+       ]
+      ]
+     }
+    },
+    {
+     "type": "BUTTONS",
+     "buttons": [
+      {
+       "type": "URL",
+       "text": "Open FW Manager",
+       "url": "__APP_URL__?go={{1}}",
+       "example": [
+        "__APP_URL__?go=requests/8f2c1d"
+       ]
+      }
+     ]
+    }
+   ],
+   "fwm": {
+    "params": [
+     "ref",
+     "type",
+     "workerNo",
+     "since"
+    ],
+    "button": true,
+    "note": "recommended / escalated / approval overdue reminder"
+   }
+  },
+  {
+   "name": "fwm_emergency_leave",
+   "language": "en",
+   "category": "UTILITY",
+   "components": [
+    {
+     "type": "BODY",
+     "text": "Urgent: emergency leave request {{1}} for worker {{2}} ({{3}}) needs your review today.",
+     "example": {
+      "body_text": [
+       [
+        "R-1043",
+        "FW0001",
+        "Death of immediate family member"
+       ]
+      ]
+     }
+    },
+    {
+     "type": "BUTTONS",
+     "buttons": [
+      {
+       "type": "URL",
+       "text": "Open FW Manager",
+       "url": "__APP_URL__?go={{1}}",
+       "example": [
+        "__APP_URL__?go=requests/8f2c1d"
+       ]
+      }
+     ]
+    }
+   ],
+   "fwm": {
+    "params": [
+     "ref",
+     "workerNo",
+     "reason"
+    ],
+    "button": true,
+    "note": ""
+   }
+  },
+  {
+   "name": "fwm_emergency_decided",
+   "language": "en",
+   "category": "UTILITY",
+   "components": [
+    {
+     "type": "BODY",
+     "text": "Emergency leave {{1}} for worker {{2}} has been {{3}}. Open FW Manager for the next steps.",
+     "example": {
+      "body_text": [
+       [
+        "R-1043",
+        "FW0001",
+        "approved"
+       ]
+      ]
+     }
+    },
+    {
+     "type": "BUTTONS",
+     "buttons": [
+      {
+       "type": "URL",
+       "text": "Open FW Manager",
+       "url": "__APP_URL__?go={{1}}",
+       "example": [
+        "__APP_URL__?go=requests/8f2c1d"
+       ]
+      }
+     ]
+    }
+   ],
+   "fwm": {
+    "params": [
+     "ref",
+     "workerNo",
+     "status"
+    ],
+    "button": true,
+    "note": ""
+   }
+  },
+  {
+   "name": "fwm_proof_pending",
+   "language": "en",
+   "category": "UTILITY",
+   "components": [
+    {
+     "type": "BODY",
+     "text": "Supporting documents for emergency leave {{1}} (worker {{2}}) are still pending. Please upload them in FW Manager.",
+     "example": {
+      "body_text": [
+       [
+        "R-1043",
+        "FW0001"
+       ]
+      ]
+     }
+    },
+    {
+     "type": "BUTTONS",
+     "buttons": [
+      {
+       "type": "URL",
+       "text": "Open FW Manager",
+       "url": "__APP_URL__?go={{1}}",
+       "example": [
+        "__APP_URL__?go=requests/8f2c1d"
+       ]
+      }
+     ]
+    }
+   ],
+   "fwm": {
+    "params": [
+     "ref",
+     "workerNo"
+    ],
+    "button": true,
+    "note": ""
+   }
+  },
+  {
+   "name": "fwm_ticket_ready",
+   "language": "en",
+   "category": "UTILITY",
+   "components": [
+    {
+     "type": "BODY",
+     "text": "The flight ticket for worker {{1}} (request {{2}}) has been booked by HR. You can download it in FW Manager.",
+     "example": {
+      "body_text": [
+       [
+        "FW0001",
+        "R-1044"
+       ]
+      ]
+     }
+    },
+    {
+     "type": "BUTTONS",
+     "buttons": [
+      {
+       "type": "URL",
+       "text": "Open FW Manager",
+       "url": "__APP_URL__?go={{1}}",
+       "example": [
+        "__APP_URL__?go=requests/8f2c1d"
+       ]
+      }
+     ]
+    }
+   ],
+   "fwm": {
+    "params": [
+     "workerNo",
+     "ref"
+    ],
+    "button": true,
+    "note": ""
+   }
+  },
+  {
+   "name": "fwm_passport_consent_pending",
+   "language": "en",
+   "category": "UTILITY",
+   "components": [
+    {
+     "type": "BODY",
+     "text": "The passport safekeeping consent form for worker {{1}} is still pending signature. Please collect the signed form and upload it in FW Manager.",
+     "example": {
+      "body_text": [
+       [
+        "FW0001"
+       ]
+      ]
+     }
+    },
+    {
+     "type": "BUTTONS",
+     "buttons": [
+      {
+       "type": "URL",
+       "text": "Open FW Manager",
+       "url": "__APP_URL__?go={{1}}",
+       "example": [
+        "__APP_URL__?go=requests/8f2c1d"
+       ]
+      }
+     ]
+    }
+   ],
+   "fwm": {
+    "params": [
+     "workerNo"
+    ],
+    "button": true,
+    "note": ""
+   }
+  },
+  {
+   "name": "fwm_passport_consent_uploaded",
+   "language": "en",
+   "category": "UTILITY",
+   "components": [
+    {
+     "type": "BODY",
+     "text": "A signed passport safekeeping consent for worker {{1}} was uploaded and is waiting for HR verification.",
+     "example": {
+      "body_text": [
+       [
+        "FW0001"
+       ]
+      ]
+     }
+    },
+    {
+     "type": "BUTTONS",
+     "buttons": [
+      {
+       "type": "URL",
+       "text": "Open FW Manager",
+       "url": "__APP_URL__?go={{1}}",
+       "example": [
+        "__APP_URL__?go=requests/8f2c1d"
+       ]
+      }
+     ]
+    }
+   ],
+   "fwm": {
+    "params": [
+     "workerNo"
+    ],
+    "button": true,
+    "note": ""
+   }
+  },
+  {
+   "name": "fwm_passport_ready",
+   "language": "en",
+   "category": "UTILITY",
+   "components": [
+    {
+     "type": "BODY",
+     "text": "The passport of worker {{1}} (request {{2}}) is ready for collection from HR.",
+     "example": {
+      "body_text": [
+       [
+        "FW0001",
+        "R-1045"
+       ]
+      ]
+     }
+    },
+    {
+     "type": "BUTTONS",
+     "buttons": [
+      {
+       "type": "URL",
+       "text": "Open FW Manager",
+       "url": "__APP_URL__?go={{1}}",
+       "example": [
+        "__APP_URL__?go=requests/8f2c1d"
+       ]
+      }
+     ]
+    }
+   ],
+   "fwm": {
+    "params": [
+     "workerNo",
+     "ref"
+    ],
+    "button": true,
+    "note": ""
+   }
+  },
+  {
+   "name": "fwm_passport_overdue",
+   "language": "en",
+   "category": "UTILITY",
+   "components": [
+    {
+     "type": "BODY",
+     "text": "The passport of worker {{1}} was due back in the company safe on {{2}} and is now {{3}} day(s) overdue.",
+     "example": {
+      "body_text": [
+       [
+        "FW0001",
+        "20 Oct 2026",
+        "3"
+       ]
+      ]
+     }
+    },
+    {
+     "type": "BUTTONS",
+     "buttons": [
+      {
+       "type": "URL",
+       "text": "Open FW Manager",
+       "url": "__APP_URL__?go={{1}}",
+       "example": [
+        "__APP_URL__?go=requests/8f2c1d"
+       ]
+      }
+     ]
+    }
+   ],
+   "fwm": {
+    "params": [
+     "workerNo",
+     "date",
+     "days"
+    ],
+    "button": true,
+    "note": ""
+   }
+  },
+  {
+   "name": "fwm_document_expiring",
+   "language": "en",
+   "category": "UTILITY",
+   "components": [
+    {
+     "type": "BODY",
+     "text": "The {{1}} of worker {{2}} will expire on {{3}} ({{4}} days left). Please start the renewal.",
+     "example": {
+      "body_text": [
+       [
+        "Work permit (PLKS)",
+        "FW0001",
+        "30 Nov 2026",
+        "30"
+       ]
+      ]
+     }
+    },
+    {
+     "type": "BUTTONS",
+     "buttons": [
+      {
+       "type": "URL",
+       "text": "Open FW Manager",
+       "url": "__APP_URL__?go={{1}}",
+       "example": [
+        "__APP_URL__?go=requests/8f2c1d"
+       ]
+      }
+     ]
+    }
+   ],
+   "fwm": {
+    "params": [
+     "doc",
+     "workerNo",
+     "date",
+     "days"
+    ],
+    "button": true,
+    "note": ""
+   }
+  },
+  {
+   "name": "fwm_document_expired",
+   "language": "en",
+   "category": "UTILITY",
+   "components": [
+    {
+     "type": "BODY",
+     "text": "The {{1}} of worker {{2}} expired on {{3}}. Please renew it now to stay compliant.",
+     "example": {
+      "body_text": [
+       [
+        "FOMEMA medical",
+        "FW0001",
+        "20 Oct 2026"
+       ]
+      ]
+     }
+    },
+    {
+     "type": "BUTTONS",
+     "buttons": [
+      {
+       "type": "URL",
+       "text": "Open FW Manager",
+       "url": "__APP_URL__?go={{1}}",
+       "example": [
+        "__APP_URL__?go=requests/8f2c1d"
+       ]
+      }
+     ]
+    }
+   ],
+   "fwm": {
+    "params": [
+     "doc",
+     "workerNo",
+     "date"
+    ],
+    "button": true,
+    "note": ""
+   }
+  },
+  {
+   "name": "fwm_new_comment",
+   "language": "en",
+   "category": "UTILITY",
+   "components": [
+    {
+     "type": "BODY",
+     "text": "There is a new comment on request {{1}} from {{2}}. Open FW Manager to reply.",
+     "example": {
+      "body_text": [
+       [
+        "R-1042",
+        "HR Manager"
+       ]
+      ]
+     }
+    },
+    {
+     "type": "BUTTONS",
+     "buttons": [
+      {
+       "type": "URL",
+       "text": "Open FW Manager",
+       "url": "__APP_URL__?go={{1}}",
+       "example": [
+        "__APP_URL__?go=requests/8f2c1d"
+       ]
+      }
+     ]
+    }
+   ],
+   "fwm": {
+    "params": [
+     "ref",
+     "by"
+    ],
+    "button": true,
+    "note": ""
+   }
+  },
+  {
+   "name": "fwm_remark_added",
+   "language": "en",
+   "category": "UTILITY",
+   "components": [
+    {
+     "type": "BODY",
+     "text": "A new remark was added for worker {{1}} by {{2}}. Open FW Manager to read it.",
+     "example": {
+      "body_text": [
+       [
+        "FW0001",
+        "Outlet manager"
+       ]
+      ]
+     }
+    },
+    {
+     "type": "BUTTONS",
+     "buttons": [
+      {
+       "type": "URL",
+       "text": "Open FW Manager",
+       "url": "__APP_URL__?go={{1}}",
+       "example": [
+        "__APP_URL__?go=requests/8f2c1d"
+       ]
+      }
+     ]
+    }
+   ],
+   "fwm": {
+    "params": [
+     "workerNo",
+     "by"
+    ],
+    "button": true,
+    "note": ""
+   }
+  },
+  {
+   "name": "fwm_user_waiting",
+   "language": "en",
+   "category": "UTILITY",
+   "components": [
+    {
+     "type": "BODY",
+     "text": "A new user {{1}} is waiting for access approval in FW Manager.",
+     "example": {
+      "body_text": [
+       [
+        "ali@example.com"
+       ]
+      ]
+     }
+    },
+    {
+     "type": "BUTTONS",
+     "buttons": [
+      {
+       "type": "URL",
+       "text": "Open FW Manager",
+       "url": "__APP_URL__?go={{1}}",
+       "example": [
+        "__APP_URL__?go=requests/8f2c1d"
+       ]
+      }
+     ]
+    }
+   ],
+   "fwm": {
+    "params": [
+     "title"
+    ],
+    "button": true,
+    "note": ""
+   }
+  },
+  {
+   "name": "fwm_daily_digest",
+   "language": "en",
+   "category": "UTILITY",
+   "components": [
+    {
+     "type": "BODY",
+     "text": "Good morning. FW Manager summary for {{1}}: {{2}} request(s) need your action, {{3}} document(s) expire within 30 days and {{4}} have expired.",
+     "example": {
+      "body_text": [
+       [
+        "23 Oct 2026",
+        "3",
+        "5",
+        "1"
+       ]
+      ]
+     }
+    },
+    {
+     "type": "BUTTONS",
+     "buttons": [
+      {
+       "type": "URL",
+       "text": "Open FW Manager",
+       "url": "__APP_URL__?go={{1}}",
+       "example": [
+        "__APP_URL__?go=requests/8f2c1d"
+       ]
+      }
+     ]
+    }
+   ],
+   "fwm": {
+    "params": [
+     "date",
+     "count",
+     "soon",
+     "expired"
+    ],
+    "button": true,
+    "note": ""
+   }
+  },
+  {
+   "name": "fwm_worker_leave_update",
+   "language": "en",
+   "category": "UTILITY",
+   "components": [
+    {
+     "type": "BODY",
+     "text": "Hello, your {{1}} request has been {{2}}. Please contact your manager for details.",
+     "example": {
+      "body_text": [
+       [
+        "Annual leave",
+        "approved"
+       ]
+      ]
+     }
+    }
+   ],
+   "fwm": {
+    "params": [
+     "type",
+     "status"
+    ],
+    "button": false,
+    "note": "worker"
+   }
+  },
+  {
+   "name": "fwm_worker_leave_update",
+   "language": "ms",
+   "category": "UTILITY",
+   "components": [
+    {
+     "type": "BODY",
+     "text": "Salam, permohonan {{1}} anda telah {{2}}. Sila hubungi pengurus anda untuk maklumat lanjut.",
+     "example": {
+      "body_text": [
+       [
+        "cuti tahunan",
+        "diluluskan"
+       ]
+      ]
+     }
+    }
+   ],
+   "fwm": {
+    "params": [
+     "type",
+     "status_ms"
+    ],
+    "button": false,
+    "note": "worker"
+   }
+  },
+  {
+   "name": "fwm_worker_ticket_ready",
+   "language": "en",
+   "category": "UTILITY",
+   "components": [
+    {
+     "type": "BODY",
+     "text": "Hello, your flight ticket for request {{1}} is ready. Please collect it from your manager.",
+     "example": {
+      "body_text": [
+       [
+        "R-1044"
+       ]
+      ]
+     }
+    }
+   ],
+   "fwm": {
+    "params": [
+     "ref"
+    ],
+    "button": false,
+    "note": "worker"
+   }
+  },
+  {
+   "name": "fwm_worker_ticket_ready",
+   "language": "ms",
+   "category": "UTILITY",
+   "components": [
+    {
+     "type": "BODY",
+     "text": "Salam, tiket penerbangan anda untuk permohonan {{1}} sudah siap. Sila ambil daripada pengurus anda.",
+     "example": {
+      "body_text": [
+       [
+        "R-1044"
+       ]
+      ]
+     }
+    }
+   ],
+   "fwm": {
+    "params": [
+     "ref"
+    ],
+    "button": false,
+    "note": "worker"
+   }
+  },
+  {
+   "name": "fwm_worker_passport_ready",
+   "language": "en",
+   "category": "UTILITY",
+   "components": [
+    {
+     "type": "BODY",
+     "text": "Hello, your passport for request {{1}} is ready. Please collect it from HR.",
+     "example": {
+      "body_text": [
+       [
+        "R-1045"
+       ]
+      ]
+     }
+    }
+   ],
+   "fwm": {
+    "params": [
+     "ref"
+    ],
+    "button": false,
+    "note": "worker"
+   }
+  },
+  {
+   "name": "fwm_worker_passport_ready",
+   "language": "ms",
+   "category": "UTILITY",
+   "components": [
+    {
+     "type": "BODY",
+     "text": "Salam, pasport anda untuk permohonan {{1}} sudah sedia. Sila ambil daripada HR.",
+     "example": {
+      "body_text": [
+       [
+        "R-1045"
+       ]
+      ]
+     }
+    }
+   ],
+   "fwm": {
+    "params": [
+     "ref"
+    ],
+    "button": false,
+    "note": "worker"
+   }
+  }
+ ]
+}

@@ -7,11 +7,14 @@
 //   Email:           BREVO_API_KEY [, BREVO_API_URL]                                             ← primary
 //                    RESEND_API_KEY [, RESEND_API_URL]                                           ← alternative
 //                    EMAIL_FROM, EMAIL_FROM_NAME (or Settings → Notifications → sender)
+//   WhatsApp (primary): WA_PHONE_NUMBER_ID, WA_ACCESS_TOKEN (system-user permanent token) [, WA_GRAPH_VERSION, WA_GRAPH_URL]
+//                    Business-initiated messages use APPROVED utility templates (../_shared/wa-templates.json).
 //   Push:            VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY (already used by daily-alerts)
 //   Optional:        SMS_PROVIDER / EMAIL_PROVIDER to force one adapter.
 // A channel without a configured provider is marked 'skipped: provider not configured' (not a failure).
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import webpush from 'npm:web-push@3.6.7'
+import WA from '../_shared/wa-templates.json' with { type: 'json' }
 
 const env = (k: string) => (Deno.env.get(k) || '').trim()
 const SUPABASE_URL = env('SUPABASE_URL')
@@ -24,7 +27,8 @@ if (pushReady) webpush.setVapidDetails(env('VAPID_SUBJECT') || 'mailto:admin@exa
 const CORS = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-cron-secret', 'Access-Control-Allow-Methods': 'POST, OPTIONS' }
 const json = (b: unknown, status = 200) => new Response(JSON.stringify(b), { status, headers: { ...CORS, 'Content-Type': 'application/json' } })
 
-type Delivery = { id: number; event: string; user_id: string | null; channel: string; address: string | null; title: string | null; body: string | null; link: string | null; critical: boolean; attempts: number }
+type Delivery = { id: number; event: string; user_id: string | null; channel: string; address: string | null; title: string | null; body: string | null; link: string | null; critical: boolean; attempts: number
+  wa_template: string | null; wa_lang: string | null; vars: Record<string, string> | null }
 type Result = { status: 'sent' | 'failed' | 'skipped' | 'retry'; provider?: string; providerId?: string; error?: string; cost?: number; deferUntil?: Date }
 type Cfg = { appUrl?: string; smsSender?: string; email?: { fromName?: string; fromEmail?: string }; quietHours?: { enabled?: boolean; start?: string; end?: string }; rateLimitPerHour?: Record<string, number>; costs?: Record<string, number> }
 
@@ -114,6 +118,36 @@ const resend: EmailAdapter = {
 }
 const EMAIL: EmailAdapter[] = [brevo, resend]
 
+/* ---------------- WhatsApp Business Cloud API (Meta Graph /{PHONE_NUMBER_ID}/messages) ---------------- */
+type WaTpl = { name: string; language: string; components: { type: string; buttons?: { type: string }[] }[]; fwm: { params: string[]; button: boolean } }
+const WA_TEMPLATES = (WA as { templates: WaTpl[] }).templates
+const waReady = () => !!(env('WA_PHONE_NUMBER_ID') && env('WA_ACCESS_TOKEN'))
+const waBase = () => `${env('WA_GRAPH_URL') || 'https://graph.facebook.com'}/${env('WA_GRAPH_VERSION') || 'v26.0'}`
+// template parameters: no newlines/tabs, no 4+ spaces, not empty
+const waParam = (v: unknown) => (String(v ?? '').replace(/[\n\r\t]+/g, ' ').replace(/\s{4,}/g, '   ').trim() || '-').slice(0, 200)
+// Meta error codes that will never succeed on retry → fail now (SMS fallback kicks in)
+const WA_PERMANENT = new Set([131026, 131051, 131047, 132000, 132001, 132005, 132007, 132012, 132015, 132016, 131008, 131009, 100, 190, 10, 200])
+async function sendWhatsApp(d: Delivery): Promise<Result> {
+  const name = d.wa_template || ''
+  const lang = d.wa_lang || 'en'
+  const tpl = WA_TEMPLATES.find((t) => t.name === name && t.language === lang) || WA_TEMPLATES.find((t) => t.name === name)
+  const components: unknown[] = []
+  if (tpl) {
+    if (tpl.fwm.params.length) components.push({ type: 'body', parameters: tpl.fwm.params.map((k) => ({ type: 'text', text: waParam(d.vars?.[k]) })) })
+    if (tpl.fwm.button && d.vars?.go) components.push({ type: 'button', sub_type: 'url', index: '0', parameters: [{ type: 'text', text: d.vars.go }] })
+  } else if (name !== 'hello_world') return { status: 'failed', provider: 'whatsapp', error: `unknown WhatsApp template "${name}"` }
+  const r = await fetch(`${waBase()}/${env('WA_PHONE_NUMBER_ID')}/messages`, {
+    method: 'POST', headers: { Authorization: 'Bearer ' + env('WA_ACCESS_TOKEN'), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ messaging_product: 'whatsapp', recipient_type: 'individual', to: d.address!.replace(/[^0-9]/g, ''), type: 'template',
+      template: { name, language: { code: tpl?.language || lang }, ...(components.length ? { components } : {}) } }),
+  })
+  const j = await r.json().catch(() => ({}))
+  if (r.ok && j.messages?.[0]?.id) return { status: 'sent', provider: 'whatsapp', providerId: j.messages[0].id }
+  const code = Number(j.error?.code)
+  const msg = `WhatsApp ${r.status} ${code || ''} ${j.error?.message || ''} ${j.error?.error_data?.details || ''}`.trim().slice(0, 250)
+  return { status: WA_PERMANENT.has(code) || (r.status >= 400 && r.status < 500 && r.status !== 429 && code !== 4 && code !== 80007 && code !== 130429 && code !== 131056) ? 'failed' : 'retry', provider: 'whatsapp', error: msg }
+}
+
 const pick = <T extends { name: string; ready(): boolean }>(list: T[], forced: string) => (forced ? list.filter((a) => a.name === forced && a.ready()) : list.filter((a) => a.ready()))[0]
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!))
 
@@ -146,7 +180,7 @@ Deno.serve(async (req) => {
 
   const { data: cfgRow } = await db.from('app_config').select('value').eq('key', 'notifications').maybeSingle()
   const cfg: Cfg = (cfgRow?.value as Cfg) || {}
-  const costs = { sms: 0.115, email: 0, whatsapp: 0, push: 0, ...(cfg.costs || {}) }
+  const costs = { sms: 0.115, email: 0, whatsapp: 0.0564, push: 0, ...(cfg.costs || {}) }
   const limits: Record<string, number> = { sms: 6, email: 30, whatsapp: 6, push: 60, ...(cfg.rateLimitPerHour || {}) }
   const fromEmail = env('EMAIL_FROM') || cfg.email?.fromEmail || ''
   const fromName = env('EMAIL_FROM_NAME') || cfg.email?.fromName || 'FW Manager'
@@ -187,14 +221,20 @@ Deno.serve(async (req) => {
         tally[final]++
       }
       await db.from('notification_deliveries').update(patch).eq('id', d.id)
+      // WhatsApp failed (or provider missing) → SMS fallback per Settings → Notifications
+      if (d.channel === 'whatsapp' && (final === 'failed' || (final === 'skipped' && res.error === NOT_CONFIGURED.error))) await db.rpc('notify_fallback', { p_id: d.id, p_reason: 'failed' })
     }
   }
-  return json({ ...tally, sms: smsAdapter?.name || 'not configured', email: emailAdapter?.name || 'not configured', push: pushReady ? 'vapid' : 'not configured', quiet: !!quiet })
+  return json({ ...tally, whatsapp: waReady() ? 'cloud-api' : 'not configured', sms: smsAdapter?.name || 'not configured', email: emailAdapter?.name || 'not configured', push: pushReady ? 'vapid' : 'not configured', quiet: !!quiet })
 
   async function deliver(db: ReturnType<typeof createClient>, d: Delivery): Promise<Result> {
     switch (d.channel) {
-      case 'whatsapp':
-        return { status: 'skipped', error: 'WhatsApp coming later' }
+      case 'whatsapp': {
+        if (!d.address) return { status: 'skipped', error: 'no mobile number' }
+        if (!waReady()) return NOT_CONFIGURED
+        const r = await sendWhatsApp(d)
+        return { ...r, cost: r.status === 'sent' ? costs.whatsapp : undefined }
+      }
       case 'sms': {
         if (!d.address) return { status: 'skipped', error: 'no mobile number' }
         if (!smsAdapter) return NOT_CONFIGURED
@@ -244,6 +284,6 @@ Deno.serve(async (req) => {
 async function overLimit(db: ReturnType<typeof createClient>, d: Delivery, limits: Record<string, number>, run: Map<string, number>) {
   const lim = (limits[d.channel] || 30) * (d.critical ? 2 : 1)
   const { count } = await db.from('notification_deliveries').select('id', { count: 'exact', head: true })
-    .eq('channel', d.channel).eq('address', d.address!).eq('status', 'sent').gte('sent_at', new Date(Date.now() - 3600_000).toISOString())
+    .eq('channel', d.channel).eq('address', d.address!).in('status', ['sent', 'delivered', 'read']).gte('sent_at', new Date(Date.now() - 3600_000).toISOString())
   return (count || 0) >= lim
 }
