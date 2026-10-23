@@ -110,7 +110,9 @@ An employer may **not** hold a worker's passport unless the worker freely agrees
 - If nothing is urgent, nobody gets a push. An identical summary is never sent twice on the same day. Dead subscriptions are removed automatically.
 - **Send me a test alert** in Settings sends the summary immediately to your own devices.
 
-Sample data: **Settings → Load sample data** adds fake `DEMO` workers (the whole team sees them).
+Sample data: **Settings → Data & Backup → Load sample data** adds fake `DEMO` workers (the whole team sees them). Once real workers or outlets exist the button moves under **Advanced** with a warning.
+
+**Remove sample (DEMO) data** (v1.1.3, Super Admin only, Settings → Data & Backup): shows a preview (DEMO workers, outlets, remarks, documents, requests; users assigned to DEMO outlets with a dropdown to move each to a real outlet or leave unassigned), then asks you to type `REMOVE`. It soft-deletes (synced to every device) only workers/outlets whose name starts with `DEMO ` plus their remarks and documents, cancels their open requests without notifications, and writes an audit entry (`demo.remove`). A DEMO outlet that still has a real worker is kept. Job categories are standard lists and are not removed. Server: `demo_data_preview()` / `remove_demo_data()` (migration 011).
 
 ## Features
 

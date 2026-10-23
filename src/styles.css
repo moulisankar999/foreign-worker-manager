@@ -463,3 +463,10 @@ code { background: #f1f5f9; padding: 1px 5px; border-radius: 5px; font-size: .85
   .set-tabs button { width: auto; flex: 0 0 auto; padding: 8px 12px; }
 }
 .plain-list { display: block; padding-left: 18px; margin: 8px 0; list-style: disc; } .plain-list li { display: list-item; padding: 2px 0; border: 0; }
+/* v1.1.3 remove DEMO data */
+.demo-counts li { padding: 2px 0; }
+.demo-users { border: 1px solid var(--line, #e5e7eb); border-radius: 10px; padding: 8px 10px; margin: 8px 0; }
+.demo-user { display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; padding: 6px 0; border-top: 1px solid var(--line, #e5e7eb); }
+.demo-user:first-of-type { border-top: 0; }
+.demo-user select { min-width: 200px; max-width: 100%; }
+details.adv > summary { cursor: pointer; font-size: .85rem; color: var(--muted, #6b7280); margin-top: 10px; }

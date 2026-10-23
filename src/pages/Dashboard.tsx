@@ -75,7 +75,7 @@ export default function Dashboard() {
             <p className="muted">Add your outlets in Settings, then add workers. Or explore with fake demo data first.</p>
             <div className="row gap-s wrap center">
               <Btn kind="primary" icon="plus" onClick={() => nav('/workers/new')}>Add first worker</Btn>
-              <Btn icon="download" disabled={busy} onClick={async () => { setBusy(true); await loadSampleData(); setBusy(false) }}>Load sample data</Btn>
+              {!outlets.some((o) => !o.name.startsWith('DEMO ')) && <Btn icon="download" disabled={busy} onClick={async () => { setBusy(true); await loadSampleData(); setBusy(false) }}>Load sample data</Btn>}
               <Btn icon="gear" onClick={() => nav('/settings/org')}>Set up outlets</Btn>
             </div>
           </Empty>
