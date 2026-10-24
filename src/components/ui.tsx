@@ -1,4 +1,5 @@
 import { useEffect, useId, useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { Icon } from './Icon'
 import { fmtDate } from '../lib/util'
 import { PhoneInput } from './phoneInput'
@@ -115,7 +116,8 @@ export function Modal({ title, onClose, children, footer, wide }: { title: React
     document.body.classList.add('modal-open')
     return () => { window.removeEventListener('keydown', h); document.body.classList.remove('modal-open') }
   }, [onClose])
-  return (
+  // Portal to <body>: a modal opened from the sticky top bar (backdrop-filter) was positioned against the bar and cut off.
+  return createPortal(
     <div className="modal-bg" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div className={`modal ${wide ? 'modal-wide' : ''}`} role="dialog" aria-modal="true" aria-label={typeof title === 'string' ? title : undefined}>
         <header className="modal-h">
@@ -125,7 +127,8 @@ export function Modal({ title, onClose, children, footer, wide }: { title: React
         <div className="modal-b">{children}</div>
         {footer && <footer className="modal-f">{footer}</footer>}
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
 

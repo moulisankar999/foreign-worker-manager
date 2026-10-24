@@ -204,6 +204,12 @@ Everyone can see **Settings → About** (app version, build, "Developed by Mouli
 - Software Control → Errors: older rows (app before 1.3.3) that say `android` but came from an Apple user-agent are shown as "unknown (old app)". Stored data is not changed.
 - "Clear list" (`clear_client_errors()`, migration 032) now also resets the "App errors" health tile and writes an audit entry. The Errors tab badge and the Software Control sidebar badge update straight away.
 - Tests: `UI_URL=<TEST build> node tests/platform-ui.mjs` (TEST only; mocks Capacitor ios/android via `window.CapacitorCustomPlatform`).
+
+### Help, FAQ and user manuals (v1.3.5, FW Worker 1.0.2, migration 033)
+- FW Manager: **Help** (sidebar / More, and the user menu) has *My role*, *FAQ* and *User manual* tabs. Each user sees only their own role's responsibilities, FAQs and how-to guides, and downloads only their own illustrated PDF manual (CEO, General Manager, HR Admin, HR Manager, Outlet Manager). HR roles can also download the FW Worker guide (Tamil / English) to give workers. The viewer role has no manual.
+- FW Worker: the **?** button opens a paged Help sheet (FAQ + How to, no scrolling) in the worker's language (Tamil, Hindi, Malay, Nepali, Bengali, English; other languages show English) and a link to the PDF guide.
+- PDFs live in the PRIVATE storage bucket `manuals` (migration 033: `manual_file_for_role()` + read policy); the app opens them with short-lived signed URLs.
+- Rebuilding the manuals and screenshots (TEST project only): see `scripts/manuals/README.md`.
 ## Features
 
 ### Dashboard
