@@ -75,6 +75,9 @@ export default function RequestsPage() {
                     <div className="r-act col-end">
                       <Chip tone={STATUS_TONE[r.status]}>{STATUS_LABEL[r.status]}</Chip>
                       {(r.priority === 'urgent' || r.priority === 'high') && <Chip tone="red">{r.priority}</Chip>}
+                      {r.source === 'worker' && <Chip tone="blue">📱 worker</Chip>}
+                      {r.manager_overdue && <Chip tone="orange">OM overdue</Chip>}
+                      {r.confidential && <Chip tone="purple">🔒 confidential</Chip>}
                       {r.type === 'emergency_leave' && r.data.proofReceived !== true && !r.data.proofWaived && OPEN_STATUSES.concat('completed').includes(r.status) && <Chip tone="orange">proof pending</Chip>}
                       {r.data.ticketBooked === true && <Chip tone="purple">✈ ticket</Chip>}
                     </div>
@@ -290,7 +293,7 @@ export function RequestDetail() {
     return String(x)
   }
   const doAct = async (a: string) => {
-    if ((a === 'return' || a === 'reject') && !comment.trim()) return alert('Please write the reason')
+    if ((a === 'return' || a === 'reject' || a === 'mgr_reject') && !comment.trim()) return alert('Please write the reason')
     if (a === 'comment' && !comment.trim()) return alert('Write a comment')
     setBusy(true)
     try { await actRequest(r.id, a, comment); setAct(null); setComment('') } catch (e) { err(e) } finally { setBusy(false) }
@@ -309,7 +312,11 @@ export function RequestDetail() {
           <Chip tone="gray">{refNo(r)}</Chip>
           {r.priority !== 'normal' && <Chip tone={r.priority === 'urgent' || r.priority === 'high' ? 'red' : 'gray'}>{r.priority}</Chip>}
           <Chip tone="blue">Final approval: {ROLE_LABEL[r.required_level]}</Chip>
+          <Chip tone={r.source === 'worker' ? 'teal' : 'gray'}>{r.source === 'worker' ? '📱 Raised by worker (app)' : 'Raised by staff'}</Chip>
+          {r.manager_overdue && <Chip tone="orange">Outlet manager did not answer in time</Chip>}
+          {r.confidential && <Chip tone="purple">🔒 Confidential — hidden from outlet managers</Chip>}
         </div>
+        {r.status === 'manager_review' && r.manager_due_at && <p className="callout small mt-s">Waiting for the outlet manager. Goes to HR automatically on {new Date(r.manager_due_at).toLocaleString()}.</p>}
         <KV items={[
           ['Worker', w ? <Link to={`/workers/${w.id}`}>{w.fullName} · {w.workerNo}</Link> : '—'],
           ['Outlet', outletName(outlets, r.outlet_id || undefined)],
@@ -317,6 +324,7 @@ export function RequestDetail() {
           ...(r.amount ? [['Amount', rm(r.amount)] as [string, string]] : []),
           ...(r.type === 'emergency_leave' ? [['Emergency', String(r.data.reasonLabel || r.data.reasonKey)] as [string, string], ...(r.data.relationship ? [['Family member', String(r.data.relationship)] as [string, string]] : []), ...(r.data.reasonDetail ? [['Details', String(r.data.reasonDetail)] as [string, string]] : [])] : []),
           ...fields.map((f) => [f.label, show(f)] as [string, string]),
+          ...(r.manager_decided_by_name ? [['Outlet manager', `${r.manager_decided_by_name}${r.manager_decided_at ? ' · ' + new Date(r.manager_decided_at).toLocaleString() : ''}`] as [string, string]] : []),
           ...(r.decided_by_name ? [['Decision', decidedLine(r)] as [string, string]] : []),
           ...(r.applied_by_name ? [['Applied by', `${r.applied_by_name}${r.result?.summary ? ' — ' + r.result.summary : ''}`] as [string, string]] : []),
           ...(r.result?.ticketDecision ? [['Ticket decision', String(r.result.ticketDecision).replace('_', ' ')] as [string, string]] : []),
@@ -370,7 +378,7 @@ export function RequestDetail() {
         <Card title="Actions">
           <div className="row gap-s wrap">
             {actions.filter((a) => a !== 'comment').map((a) => (
-              <Btn key={a} kind={a === 'approve' || a === 'apply' || a === 'forward' ? 'primary' : a === 'reject' ? 'danger' : 'secondary'} disabled={busy}
+              <Btn key={a} kind={a === 'approve' || a === 'apply' || a === 'forward' || a === 'mgr_approve' ? 'primary' : a === 'reject' || a === 'mgr_reject' ? 'danger' : 'secondary'} disabled={busy}
                 onClick={() => (a === 'apply' ? setApplyOpen(true) : a === 'resubmit' ? doAct('resubmit') : setAct(a))}>{ACTION_LABEL[a]}</Btn>
             ))}
             <Btn kind="ghost" onClick={() => setAct('comment')}>💬 Comment</Btn>
@@ -378,7 +386,7 @@ export function RequestDetail() {
           {r.type === 'emergency_leave' && actions.includes('approve') && !ticketBooked && <p className="warn small">Attach the flight ticket before approving.</p>}
           {act && (
             <div className="mt-s">
-              <label className="small" htmlFor="rq-c">{act === 'return' || act === 'reject' ? 'Reason (required)' : 'Comment'}</label>
+              <label className="small" htmlFor="rq-c">{act === 'return' || act === 'reject' || act === 'mgr_reject' ? 'Reason (required — the worker sees it)' : 'Comment'}</label>
               <textarea id="rq-c" rows={3} value={comment} onChange={(e) => setComment(e.target.value)} />
               <div className="row gap-s mt-s"><Btn kind="primary" disabled={busy} onClick={() => doAct(act)}>{ACTION_LABEL[act]}</Btn><Btn kind="ghost" onClick={() => setAct(null)}>Cancel</Btn></div>
             </div>

@@ -4,6 +4,7 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { VaultPanel } from '../components/vault'
 import { CheckStatusPanel } from '../components/agencies'
 import { PassportPanel, RemarksPanel, WorkerRequests } from '../components/workerExtras'
+import { AppAccessPanel } from '../components/appAccess'
 import { useAuth } from '../lib/auth'
 import { CONSENT_LABEL, CONSENT_TONE, consentOf, overdueDays } from '../lib/passport'
 import { Avatar, Btn, Card, Chip, Empty, FormModal, KV, Tabs, docTone, sevTone, statusTone } from '../components/ui'
@@ -21,7 +22,7 @@ import { STATUSES, type MemoRec, type WorkerStatus } from '../lib/types'
 import { missingLanguage, otherLanguagesText, primaryLangName } from '../lib/languages'
 import { age, download, fmtDate, rm, serviceText, todayISO } from '../lib/util'
 
-type Tab = 'overview' | 'checks' | 'vault' | 'requests' | 'passport' | 'remarks' | 'docs' | 'remit' | 'family' | 'contract' | 'pay' | 'loans' | 'leave' | 'memos' | 'notes' | 'trackers'
+type Tab = 'access' | 'overview' | 'checks' | 'vault' | 'requests' | 'passport' | 'remarks' | 'docs' | 'remit' | 'family' | 'contract' | 'pay' | 'loans' | 'leave' | 'memos' | 'notes' | 'trackers'
 
 export default function WorkerDetail() {
   const { id } = useParams()
@@ -61,6 +62,7 @@ export default function WorkerDetail() {
     ...(isHr ? [{ id: 'remit' as Tab, label: 'Remittance' }] : []),
     { id: 'memos', label: 'Memos', badge: w.memos.filter((m) => m.checklist.some((c) => !c.done)).length },
     { id: 'notes', label: 'Timeline' },
+    ...(isHr ? [{ id: 'access' as Tab, label: '📱 App access' }] : []), // CEO / GM / HR Admin / HR Manager only (server-enforced too)
   ]
   // outlet managers / viewers: read-only, no pay data
   const tabs = canWrite ? allTabs : allTabs.filter((x) => ['overview', 'requests', 'vault', 'passport', 'remarks', 'checks', 'notes'].includes(x.id))
@@ -150,6 +152,7 @@ export default function WorkerDetail() {
         </>
       )}
       {tab === 'requests' && <WorkerRequests w={w} />}
+      {tab === 'access' && isHr && <AppAccessPanel w={w} />}
       {tab === 'vault' && <VaultPanel workerId={w.id} />}
       {tab === 'passport' && <PassportPanel w={w} />}
       {tab === 'remarks' && <RemarksPanel w={w} />}

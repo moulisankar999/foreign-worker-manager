@@ -87,7 +87,9 @@ export async function createRequest(type: string, workerId: string, title: strin
   return r as RequestRow
 }
 export async function actRequest(id: string, action: string, comment?: string, patch?: Record<string, unknown>): Promise<RequestRow> {
-  const { data, error } = await supabase.rpc('request_act', { p_id: id, p_action: action, p_comment: comment || null, p_patch: patch || null })
+  const { data, error } = action === 'mgr_approve' || action === 'mgr_reject'
+    ? await supabase.rpc('request_manager_act', { p_id: id, p_action: action === 'mgr_approve' ? 'approve' : 'reject', p_comment: comment || null })
+    : await supabase.rpc('request_act', { p_id: id, p_action: action, p_comment: comment || null, p_patch: patch || null })
   err(error)
   requestsChanged()
   return data as RequestRow

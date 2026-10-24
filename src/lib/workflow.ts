@@ -94,21 +94,22 @@ export function requiredLevel(rules: ApprovalRules | undefined, type: string, am
   return r.level
 }
 
-export type ReqStatus = 'submitted' | 'returned' | 'recommended' | 'escalated' | 'approved' | 'rejected' | 'completed' | 'cancelled'
+export type ReqStatus = 'manager_review' | 'submitted' | 'returned' | 'recommended' | 'escalated' | 'approved' | 'rejected' | 'completed' | 'cancelled'
 export const STATUS_LABEL: Record<ReqStatus, string> = {
-  submitted: 'Waiting HR review', returned: 'Returned for info', recommended: 'Waiting HR Admin', escalated: 'Waiting General Manager',
+  manager_review: 'Waiting outlet manager', submitted: 'Waiting HR review', returned: 'Returned for info', recommended: 'Waiting HR Admin', escalated: 'Waiting General Manager',
   approved: 'Approved – to apply', rejected: 'Rejected', completed: 'Done', cancelled: 'Cancelled',
 }
 export const STATUS_TONE: Record<ReqStatus, string> = {
-  submitted: 'amber', returned: 'orange', recommended: 'amber', escalated: 'purple', approved: 'teal', rejected: 'red', completed: 'green', cancelled: 'gray',
+  manager_review: 'amber', submitted: 'amber', returned: 'orange', recommended: 'amber', escalated: 'purple', approved: 'teal', rejected: 'red', completed: 'green', cancelled: 'gray',
 }
-export const OPEN_STATUSES: ReqStatus[] = ['submitted', 'returned', 'recommended', 'escalated', 'approved']
+export const OPEN_STATUSES: ReqStatus[] = ['manager_review', 'submitted', 'returned', 'recommended', 'escalated', 'approved']
 export const STAGE_RANK: Partial<Record<ReqStatus, number>> = { submitted: 1, recommended: 2, escalated: 3 }
 
 export interface RequestRow {
   id: string; ref_no: number; type: string; worker_id: string | null; outlet_id: string | null; title: string
   data: Record<string, unknown>; amount: number | null; priority: 'low' | 'normal' | 'high' | 'urgent'; status: ReqStatus
   required_level: Level; created_by: string; created_by_name: string | null; created_at: string; updated_at: string
+  source?: 'manager' | 'worker'; confidential?: boolean; manager_due_at?: string | null; manager_overdue?: boolean; manager_decided_by_name?: string | null; manager_decided_at?: string | null
   decided_by_name?: string | null; decided_by_role?: string | null; decided_at?: string | null; ceo_locked?: boolean; ceo_updated_at?: string | null; applied_by_name?: string | null; applied_at?: string | null; result?: Record<string, unknown> | null
 }
 
@@ -130,6 +131,7 @@ const rankFor = (type: string, c: ActCtx) => (canTop(type, c) ? 3 : c.role === '
 /** Is this request waiting for ME to do something? (drives badges and the daily alert) */
 export function needsMyAction(r: Pick<RequestRow, 'status' | 'created_by' | 'required_level' | 'type' | 'ceo_locked'>, role: string, userId: string, c?: Partial<ActCtx>): boolean {
   const ctx: ActCtx = { role, userId, ...c }
+  if (r.status === 'manager_review') return role === 'outlet_manager' // raised by a worker in the FW Worker app: his outlet manager decides first
   if (r.status === 'returned') return r.created_by === userId
   if (r.status === 'approved') return role === 'hr_manager'
   if (r.ceo_locked && role !== 'super_admin') return false
@@ -156,6 +158,12 @@ export function availableActions(r: RequestRow, role: string, userId: string, c?
   const ceo = role === 'super_admin'
   const open = OPEN_STATUSES.includes(r.status)
   const stage = STAGE_RANK[r.status]
+  if (r.status === 'manager_review') {
+    // worker request at the outlet-manager step (server: request_manager_act). Higher roles may step in.
+    if (role === 'outlet_manager' || (RANK[role] || 0) >= 1) out.push('mgr_approve', 'mgr_reject')
+    out.push('comment')
+    return out
+  }
   if (r.ceo_locked && !ceo) {
     if (r.status === 'approved' && (RANK[role] || 0) >= 1) out.push('apply')
     out.push('comment')
@@ -180,6 +188,7 @@ export const decidedLine = (r: Pick<RequestRow, 'status' | 'decided_by_name' | '
   `${r.status === 'rejected' ? 'Rejected' : 'Approved'} by ${r.decided_by_role ? (ROLE_LABEL[r.decided_by_role] || r.decided_by_role) + ' ' : ''}${r.decided_by_name || ''}`.trim()
 export const ACTION_LABEL: Record<string, string> = {
   approve: 'Approve', forward: 'Recommend & send up', return: 'Return for info', reject: 'Reject', apply: 'Apply to worker record & close',
+  mgr_approve: 'Approve → send to HR', mgr_reject: 'Reject', worker_submit: 'Raised by worker (app)', auto_escalate: 'Sent to HR (outlet manager did not answer in time)', worker_cancel: 'Cancelled by worker', worker_resubmit: 'Resubmitted by worker',
   resubmit: 'Resubmit', cancel: 'Cancel request', comment: 'Add comment', ceo_overrule: 'Overruled by CEO', ceo_recall: 'Recalled by CEO', ceo_reviewed: 'Reviewed by CEO',
 }
 
