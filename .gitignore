@@ -15,3 +15,6 @@ backups/
 screens/
 .ios-keys/
 supabase/private/
+dist-worker
+dist-worker-native
+dist-worker-test

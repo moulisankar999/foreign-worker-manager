@@ -12,6 +12,7 @@ self.addEventListener('activate', (e) => {
 self.addEventListener('fetch', (e) => {
   const req = e.request;
   if (req.method !== 'GET' || new URL(req.url).origin !== location.origin) return;
+  if (new URL(req.url).href.startsWith(SCOPE + 'worker/')) return; // the FW Worker app has its own service worker
   if (req.mode === 'navigate') {
     e.respondWith(fetch(req).then((r) => { const cp = r.clone(); caches.open(CACHE).then((c) => c.put(SCOPE + 'index.html', cp)); return r; }).catch(() => caches.match(SCOPE + 'index.html')));
     return;

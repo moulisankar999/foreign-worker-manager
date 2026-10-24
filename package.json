@@ -9,7 +9,12 @@
     "preview": "vite preview",
     "build:native": "tsc -b && vite build --mode native",
     "cap:sync": "npm run build:native && npx cap sync",
-    "android:apk": "npm run cap:sync && bash scripts/build-android.sh"
+    "android:apk": "npm run cap:sync && bash scripts/build-android.sh",
+    "dev:worker": "vite --config vite.worker.config.ts",
+    "build:worker": "tsc -b && vite build --config vite.worker.config.ts",
+    "build:worker:native": "tsc -b && vite build --config vite.worker.config.ts --mode native",
+    "worker:cap:sync": "npm run build:worker:native && cd worker && npx cap sync",
+    "worker:android:apk": "npm run worker:cap:sync && bash scripts/build-android-worker.sh"
   },
   "dependencies": {
     "@capacitor/android": "^8.5.3",
