@@ -173,6 +173,10 @@ Everyone can see **Settings → About** (app version, build, "Developed by Mouli
 - **Required printed reports**: the CEO (or HR with compliance settings) schedules reports that HR must print, sign and file on a routine. The schedules table shows company names. Server side: migration `018_report_submissions.sql` (tables `report_schedules` / `report_submissions`, row-level security by company).
 - The demo company is left out of reports (company filter, workers, outlets, users list, schedules) unless the CEO turns on **Show demo data**.
 
+### Worker requests and app access (v1.3.2)
+- **Requests** page: requests raised from the FW Worker app show chips for source (worker app), overdue and confidential. Outlet Managers approve or reject first (a reason is required to reject), then HR. Complaints marked confidential skip the outlet manager and go to HR only.
+- **Worker → 📱 App access** (CEO / GM / HR): turn the worker's app login on or off and issue a new 6-digit PIN. The PIN is shown once and never stored in readable form. Server side: migration `030_worker_app.sql`.
+
 ## Features
 
 ### Dashboard
