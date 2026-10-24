@@ -96,7 +96,14 @@ function set(next: Record<string, unknown>) {
 export async function refreshConfig() {
   const { data, error } = await supabase.from('app_config').select('key,value')
   if (error || !data) return
-  set(Object.fromEntries(data.map((r) => [r.key, r.value])))
+  const next: Record<string, unknown> = Object.fromEntries(data.map((r) => [r.key, r.value]))
+  // v1.3.0: people limited to some companies / outlets do not get the full company list; the server hands them
+  // only their own companies (never other companies' names)
+  if (!('companies' in next)) {
+    const { data: mine } = await supabase.rpc('my_company_list')
+    if (mine && typeof mine === 'object') next.companies = mine
+  }
+  set(next)
 }
 export function startConfig() {
   void refreshConfig()

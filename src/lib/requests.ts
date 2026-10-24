@@ -1,6 +1,7 @@
 /* Requests & approvals: cloud-only (needs a connection), live-updated through realtime. */
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { supabase } from './supabase'
+import { useDemoOutletIds, useHideDemo } from './demo'
 import { db, updateWorker } from './db'
 import { currentBasic } from './calc'
 import { defaultChecklist } from './memo'
@@ -53,7 +54,11 @@ export function useRequests(opts: { workerId?: string } = {}) {
     })()
     return () => { alive = false }
   }, [t, opts.workerId])
-  return state
+  // the demo company (App Review) stays out of the lists and counts unless shown (lib/demo.ts)
+  const hide = useHideDemo()
+  const demo = useDemoOutletIds()
+  return useMemo(() => (hide && demo.size && !opts.workerId ? { ...state, rows: state.rows.filter((r) => !demo.has(r.outlet_id || '')) } : state),
+    [state, hide, demo, opts.workerId])
 }
 export function useRequest(id?: string) {
   const t = useTick()

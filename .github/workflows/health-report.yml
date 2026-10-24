@@ -1,0 +1,50 @@
+# Every 30 minutes: report Apple / GitHub / SSL health to the CEO-only "Software Control" board in FW Manager.
+# The repo is public: this job prints only a one-line summary; secrets are passed as env and never echoed.
+name: health-report
+
+on:
+  schedule:
+    - cron: '17,47 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: health-report
+  cancel-in-progress: true
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            package.json
+            scripts/health_report.py
+          sparse-checkout-cone-mode: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install PyJWT
+        run: python -m pip install --quiet --disable-pip-version-check 'pyjwt[crypto]==2.9.0'
+      - name: Collect and send
+        env:
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          HEALTH_INGEST_SECRET: ${{ secrets.HEALTH_INGEST_SECRET }}
+          HEALTH_URL: ${{ vars.HEALTH_URL }}
+          GH_TOKEN: ${{ github.token }}
+          HAS_ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 != '' }}
+          HAS_ASC_KEY_ID: ${{ secrets.ASC_KEY_ID != '' }}
+          HAS_ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID != '' }}
+          HAS_APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID != '' }}
+          HAS_IOS_DIST_P12_B64: ${{ secrets.IOS_DIST_P12_B64 != '' }}
+          HAS_IOS_DIST_P12_PASSWORD: ${{ secrets.IOS_DIST_P12_PASSWORD != '' }}
+          HAS_IOS_PROFILE_B64: ${{ secrets.IOS_PROFILE_B64 != '' }}
+          HAS_HEALTH_INGEST_SECRET: ${{ secrets.HEALTH_INGEST_SECRET != '' }}
+        run: python scripts/health_report.py

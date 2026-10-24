@@ -331,7 +331,8 @@ export async function startSync(userId: string, role: string, outlets = '') {
   if (active) stopSync()
   canWrite = ['super_admin', 'general_manager', 'hr_admin', 'hr_manager', 'admin', 'manager'].includes(role)
   canRemark = canWrite || role === 'outlet_manager'
-  const scope = `${userId}|${role}|${outlets}`
+  // '|s2' (v1.3.0): outlets outside the user's scope are no longer sent, so download them again once
+  const scope = `${userId}|${role}|${outlets}|s2`
   const prev = localStorage.getItem(SYNC_USER)
   if (prev !== scope) {
     // different account, role or outlets on this device: what this user may see changed → download again
@@ -351,7 +352,8 @@ export async function startSync(userId: string, role: string, outlets = '') {
         const keep = new Set(Object.keys(dirty))
         await db.synced.where('key').startsWith('workers:').delete()
         await db.synced.where('key').startsWith('remarks:').delete()
-        for (const e of ['workers', 'remarks'] as Entity[]) {
+        await db.synced.where('key').startsWith('outlets:').delete()
+        for (const e of ['workers', 'remarks', 'outlets'] as Entity[]) {
           const ids = ((await db.table(e).toCollection().primaryKeys()) as string[]).filter((id) => !keep.has(keyOf(e, id)))
           await db.table(e).bulkDelete(ids)
         }

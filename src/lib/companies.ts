@@ -4,7 +4,7 @@
 import type { Outlet } from './types'
 import type { Role } from './supabase'
 
-export interface Company { id: string; name: string; logo?: string }
+export interface Company { id: string; name: string; logo?: string; /** demo company (e.g. for App Review): left out of totals, alerts and reports */ demo?: boolean }
 export interface CompaniesConfig { items: Company[] }
 export const DEFAULT_COMPANY_ID = 'main'
 export const DEFAULT_COMPANIES: CompaniesConfig = { items: [{ id: DEFAULT_COMPANY_ID, name: 'Main company' }] }

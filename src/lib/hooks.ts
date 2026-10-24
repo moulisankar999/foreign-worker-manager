@@ -6,6 +6,7 @@ import { setOutletCompanies } from './pay'
 import { outletCompany } from './companies'
 import { useConfig } from './config'
 import { useAuth } from './auth'
+import { demoOutletIds, isDemoOutlet, useHideDemo } from './demo'
 import { DEFAULT_SETTINGS, type JobCategory, type Outlet, type Settings, type Worker } from './types'
 
 const EMPTY_W: Worker[] = []
@@ -16,14 +17,27 @@ export function useSettings(): Settings {
   const s = useLiveQuery(() => db.settings.get('app'), [])
   return useMemo(() => ({ ...DEFAULT_SETTINGS, ...(s || {}) }), [s])
 }
+/** workers on this device; the demo company's workers are left out unless useHideDemo() says otherwise */
+async function loadWorkers(hide: boolean) {
+  const ws = await db.workers.toArray()
+  if (!hide) return ws
+  const demo = await demoOutletIds()
+  return demo.size ? ws.filter((w) => !demo.has(w.outletId || '')) : ws
+}
 export function useWorkers() {
-  return useLiveQuery(() => db.workers.toArray(), []) ?? EMPTY_W
+  const hide = useHideDemo()
+  return useLiveQuery(() => loadWorkers(hide), [hide]) ?? EMPTY_W
 }
 export function useWorkersLoaded() {
-  return useLiveQuery(() => db.workers.toArray(), [])
+  const hide = useHideDemo()
+  return useLiveQuery(() => loadWorkers(hide), [hide])
 }
 export function useOutlets() {
-  return useLiveQuery(() => db.outlets.orderBy('name').toArray(), []) ?? EMPTY_O
+  const hide = useHideDemo()
+  return useLiveQuery(async () => {
+    const os = await db.outlets.orderBy('name').toArray()
+    return hide ? os.filter((o) => !isDemoOutlet(o)) : os
+  }, [hide]) ?? EMPTY_O
 }
 export function useJobs() {
   return useLiveQuery(() => db.jobs.toArray(), []) ?? EMPTY_J

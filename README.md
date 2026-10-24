@@ -154,6 +154,20 @@ Everything is under **Compliance** in the menu (HR, CEO and GM; outlet managers 
 - **Minimum wage** — the announced RM2,000 from 1 June 2027 is listed as "announced — confirm when gazetted". Companies marked as under RM50 million in sales stay on RM1,700 for now (Settings → Pay & Leave rules → business size).
 - **Missing payslip alert** — active workers with no payslip for last month (only shown to people who may see pay).
 
+## Software Control (v1.3.0, CEO only)
+
+The CEO (Super Admin / Admin) sees **Software Control** in the sidebar (on phones: More → Software Control):
+
+- **Health monitor** — green / amber / red tiles for the website, database, logins, storage, backups, notifications, cron jobs, edge-function secrets, the iOS/Android build pipelines, Apple certificate and profile, TestFlight, the domain and the HTTPS certificate. Each tile says when it was last checked, what it means and what to do. Checks run about every 30 minutes (database cron + a scheduled GitHub workflow) and can be run on demand. When a tile turns red or amber the CEO alone gets an in-app alert, a phone push and (when an email provider is configured) an email.
+- **App errors** — crashes and failed requests from every user's app are collected (message, screen, version) so they can be fixed.
+- **Know-how / system map** — how the system is built, where everything lives, a renewal checklist, and every secret listed by **name and location only** (with a present / missing status). The content is stored in a CEO-only database table, not in this repository or the app bundle. Passwords, keys and tokens are never stored or shown in the app or the repo.
+
+Everyone can see **Settings → About** (app version, build, "Developed by Mouli Sankar").
+
+### Demo company and scoped names (v1.3.0)
+- **Demo company for App Review**: the company `demo-apple` (or any company marked `"demo": true`), with its outlet and workers, stays in the database. It is left out of CEO / GM / HR dashboard totals, compliance counts, alerts, daily push alerts and reports. The CEO can switch it back on with **Show demo data** (Dashboard, or the account menu). Only people scoped to that company or outlet (the reviewer login) see it normally. Server side: migration `019_demo_scope.sql` (`notify`, `notify_digest`) and the `daily-alerts` function.
+- **Scoped users see only their own names**: Outlet Managers and staff limited to companies / outlets get only their own outlets (database row-level security plus sync) and their own companies (`my_company_list()`). Note: the public sign-up form still lists company and outlet names so new staff can pick where they work.
+
 ## Features
 
 ### Dashboard

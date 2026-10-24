@@ -14,3 +14,4 @@ backups/
 .demo-login
 screens/
 .ios-keys/
+supabase/private/

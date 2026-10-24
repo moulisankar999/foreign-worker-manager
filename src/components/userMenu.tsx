@@ -11,6 +11,7 @@ import { Icon } from './Icon'
 import { Modal } from './ui'
 import { SetPasswordForm } from '../pages/SetPassword'
 import { setTheme, useTheme, type ThemePref } from '../lib/theme'
+import { setShowDemo, useShowDemo } from '../lib/demo'
 
 export function ThemeSwitch() {
   const t = useTheme()
@@ -55,7 +56,8 @@ function useWhoAmI() {
 /** Avatar button in the top app bar (every role, every screen size) */
 export function UserMenu() {
   const me = useWhoAmI()
-  const { profile } = useAuth()
+  const { profile, isSuper } = useAuth()
+  const showDemo = useShowDemo()
   const { run, busy } = useSignOut()
   const [open, setOpen] = useState(false)
   const [pwOpen, setPwOpen] = useState(false)
@@ -85,6 +87,12 @@ export function UserMenu() {
             </div>
           </div>
           <ThemeSwitch />
+          {isSuper && (
+            <label className="umenu-item umenu-check" title="The demo company for Apple's app review is left out of totals, alerts and reports unless this is on">
+              <input type="checkbox" role="menuitemcheckbox" aria-checked={showDemo} checked={showDemo} onChange={(e) => setShowDemo(e.target.checked)} />
+              <span>Show demo data <small className="muted">(Apple review company)</small></span>
+            </label>
+          )}
           <Link role="menuitem" to="/settings/account" className="umenu-item" onClick={() => setOpen(false)}><Icon name="gear" size={18} /> Account &amp; settings</Link>
           <button role="menuitem" type="button" className="umenu-item" onClick={() => { setOpen(false); setPwDone(false); setPwOpen(true) }}><Icon name="lock" size={18} /> Change password</button>
           <button role="menuitem" type="button" className="umenu-item danger" disabled={busy} onClick={() => { void run() }}>

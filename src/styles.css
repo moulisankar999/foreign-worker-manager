@@ -665,3 +665,44 @@ img, video, canvas, svg { max-width: 100%; }
 }
 .side > * { flex-shrink: 0; }
 @media print { .main { margin-left: 0 !important; } }
+
+/* ---- v1.3.0 Software Control (CEO) ---- */
+.hc-sum { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 12px 0; }
+.hc-sum .btn { margin-left: auto; }
+.hc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); gap: 12px; }
+.hc-tile { background: var(--card); border: 1px solid var(--line); border-left: 6px solid var(--gray); border-radius: var(--r); padding: 12px 14px; box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.hc-green { border-left-color: var(--green); } .hc-amber { border-left-color: var(--amber); } .hc-red { border-left-color: var(--red); background: color-mix(in srgb, var(--red) 5%, var(--card)); }
+.hc-head { display: flex; justify-content: space-between; gap: 8px; align-items: flex-start; }
+.hc-head strong { font-size: .95rem; overflow-wrap: anywhere; }
+.hc-tile p { margin: 0; font-size: .86rem; overflow-wrap: anywhere; }
+.hc-adv { color: var(--text); } .hc-where { color: var(--muted); }
+.hc-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: auto; padding-top: 6px; flex-wrap: wrap; }
+.hc-foot small { flex: 1 1 140px; min-width: 0; }
+.err-list li { cursor: pointer; }
+.err-msg { overflow-wrap: anywhere; font-size: .9rem; }
+.err-detail { white-space: pre-wrap; overflow-wrap: anywhere; font-size: .75rem; background: var(--bg); padding: 8px; border-radius: 8px; max-height: 260px; overflow: auto; margin: 6px 0 0; }
+.smap .card { margin-bottom: 12px; }
+.smap-kv { display: grid; gap: 6px; margin: 6px 0 10px; }
+.smap-kv > div { display: grid; grid-template-columns: minmax(110px, 34%) 1fr; gap: 10px; font-size: .88rem; border-bottom: 1px dashed var(--line); padding-bottom: 4px; }
+.smap-kv dt { color: var(--muted); } .smap-kv dd { margin: 0; overflow-wrap: anywhere; }
+.smap-list { margin: 6px 0 10px; padding-left: 20px; font-size: .88rem; } .smap-list li { margin: 3px 0; }
+.smap-diag { display: flex; flex-direction: column; gap: 6px; margin: 8px 0 12px; align-items: stretch; }
+.smap-drow { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; position: relative; }
+.smap-drow + .smap-drow::before { content: '↓'; position: absolute; top: -9px; left: 50%; transform: translate(-50%, -50%); color: var(--muted); font-size: .8rem; }
+.smap-drow + .smap-drow { margin-top: 10px; }
+.smap-node { flex: 1 1 140px; max-width: 260px; border: 1.5px solid var(--pri); border-radius: 10px; padding: 6px 10px; text-align: center; background: var(--pri-l); }
+.smap-node strong { display: block; font-size: .84rem; } .smap-node small { display: block; font-size: .72rem; color: var(--muted); overflow-wrap: anywhere; }
+.smap-tab { width: 100%; border-collapse: collapse; font-size: .84rem; margin: 6px 0 10px; display: block; overflow-x: auto; }
+.smap-tab th, .smap-tab td { text-align: left; padding: 5px 8px 5px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+.smap-tab code { font-size: .8rem; overflow-wrap: anywhere; }
+.about-kv { display: grid; gap: 4px; margin: 10px 0; font-size: .88rem; }
+.about-kv > div { display: grid; grid-template-columns: 110px 1fr; gap: 8px; } .about-kv dt { color: var(--muted); } .about-kv dd { margin: 0; overflow-wrap: anywhere; }
+
+
+/* v1.3.0: demo company switch (CEO) */
+.umenu-check { cursor: pointer; }
+.umenu-check input { width: 18px; height: 18px; margin: 0; accent-color: var(--brand, #0f766e); }
+.umenu-check small { display: block; }
+.demo-chip { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border: 1px dashed var(--line, #cbd5e1); border-radius: 999px; font-size: 13px; color: var(--muted, #64748b); cursor: pointer; white-space: nowrap; }
+.demo-chip input { width: 16px; height: 16px; margin: 0; accent-color: var(--brand, #0f766e); }
+.demo-chip.on { border-style: solid; border-color: #f59e0b; background: #fffbeb; color: #92400e; font-weight: 600; }

@@ -35,6 +35,7 @@ import { UserMenu } from './components/userMenu'
 import CeoReviewPage, { useCeoBadge } from './pages/CeoReview'
 import CompliancePage from './pages/Compliance'
 import GrievancePublic from './pages/GrievancePublic'
+import ControlPage, { useControlBadge } from './pages/Control'
 
 const NAV = [
   { to: '/', label: 'Home', icon: 'home', end: true },
@@ -45,6 +46,7 @@ const NAV = [
   { to: '/reports', label: 'Reports', icon: 'chart', desk: true },
   { to: '/compliance', label: 'Compliance', icon: 'shield', desk: true, hr: true },
   { to: '/ceo-review', label: 'CEO review', icon: 'lock', desk: true, ceo: true },
+  { to: '/control', label: 'Software Control', icon: 'shield', desk: true, ceo: true },
   { to: '/settings', label: 'Settings', icon: 'gear', desk: true },
   { to: '/more', label: 'More', icon: 'more', mobile: true },
 ]
@@ -64,6 +66,7 @@ export default function App() {
 function MainApp() {
   const { canWrite, role, session, myCompanies, myOutlets, can, route, isSuper, isOM } = useAuth()
   const ceoBadge = useCeoBadge()
+  const ctlBadge = useControlBadge()
   const allOutlets = useOutlets()
   useConfig() // re-render when a company logo changes
   const myLogo = headerLogo(role, myCompanies, myOutlets, allOutlets)
@@ -71,7 +74,7 @@ function MainApp() {
   const { rows: reqs } = useRequests()
   const myReq = reqs.filter((r) => needsMyAction(r, role || '', session?.user.id || '', { can, route })).length
   const { pending: newUsers } = usePendingUsers()
-  const badge = (to: string) => (to === '/alerts' ? urgent : to === '/requests' ? myReq : to === '/ceo-review' ? ceoBadge : to === '/' || to === '/settings' || to === '/more' ? newUsers.length : 0)
+  const badge = (to: string) => (to === '/alerts' ? urgent : to === '/requests' ? myReq : to === '/ceo-review' ? ceoBadge : to === '/control' ? ctlBadge : to === '/more' ? newUsers.length + ctlBadge : to === '/' || to === '/settings' ? newUsers.length : 0)
   const alerts = useAlerts()
   const settings = useSettings()
   const urgent = alerts.filter((a) => a.severity === 'critical' || a.severity === 'high').length
@@ -143,6 +146,8 @@ function MainApp() {
             <Route path="/requests/:id" element={<RequestDetail />} />
             <Route path="/ceo-review" element={<CeoReviewPage />} />
             <Route path="/compliance" element={<CompliancePage />} />
+            {isSuper && <Route path="/control" element={<ControlPage />} />}
+            {isSuper && <Route path="/control/:tab" element={<ControlPage />} />}
             <Route path="/documents" element={<DocumentLibrary />} />
             <Route path="/inbox" element={<Inbox />} />
             <Route path="/more" element={<More />} />

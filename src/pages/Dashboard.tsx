@@ -12,6 +12,7 @@ import { missingLanguage } from '../lib/languages'
 import { fmtDate, fmtMonth, rm0, todayISO } from '../lib/util'
 import { ExpiryTimeline, Greeting, HealthCard, LatestChecks, Priorities, StatusGlance, TipCard, type Extra } from '../components/advice'
 import { useCeoBadge } from './CeoReview'
+import { setShowDemo, useShowDemo } from '../lib/demo'
 import { useRequests } from '../lib/requests'
 import { needsMyAction } from '../lib/workflow'
 import { usePendingUsers } from '../lib/userApprovals'
@@ -109,6 +110,7 @@ export default function Dashboard() {
       <div className="page dash-tabs">
         <div className="page-h">
           <Greeting sub={`${k.total} current workers${k.exited ? ` · ${k.exited} exited` : ''}`} />
+          {isSuper && <DemoChip />}
           <div className="row gap-s wrap dash-add">
             {canWrite && <Btn kind="primary" icon="plus" onClick={() => nav('/workers/new')}>Add worker</Btn>}
           </div>
@@ -227,5 +229,15 @@ function OutletRiskCard() {
       <p className="small muted" style={{ marginTop: 0 }}>{hi ? <Chip tone="red">{hi} high</Chip> : null} {med ? <Chip tone="amber">{med} medium</Chip> : null} {!hi && !med ? <Chip tone="green">All low</Chip> : null} Combines passports held, late pay, overtime, deductions, hostel, complaints and expiring documents.</p>
       <RiskTable limit={5} />
     </Card>
+  )
+}
+
+/** CEO: "Show demo data" switch (the Apple review demo company is left out of totals, alerts and reports by default) */
+function DemoChip() {
+  const on = useShowDemo()
+  return (
+    <label className={`demo-chip${on ? ' on' : ''}`} title="The demo company for Apple's app review is left out of totals, alerts and reports unless this is on">
+      <input type="checkbox" checked={on} onChange={(e) => setShowDemo(e.target.checked)} /> Show demo data
+    </label>
   )
 }

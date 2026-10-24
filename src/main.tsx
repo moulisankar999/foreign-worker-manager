@@ -10,6 +10,7 @@ import { isNative, shareFile } from './lib/platform'
 import { setNativeSaver } from './lib/util'
 import { listenForTaps } from './lib/localNotify'
 import { supabase } from './lib/supabase'
+import { installErrorCapture } from './lib/errorCapture'
 
 applyTheme()
 
@@ -40,6 +41,8 @@ window.addEventListener('unhandledrejection', (e) => {
   const m = String((e.reason as Error)?.message || '')
   if (m.startsWith('View-only access')) { e.preventDefault(); alert(m) }
 })
+
+installErrorCapture() // CEO-only error list (Software Control → Errors)
 
 if (isNative()) {
   // Android / iOS app: files go to the share sheet, notification taps open Alerts, Android back button navigates back

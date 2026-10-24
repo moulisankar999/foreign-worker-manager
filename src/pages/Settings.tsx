@@ -18,6 +18,7 @@ import { LogoEdit, LogoImg } from '../components/logos'
 import { outletLogo } from '../lib/logos'
 import { CompaniesCard, UserApprovalRulesCard } from '../components/companies'
 import { useConfig } from '../lib/config'
+import { supabase } from '../lib/supabase'
 import { companyName, DEFAULT_COMPANY_ID, outletCompany } from '../lib/companies'
 import { clearDeviceCopy, syncNow } from '../lib/sync'
 import { buildAlerts } from '../lib/calc'
@@ -149,6 +150,7 @@ export default function SettingsPage() {
     const data = await exportBackup()
     download(`fw-manager-backup-${todayISO()}.json`, JSON.stringify(data), 'application/json')
     localStorage.setItem('fwm-last-backup', todayISO())
+    void supabase.rpc('note_backup').then(() => {}, () => {}) // date only, for the CEO's health board
     setMsg(`Backup downloaded (${data.workers.length} workers).`)
   }
   const doImport = async (f: File) => {
@@ -306,6 +308,7 @@ export default function SettingsPage() {
       {tab === 'about' && <Sec id="s-about">
       <Card title="About FW Manager">
         <p className="small">FW Manager <strong>{APP_VERSION}</strong> — foreign worker records, documents, passport safekeeping and requests, shared live with your team.</p>
+        <AboutBuild />
         {install && <p><Btn kind="primary" icon="download" onClick={() => install.prompt()}>Install app</Btn></p>}
         {!isNative() && <>
           <p className="muted small"><strong>iPhone:</strong> open in Safari → Share → “Add to Home Screen”. <strong>Android:</strong> install the app below, or in Chrome → menu → “Install app”.</p>
@@ -351,4 +354,24 @@ function ChangePasswordInline() {
   return done
     ? <div><p className="ok">✅ Your password is changed. Use it next time you sign in.</p><Btn small kind="ghost" onClick={() => { setDone(false); setK(k + 1) }}>Change again</Btn></div>
     : <SetPasswordForm key={k} mode="change" onDone={() => setDone(true)} />
+}
+
+/** App name, version, build and the developer credit (shown to every user). */
+function AboutBuild() {
+  const [build, setBuild] = useState<string>(isNative() ? '…' : '')
+  useEffect(() => {
+    if (!isNative()) return
+    void import('@capacitor/app').then(({ App }) => App.getInfo()).then((i) => setBuild(i.build || '?'), () => setBuild('?'))
+  }, [])
+  const built = new Date(__BUILD_TIME__)
+  const platform = !isNative() ? 'Web app' : /iPhone|iPad|iOS/i.test(navigator.userAgent) ? 'iPhone / iPad app' : 'Android app'
+  return (
+    <dl className="about-kv">
+      <div><dt>App</dt><dd>FW Manager</dd></div>
+      <div><dt>Version</dt><dd>{APP_VERSION}</dd></div>
+      <div><dt>Build</dt><dd>{build ? `${build} · ` : ''}{built.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })} {built.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}</dd></div>
+      <div><dt>Platform</dt><dd>{platform}</dd></div>
+      <div><dt>Developed by</dt><dd>Mouli Sankar · <a href="mailto:mouli@mouli.biz">mouli@mouli.biz</a></dd></div>
+    </dl>
+  )
 }

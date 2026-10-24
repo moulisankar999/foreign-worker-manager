@@ -67,6 +67,14 @@ Deno.serve(async (req) => {
     }
     if (data.length < 1000) break
   }
+  // v1.3.0: the demo company for Apple's app review (id demo-apple, or "demo": true in the company list) is left out
+  // of everyone's alerts except people whose own scope is that company / outlet
+  const demoCos = new Set(['demo-apple'])
+  {
+    const { data: co } = await db.from('app_config').select('value').eq('key', 'companies').maybeSingle()
+    for (const c of ((co?.value as { items?: { id: string; demo?: boolean }[] } | null)?.items || [])) if (c.demo) demoCos.add(c.id)
+  }
+  const isDemoOutlet = (o?: string) => !!o && demoCos.has(outletCo.get(o) || 'main')
   for (const w of workers) { // tolerate partially filled records
     w.documents ||= []; w.leaves ||= []; w.loans ||= []; w.deductions ||= []; w.memos ||= []; w.increments ||= []; w.family ||= []
   }
@@ -80,7 +88,9 @@ Deno.serve(async (req) => {
     const key = all ? 'all' : 's:' + [...os].sort().join(',') + '|' + [...cs].sort().join(',')
     let c = cache.get(key)
     if (!c) {
-      const ws = all ? workers : workers.filter((w) => !!w.outletId && (os.includes(w.outletId) || cs.includes(outletCo.get(w.outletId) || 'main')))
+      const ws = all
+        ? workers.filter((w) => !isDemoOutlet(w.outletId))
+        : workers.filter((w) => !!w.outletId && (os.includes(w.outletId) || cs.includes(outletCo.get(w.outletId) || 'main')))
       const urgent = buildAlerts(ws, settings).filter((a) => a.severity === 'critical' || a.severity === 'high')
       c = { urgent, digest: await sha(urgent.map((a) => a.id).sort().join('|')), msg: summary(urgent) }
       cache.set(key, c)
@@ -120,5 +130,8 @@ Deno.serve(async (req) => {
     }
     if (ok && !test) await db.from('alert_log').insert({ user_id: uid, day, digest })
   }
-  return json({ day, workers: workers.length, scopes: cache.size, recipients: ids.length, subscriptions: subs?.length || 0, sent, skipped, failed, removed, test })
+  // a signed-in caller also gets their own urgent-alert count (lets "Test alerts" show what the daily push would say)
+  const me = onlyUser ? (users || [])[0] : null
+  const mineN = me ? (await forUser(me.role, me.outlet_ids, me.company_ids)).urgent.length : undefined
+  return json({ day, workers: workers.length, scopes: cache.size, recipients: ids.length, subscriptions: subs?.length || 0, sent, skipped, failed, removed, test, urgent: mineN })
 })

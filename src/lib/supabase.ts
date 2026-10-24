@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { Capacitor } from '@capacitor/core'
 import { Preferences } from '@capacitor/preferences'
+import { registerErrorClient, trackedFetch } from './errorCapture'
 
 // Public values only (safe in the browser). Secrets live in .secrets.env on the build machine, never here.
 // A test build can point at the separate TEST project with VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY (see tests/README).
@@ -22,7 +23,9 @@ const nativeStorage = {
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false, storageKey: AUTH_KEY, ...(Capacitor.isNativePlatform() ? { storage: nativeStorage } : {}) },
   realtime: { params: { eventsPerSecond: 10 } },
+  global: { fetch: trackedFetch },
 })
+registerErrorClient(supabase)
 
 export type Role = 'super_admin' | 'general_manager' | 'hr_admin' | 'hr_manager' | 'outlet_manager' | 'viewer'
 export interface Profile {

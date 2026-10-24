@@ -4,12 +4,15 @@ import { Icon } from '../components/Icon'
 import { useAuth } from '../lib/auth'
 import { SignOutRow } from '../components/userMenu'
 import { useCeoBadge } from './CeoReview'
+import { useControlBadge } from './Control'
 
 export default function More() {
   const { canWrite, isSuper, isGm, isHr, isOM } = useAuth()
   const ceoN = useCeoBadge()
+  const ctlN = useControlBadge()
   const items: [string, string, string, string][] = [
     ...(isSuper ? [['/ceo-review', 'lock', `CEO review${ceoN ? ` (${ceoN})` : ''}`, 'GM decisions & rejections — overrule, recall, mark reviewed'] as [string, string, string, string]] : []),
+    ...(isSuper ? [['/control', 'shield', `Software Control${ctlN ? ` (${ctlN})` : ''}`, 'Health monitor, app errors, system map & renewals'] as [string, string, string, string]] : []),
     ['/documents', 'doc', 'Document library', 'All scanned documents & expiries'],
     ['/alerts', 'bell', 'Alerts', 'Expiries, overdue passports, proof pending'],
     ['/reports', 'chart', 'Reports', 'Headcount, leave, emergency leave, passport register'],
