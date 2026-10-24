@@ -168,6 +168,11 @@ Everyone can see **Settings → About** (app version, build, "Developed by Mouli
 - **Demo company for App Review**: the company `demo-apple` (or any company marked `"demo": true`), with its outlet and workers, stays in the database. It is left out of CEO / GM / HR dashboard totals, compliance counts, alerts, daily push alerts and reports. The CEO can switch it back on with **Show demo data** (Dashboard, or the account menu). Only people scoped to that company or outlet (the reviewer login) see it normally. Server side: migration `019_demo_scope.sql` (`notify`, `notify_digest`) and the `daily-alerts` function.
 - **Scoped users see only their own names**: Outlet Managers and staff limited to companies / outlets get only their own outlets (database row-level security plus sync) and their own companies (`my_company_list()`). Note: the public sign-up form still lists company and outlet names so new staff can pick where they work.
 
+### Reports library and required printed reports (v1.3.1)
+- **Reports** is a role-scoped A4 report library with print / PDF preview and CSV export. Each person only gets the data their role and scope allow (server-side), and Outlet Managers only see their own outlet and company names.
+- **Required printed reports**: the CEO (or HR with compliance settings) schedules reports that HR must print, sign and file on a routine. The schedules table shows company names. Server side: migration `018_report_submissions.sql` (tables `report_schedules` / `report_submissions`, row-level security by company).
+- The demo company is left out of reports (company filter, workers, outlets, users list, schedules) unless the CEO turns on **Show demo data**.
+
 ## Features
 
 ### Dashboard
