@@ -18,6 +18,7 @@ export default function More() {
     ['/reports', 'chart', 'Reports', 'Headcount, leave, emergency leave, passport register'],
     ...(canWrite && !isOM ? [['/compliance', 'shield', 'Compliance', 'Outlet risk, hostels, hiring, complaints, PDPA'] as [string, string, string, string]] : []),
     ['/inbox', 'bell', 'Notifications', 'Request updates'],
+    ['/help', 'help', 'Help', 'My role, FAQ and the user manual (PDF)'],
     ['/settings', 'gear', 'Settings', isSuper || isGm ? 'Users, approval rules, notifications…' : 'Account & app'],
   ]
   void canWrite; void isHr

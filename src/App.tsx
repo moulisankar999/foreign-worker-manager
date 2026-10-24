@@ -36,6 +36,7 @@ import CeoReviewPage, { useCeoBadge } from './pages/CeoReview'
 import CompliancePage from './pages/Compliance'
 import GrievancePublic from './pages/GrievancePublic'
 import ControlPage, { useControlBadge } from './pages/Control'
+import HelpPage from './pages/Help'
 
 const NAV = [
   { to: '/', label: 'Home', icon: 'home', end: true },
@@ -48,6 +49,7 @@ const NAV = [
   { to: '/ceo-review', label: 'CEO review', icon: 'lock', desk: true, ceo: true },
   { to: '/control', label: 'Software Control', icon: 'shield', desk: true, ceo: true },
   { to: '/settings', label: 'Settings', icon: 'gear', desk: true },
+  { to: '/help', label: 'Help', icon: 'help', desk: true },
   { to: '/more', label: 'More', icon: 'more', mobile: true },
 ]
 
@@ -141,6 +143,8 @@ function MainApp() {
             <Route path="/reports" element={<Reports />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/settings/:tab" element={<SettingsPage />} />
+            <Route path="/help" element={<HelpPage />} />
+            <Route path="/help/:tab" element={<HelpPage />} />
             <Route path="/requests" element={<RequestsPage />} />
             <Route path="/requests/new" element={<NewRequest />} />
             <Route path="/requests/:id" element={<RequestDetail />} />

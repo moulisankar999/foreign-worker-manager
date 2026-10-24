@@ -1,6 +1,7 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { ApiError, cancelRequest, changePin, createRequest, getMe, getRequests, login, logout, resubmitRequest, sb, type Me, type WReq } from './api'
 import { LANGS, initialLang, translator, type Key, type Lang, type T } from './i18n'
+import { helpFor } from './help'
 
 type Tab = 'home' | 'docs' | 'req' | 'new' | 'me'
 const POLL_MS = 30_000
@@ -109,6 +110,7 @@ function Login({ t, lang, setLang, notice, onDone }: { t: T; lang: Lang; setLang
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   const [langOpen, setLangOpen] = useState(false)
+  const [helpOpen, setHelpOpen] = useState(false)
   const ok = pp.replace(/\s/g, '').length >= 5 && /^\d{6}$/.test(pin)
   const submit = async () => {
     if (!ok || busy) return
@@ -117,7 +119,7 @@ function Login({ t, lang, setLang, notice, onDone }: { t: T; lang: Lang; setLang
   }
   return (
     <form className="login" onSubmit={(e) => { e.preventDefault(); submit() }}>
-      <div className="langbar"><button type="button" className="btn ghost small" data-testid="login-lang" onClick={() => setLangOpen(true)}>🌐 {LANGS.find((l) => l.code === lang)?.native}</button></div>
+      <div className="langbar"><button type="button" className="btn ghost small" data-testid="login-lang" onClick={() => setLangOpen(true)}>🌐 {LANGS.find((l) => l.code === lang)?.native}</button><button type="button" className="btn ghost small" data-testid="login-help" onClick={() => setHelpOpen(true)}>❓ {helpFor(lang).ui.help}</button></div>
       <img src={ICON} className="logo" alt="" />
       <h1>{t('appName')}</h1>
       {notice && <div className="note">{notice}</div>}
@@ -129,6 +131,7 @@ function Login({ t, lang, setLang, notice, onDone }: { t: T; lang: Lang; setLang
       <button className="btn primary block" disabled={!ok || busy} data-testid="login-submit">{busy ? t('sending') : t('signIn')}</button>
       <div className="muted small" style={{ textAlign: 'center' }}>{t('pinHelp')}</div>
       {langOpen && <LangSheet t={t} lang={lang} onPick={(l) => { setLang(l); setLangOpen(false) }} onClose={() => setLangOpen(false)} />}
+      {helpOpen && <HelpSheet t={t} lang={lang} signedIn={false} onClose={() => setHelpOpen(false)} />}
     </form>
   )
 }
@@ -207,6 +210,7 @@ function Home({ t, lang, setLang, onEnded }: { t: T; lang: Lang; setLang: (l: La
   useEffect(() => { if (tab === 'req' && reqs && badge) markSeen(reqs) }, [tab, reqs, badge])
   useEffect(() => { if (!toast) return; const id = setTimeout(() => setToast(null), 3000); return () => clearTimeout(id) }, [toast])
 
+  const [helpOpen, setHelpOpen] = useState(false)
   const tabs: { id: Tab; ic: string; k: Key }[] = [
     { id: 'home', ic: '🏠', k: 'tabHome' }, { id: 'docs', ic: '🛂', k: 'tabDocs' }, { id: 'new', ic: '＋', k: 'tabNew' },
     { id: 'req', ic: '📨', k: 'tabReq' }, { id: 'me', ic: '👤', k: 'tabMe' },
@@ -217,6 +221,7 @@ function Home({ t, lang, setLang, onEnded }: { t: T; lang: Lang; setLang: (l: La
       <header className="top">
         <img src={ICON} width={30} height={30} style={{ borderRadius: 8 }} alt="" />
         <h1>{title}</h1>
+        <button className="iconbtn" onClick={() => setHelpOpen(true)} aria-label={helpFor(lang).ui.help} data-testid="help">?</button>
         <button className="iconbtn" onClick={() => { load(); setToast(t('refresh') + ' ✓') }} aria-label={t('refresh')} data-testid="refresh">⟳</button>
       </header>
       <main className="main" data-testid={'tab-' + tab}>
@@ -238,7 +243,68 @@ function Home({ t, lang, setLang, onEnded }: { t: T; lang: Lang; setLang: (l: La
         ))}
       </nav>
       {toast && <div className="toast" role="status">{toast}</div>}
+      {helpOpen && <HelpSheet t={t} lang={lang} signedIn onClose={() => setHelpOpen(false)} />}
     </div>
+  )
+}
+
+/* ------------------------------------------------------------------ Help (FAQ + how-to; pages instead of scrolling) */
+const WORKER_MANUAL = 'fw-worker-manual.pdf'
+function HelpSheet({ t, lang, signedIn, onClose }: { t: T; lang: Lang; signedIn: boolean; onClose: () => void }) {
+  const h = helpFor(lang)
+  const [seg, setSeg] = useState<'faq' | 'how'>('faq')
+  const [open, setOpen] = useState<number | null>(null)
+  const [page, setPage] = useState(0)
+  const [msg, setMsg] = useState<string | null>(null)
+  const [ref, per] = useFit(64)
+  const titles = seg === 'faq' ? h.faq.map((f) => f[0]) : h.guides.map((g) => g.title)
+  const pages = Math.max(1, Math.ceil(titles.length / per))
+  const p = Math.min(page, pages - 1)
+  const pick = (s: 'faq' | 'how') => { setSeg(s); setOpen(null); setPage(0) }
+  const pdf = async () => {
+    setMsg(null)
+    const { data, error } = await sb.storage.from('manuals').createSignedUrl(WORKER_MANUAL, 600, { download: WORKER_MANUAL })
+    if (error || !data) { setMsg(h.ui.pdfMissing); return }
+    const { Capacitor } = await import('@capacitor/core')
+    if (Capacitor.isNativePlatform()) { const { Browser } = await import('@capacitor/browser'); await Browser.open({ url: data.signedUrl }) }
+    else window.open(data.signedUrl, '_blank')
+  }
+  return (
+    <Sheet title={'❓ ' + h.ui.help} onClose={onClose} t={t} full>
+      <div className="seg" role="tablist">
+        <button type="button" role="tab" aria-selected={seg === 'faq'} className={seg === 'faq' ? 'on' : ''} onClick={() => pick('faq')} data-testid="help-faq">💬 {h.ui.faq}</button>
+        <button type="button" role="tab" aria-selected={seg === 'how'} className={seg === 'how' ? 'on' : ''} onClick={() => pick('how')} data-testid="help-how">📖 {h.ui.howTo}</button>
+      </div>
+      <div className="list" ref={ref} data-testid="help-list">
+        {open === null ? titles.slice(p * per, p * per + per).map((q, i) => (
+          <button key={q} type="button" className="row help-row" onClick={() => setOpen(p * per + i)} data-testid="help-row">
+            <span className="t ell">{q}</span><span className="muted">›</span>
+          </button>
+        )) : (
+          <div className="card grow help-ans" data-testid="help-answer">
+            <div className="q">{titles[open]}</div>
+            {seg === 'faq' ? <p>{h.faq[open][1]}</p>
+              : <ol>{h.guides[open].steps.map((s) => <li key={s}>{s}</li>)}</ol>}
+          </div>
+        )}
+      </div>
+      {open === null ? (pages > 1 && (
+        <div className="pager">
+          <button className="btn" disabled={p === 0} onClick={() => setPage(p - 1)} aria-label={t('back')} data-testid="help-prev">‹</button>
+          <span className="muted small">{p + 1} / {pages}</span>
+          <button className="btn" disabled={p >= pages - 1} onClick={() => setPage(p + 1)} aria-label={t('next')} data-testid="help-next">›</button>
+        </div>
+      )) : (
+        <div className="pager">
+          <button className="btn" disabled={open === 0} onClick={() => setOpen(open - 1)} aria-label={t('back')}>‹</button>
+          <button className="btn" onClick={() => { setPage(Math.floor(open / per)); setOpen(null) }} data-testid="help-back">☰ {h.ui.list}</button>
+          <button className="btn" disabled={open >= titles.length - 1} onClick={() => setOpen(open + 1)} aria-label={t('next')}>›</button>
+        </div>
+      )}
+      {msg && <div className="note">{msg}</div>}
+      {signedIn ? <button type="button" className="btn block" onClick={() => void pdf()} data-testid="help-pdf">📄 {h.ui.pdf}</button>
+        : <div className="muted small" style={{ textAlign: 'center' }}>📄 {h.ui.pdfNeedsSignIn}</div>}
+    </Sheet>
   )
 }
 
@@ -526,7 +592,7 @@ function NewTab({ t, lang, onEnded, done }: { t: T; lang: Lang; onEnded: () => v
 
 /* ------------------------------------------------------------------ Me tab */
 function MeTab({ t, lang, me, setLang, onEnded, toast }: { t: T; lang: Lang; me: Me; setLang: (l: Lang) => void; onEnded: () => void; toast: (s: string) => void }) {
-  const [sheet, setSheet] = useState<'lang' | 'pin' | null>(null)
+  const [sheet, setSheet] = useState<'lang' | 'pin' | 'help' | null>(null)
   return (
     <>
       <div className="card grow" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -540,9 +606,13 @@ function MeTab({ t, lang, me, setLang, onEnded, toast }: { t: T; lang: Lang; me:
         </div>
       </div>
       <button className="btn block" onClick={() => setSheet('lang')} data-testid="me-lang">🌐 {t('language')}: {LANGS.find((l) => l.code === lang)?.native}</button>
-      <button className="btn block" onClick={() => setSheet('pin')} data-testid="me-pin">🔑 {t('changePin')}</button>
+      <div className="row2">
+        <button className="btn" onClick={() => setSheet('pin')} data-testid="me-pin">🔑 {t('changePin')}</button>
+        <button className="btn" onClick={() => setSheet('help')} data-testid="me-help">❓ {helpFor(lang).ui.help}</button>
+      </div>
       <button className="btn danger block" onClick={async () => { await logout() }} data-testid="me-logout">↩ {t('signOut')}</button>
       {sheet === 'lang' && <LangSheet t={t} lang={lang} onPick={(l) => { setLang(l); setSheet(null) }} onClose={() => setSheet(null)} />}
+      {sheet === 'help' && <HelpSheet t={t} lang={lang} signedIn onClose={() => setSheet(null)} />}
       {sheet === 'pin' && <PinSheet t={t} onClose={() => setSheet(null)} onEnded={onEnded} onDone={() => { setSheet(null); toast(t('pinChanged') + ' ✓') }} />}
     </>
   )

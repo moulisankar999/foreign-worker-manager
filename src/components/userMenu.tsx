@@ -94,6 +94,7 @@ export function UserMenu() {
             </label>
           )}
           <Link role="menuitem" to="/settings/account" className="umenu-item" onClick={() => setOpen(false)}><Icon name="gear" size={18} /> Account &amp; settings</Link>
+          <Link role="menuitem" to="/help" className="umenu-item" onClick={() => setOpen(false)}><Icon name="help" size={18} /> Help &amp; user manual</Link>
           <button role="menuitem" type="button" className="umenu-item" onClick={() => { setOpen(false); setPwDone(false); setPwOpen(true) }}><Icon name="lock" size={18} /> Change password</button>
           <button role="menuitem" type="button" className="umenu-item danger" disabled={busy} onClick={() => { void run() }}>
             <Icon name="exit" size={18} /> {busy ? 'Signing out…' : 'Switch user / Sign out'}

@@ -28,6 +28,7 @@ const P: Record<string, string> = {
   lock: 'M5 11h14a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2zM7 11V7a5 5 0 0 1 10 0v4',
   pause: 'M6 4h4v16H6zM14 4h4v16h-4z',
   play: 'M5 3l14 9-14 9z',
+  help: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3M12 17h.01',
   more: 'M12 13a1 1 0 1 0 0-2 1 1 0 0 0 0 2zM19 13a1 1 0 1 0 0-2 1 1 0 0 0 0 2zM5 13a1 1 0 1 0 0-2 1 1 0 0 0 0 2z',
 }
 export function Icon({ name, size = 20, className }: { name: keyof typeof P | string; size?: number; className?: string }) {

@@ -706,3 +706,24 @@ img, video, canvas, svg { max-width: 100%; }
 .demo-chip { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border: 1px dashed var(--line, #cbd5e1); border-radius: 999px; font-size: 13px; color: var(--muted, #64748b); cursor: pointer; white-space: nowrap; }
 .demo-chip input { width: 16px; height: 16px; margin: 0; accent-color: var(--brand, #0f766e); }
 .demo-chip.on { border-style: solid; border-color: #f59e0b; background: #fffbeb; color: #92400e; font-weight: 600; }
+
+/* ---------- Help (My role / FAQ / User manual) ---------- */
+.help-page h1 { display: flex; align-items: center; gap: 8px; }
+.help-grid { display: grid; gap: 14px; }
+.help-chain { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 12px; }
+.help-step { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
+.help-step b { color: var(--muted); font-weight: 400; margin-left: -2px; }
+.help-step.me { background: var(--teal); border-color: var(--teal); color: #fff; font-weight: 700; }
+.help-step.me b { color: #fff; }
+.help-list { margin: 0; padding-left: 20px; display: grid; gap: 6px; }
+.help-list.ok li::marker { content: '✓  '; color: var(--green); }
+.help-list.no li::marker { content: '✕  '; color: var(--red); }
+.help-search { margin-bottom: 12px; }
+.help-faq details, .help-guide { border-bottom: 1px solid var(--line); padding: 10px 2px; }
+.help-faq summary, .help-guide summary { cursor: pointer; font-weight: 600; list-style-position: outside; }
+.help-faq details p { margin: 8px 0 2px; color: var(--text); }
+.help-group h3 { margin: 18px 0 4px; font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+.help-guide ol { margin: 8px 0; padding-left: 22px; display: grid; gap: 5px; }
+.help-call { margin: 8px 0 2px; padding: 8px 12px; border-radius: 10px; font-size: 14px; }
+.help-call.tip { background: rgba(13,148,136,.1); border-left: 4px solid var(--teal); }
+.help-call.imp { background: rgba(217,119,6,.12); border-left: 4px solid var(--amber); }
