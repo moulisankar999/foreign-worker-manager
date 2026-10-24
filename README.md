@@ -223,6 +223,8 @@ Google Play Protect may warn about an app “from an unknown developer”. That'
 
 A native iPhone app can be built from this repo (the `ios/` folder is ready), but Apple only allows that with a Mac and an Apple Developer account. See [Building the iPhone app](#building-the-iphone-app).
 
+v1.2.4 fixes touch scrolling in the Android and iPhone apps: every screen (Compliance, Dashboard tabs, workers, Settings, forms, pop-ups) now scrolls up and down with a swipe.
+
 ### Android / iOS app vs. web app
 | | Android app | Web app / Home Screen (iPhone, any browser) |
 |---|---|---|

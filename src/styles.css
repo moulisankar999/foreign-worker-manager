@@ -7,8 +7,11 @@
   -webkit-font-smoothing: antialiased; font-size: 15px; line-height: 1.45;
 }
 * { box-sizing: border-box; }
-html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; overflow-x: hidden; max-width: 100%; }
-body { margin: 0; min-height: 100vh; min-height: 100dvh; overflow-x: hidden; max-width: 100%; overscroll-behavior-y: none; -webkit-tap-highlight-color: transparent; }
+/* v1.2.4: only <body> sets overflow-x, so it hands it to the viewport and the page itself stays the one scroller.
+   (v1.2.3 set it on html AND body, which turned body into a separate, non-scrolling box; with overscroll-behavior on it,
+   touch swipes stopped there and the page could not be scrolled on Android / iOS.) */
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; overscroll-behavior-y: none; }
+body { margin: 0; min-height: 100vh; min-height: 100dvh; overflow-x: hidden; -webkit-tap-highlight-color: transparent; }
 body.modal-open { overflow: hidden; }
 h1 { font-size: 1.5rem; margin: 0; letter-spacing: -.01em; }
 h2 { font-size: 1.25rem; margin: 0 0 2px; }
@@ -38,7 +41,7 @@ input[type=checkbox] { width: 20px; height: 20px; min-height: 0; accent-color: v
 .print-only { display: none; }
 
 /* layout */
-.shell { display: flex; min-height: 100vh; min-height: 100dvh; max-width: 100%; }
+.shell { display: flex; min-height: 100vh; min-height: 100dvh; max-width: 100%; overflow-x: clip; }
 .side { width: 240px; background: #0b3b38; color: #e2f5f3; position: sticky; top: 0; height: 100vh; height: 100dvh; padding: 18px 14px; display: flex; flex-direction: column; gap: 18px; flex-shrink: 0; }
 .brand { display: flex; gap: 10px; align-items: center; padding: 0 6px; }
 .brand strong { display: block; font-size: 1.05rem; } .brand small { color: #9fd6cf; display: block; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -177,7 +180,7 @@ input[type=checkbox] { width: 20px; height: 20px; min-height: 0; accent-color: v
 .modal { background: #fff; border-radius: 18px; width: 100%; max-width: 620px; max-height: calc(100vh - 32px); max-height: calc(100dvh - 32px); display: flex; flex-direction: column; box-shadow: 0 20px 60px rgba(0,0,0,.25); animation: up .2s; }
 .modal-wide { max-width: 860px; }
 .modal-h { display: flex; justify-content: space-between; align-items: center; padding: 12px 12px 8px 18px; border-bottom: 1px solid var(--line); }
-.modal-b { padding: 16px 18px; overflow-y: auto; }
+.modal-b { padding: 16px 18px; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; min-height: 0; }
 .modal-actions { display: flex; gap: 8px; margin-top: 16px; align-items: center; flex-wrap: wrap; }
 .modal-f { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; padding: 12px 18px; border-top: 1px solid var(--line); }
 @keyframes fade { from { opacity: 0 } } @keyframes up { from { transform: translateY(24px); opacity: 0 } }
