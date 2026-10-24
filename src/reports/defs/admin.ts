@@ -1,7 +1,7 @@
 import { ROLE_LABEL } from '../../lib/workflow'
 import { todayISO } from '../../lib/util'
 import { mytStamp } from '../format'
-import { FREQ_LABEL, STATE_LABEL, STEPS, lastStep, periodLabel, periodsFor, subState } from '../submissions'
+import { FREQ_LABEL, STATE_LABEL, STEPS, lastStep, periodLabel, periodsFor, subState } from '../subsData'
 import type { ReportDef, Row, Tone } from '../types'
 import { audit, doc, errNote, hr, kpi, table, users } from './helpers'
 

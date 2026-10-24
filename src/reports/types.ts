@@ -31,7 +31,7 @@ export interface Filters {
 export interface Extra {
   audit?: { id: number; at: string; user_name: string | null; user_role: string | null; action: string; entity: string | null; summary: string | null }[]
   users?: { id: string; email: string | null; full_name: string | null; role: string; status: string; outlet_ids?: string[] | null; company_ids?: string[] | null; approved_by_name?: string | null; approved_at?: string | null; created_at: string }[]
-  subs?: { schedules: import('./submissions').Schedule[]; submissions: import('./submissions').Submission[] }
+  subs?: { schedules: import('./subsData').Schedule[]; submissions: import('./subsData').Submission[] }
   error?: string
 }
 export interface Ctx {

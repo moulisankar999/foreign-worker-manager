@@ -5,7 +5,7 @@ import { companyName } from '../lib/companies'
 import { useConfig } from '../lib/config'
 import { isDemoCompany, useHideDemo } from '../lib/demo'
 import { fmtDate, todayISO } from '../lib/util'
-import { FREQ_LABEL, STATE_LABEL, STATE_TONE, STEPS, canDoStep, deleteSchedule, doStep, periodLabel, periodOf, periodsFor, saveSchedule, subState, type Freq, type Schedule, type StepKey, type Submission } from './submissions'
+import { FREQ_LABEL, STATE_LABEL, STATE_TONE, STEPS, canDoStep, deleteSchedule, doStep, periodLabel, periodOf, periodsFor, saveSchedule, subState, type Freq, type Schedule, type StepKey, type Submission } from './subsData'
 import type { ReportDef } from './types'
 
 export interface Task { s: Schedule; period: string; sub?: Submission; state: ReturnType<typeof subState> }

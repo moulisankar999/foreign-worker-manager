@@ -16,7 +16,7 @@ import { mytStamp, show, type Lang } from './format'
 import { Preview } from './Preview'
 import type { SheetMeta } from './Sheets'
 import { DueBanner, SubmissionsPanel, tasksOf, type Task } from './Submissions'
-import { FREQ_LABEL, doStep, periodLabel, periodRange, useSubs } from './submissions'
+import { FREQ_LABEL, doStep, periodLabel, periodRange, useSubs } from './subsData'
 import type { Block, Filters, ReportDef } from './types'
 import './reports.css'
 
