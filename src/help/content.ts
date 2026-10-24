@@ -40,7 +40,7 @@ export interface RoleInfo {
   daily: string[]
 }
 
-export const CHAIN = ['Worker (FW Worker app)', 'Outlet Manager', 'HR Manager', 'HR Admin', 'General Manager', 'CEO (reviews)']
+export const CHAIN = ['Worker (FW Worker app)', 'Outlet Manager', 'HR Manager', 'HR Admin', 'General Manager', 'CEO']
 
 export const ROLE_INFO: Record<HelpRole, RoleInfo> = {
   ceo: {
@@ -56,17 +56,17 @@ export const ROLE_INFO: Record<HelpRole, RoleInfo> = {
     purpose: 'The General Manager runs day-to-day administration and makes the final decision on requests after HR Admin. You lead the HR team, keep requests moving and own the admin areas set out in "General Manager powers".',
     sees: ['All companies, outlets and workers', 'All requests and their history', 'Salary details and the audit log, as set in General Manager powers', 'Reports, alerts and compliance for every outlet'],
     can: ['Make the final decision (approve or reject) on requests escalated by HR Admin', 'Assign or escalate a request to any person at any level', 'Return a request for more information', 'Add, edit and manage workers and their documents', 'Manage users and settings through your General Manager powers', 'Review printed submissions after HR Admin has verified them'],
-    cannot: ['CEO review: the CEO reviews your decisions and holds the CEO account', 'General Manager powers are set by the CEO in Settings → Users & access', 'Printed submissions: you review, the CEO gives the final approval', 'Demo data and the Control Center are run by the CEO'],
-    reportsTo: 'CEO. Every decision you make appears in the CEO\'s review list.',
-    approvals: 'Requests come to you after HR Admin escalates them. Your decision is final; the CEO sees it in CEO review.',
+    cannot: [],
+    reportsTo: 'CEO.',
+    approvals: 'Requests come to you after HR Admin escalates them. Your decision is final.',
     daily: ['Requests → "Needs my action": approve, reject or return', 'Assign stuck requests to the right person', 'Check the Dashboard and Alerts', 'Review printed submissions waiting for you'],
   },
   hra: {
     purpose: 'HR Admin checks what HR Manager has recommended and approves requests within the approval limits. You keep HR running smoothly and send larger or unusual requests to the General Manager.',
     sees: ['All workers of your companies/outlets', 'All requests at HR Admin level and below', 'Salary and the audit log, as set in the HR Admin settings', 'Alerts, compliance and reports'],
     can: ['Approve, reject, return, or escalate requests to the General Manager', 'Add and edit workers, upload documents, renew permits', 'Generate, reset, revoke and unlock workers\' app PINs', 'Manage users (add, reset, pause/resume) when user management is part of your HR Admin settings', 'Verify printed submissions prepared by HR Manager'],
-    cannot: ['Requests above your limit go to the General Manager with one tap (Escalate)', 'Assigning a request to a specific person is done by the CEO and General Manager', 'Approval rules and General Manager powers are set by the CEO'],
-    reportsTo: 'General Manager (and the CEO).',
+    cannot: ['Requests above your limit go to the General Manager with one tap (Escalate)'],
+    reportsTo: 'General Manager.',
     approvals: 'Requests come to you after HR Manager recommends them. You approve within your limit or escalate to the General Manager.',
     daily: ['Requests → "Needs my action"', 'Alerts: permits, passports and medicals expiring', 'Verify printed submissions', 'Help HR Manager with stuck worker records'],
   },
@@ -74,7 +74,7 @@ export const ROLE_INFO: Record<HelpRole, RoleInfo> = {
     purpose: 'HR Manager keeps the worker records correct and complete, reviews every request first, and applies approved requests to the worker\'s record.',
     sees: ['All workers of your companies/outlets, their documents and history', 'Requests at HR Manager level and below', 'Alerts, compliance and reports (salary as set for your role)'],
     can: ['Add, edit and update workers using the step-by-step form', 'Upload, scan and renew documents (passport, PLKS, FOMEMA, insurance…)', 'Recommend & send up, return for info, or reject requests', 'Apply approved requests to the worker record and close them', 'Generate, reset, revoke and unlock workers\' app PINs', 'Prepare printed submissions and start the sign-off'],
-    cannot: ['Final approvals are made by HR Admin and the General Manager, after your recommendation', 'Users, approval rules and company settings are managed by the CEO, General Manager and HR Admin', 'Assigning a request to a specific person is done by the CEO and General Manager'],
+    cannot: ['Final approvals are made by HR Admin and the General Manager, after your recommendation'],
     reportsTo: 'HR Admin.',
     approvals: 'Requests come to you from outlet managers and from workers (after the outlet manager approves, or automatically if the outlet manager does not answer in time). You recommend them up to HR Admin.',
     daily: ['Requests → "Needs my action" (including "Approved – to apply")', 'Alerts: what expires soon, renewals to start', 'Keep new workers\' records and documents complete', 'Prepare the printed submissions that are due'],
@@ -83,7 +83,7 @@ export const ROLE_INFO: Record<HelpRole, RoleInfo> = {
     purpose: 'The Outlet Manager leads the workers of his own outlet(s): checks their documents, adds remarks, raises requests for them and is the first to decide on what workers ask in the FW Worker app.',
     sees: ['The workers of your outlet(s)', 'Requests for your outlet(s) (confidential ones are handled by HR)', 'Alerts and reports for your outlet(s)'],
     can: ['Raise requests for your workers (leave, advance, transfer…)', 'Approve → send to HR, or reject, requests that workers raise in the app', 'Add remarks and upload documents/photos for your workers', 'Print reports for your outlet'],
-    cannot: ['Salary details and other outlets are handled by HR', 'HR keeps each worker\'s master record up to date from your remarks and documents', 'After your approval, HR and management make the final decision', 'Users, worker PINs and settings are handled by HR and management'],
+    cannot: ['Salary details and other outlets are handled by HR', 'HR keeps each worker\'s master record up to date from your remarks and documents', 'After your approval, HR and management make the final decision', 'Worker PIN resets are handled by HR'],
     reportsTo: 'HR Manager.',
     approvals: 'Requests from your workers come to you first. Approve → it goes to HR Manager. If you do not answer in time, it goes to HR automatically.',
     daily: ['Requests → "Needs my action" (worker requests)', 'Alerts for your outlet', 'Add remarks when something happens with a worker', 'Upload any paper the worker gives you'],
@@ -180,7 +180,7 @@ export const GUIDES: Guide[] = [
 
   /* ---------------- Requests ---------------- */
   { id: 'chain', group: 'Requests', title: 'How a request travels (approval chain)', roles: ALL,
-    intro: 'Worker → Outlet Manager → HR Manager → HR Admin → General Manager. The CEO reviews decisions and can overrule, amend, recall or mark them reviewed. The CEO and General Manager can assign or escalate a request to anyone.',
+    intro: 'Worker → Outlet Manager → HR Manager → HR Admin → General Manager. Each step approves, rejects or returns the request, and the timeline shows every step.',
     steps: ['A worker raises a request in FW Worker, or a manager raises one in FW Manager.', 'Outlet Manager approves worker requests (→ HR) or rejects them.', 'HR Manager checks and recommends (→ HR Admin), returns for information, or rejects.', 'HR Admin approves within limit, or escalates to the General Manager.', 'General Manager gives the final decision.', 'HR Manager applies the approved request to the worker record and closes it.'],
     shots: ['requests'] },
   { id: 'raise', group: 'Requests', title: 'Raise a request', roles: ['ceo', 'gm', 'hra', 'hrm', 'om'],
@@ -192,16 +192,15 @@ export const GUIDES: Guide[] = [
     tip: 'If you do not answer in time, the request goes to HR automatically so the worker is not left waiting.' },
   { id: 'decide', group: 'Requests', title: 'Approve, reject or return a request', roles: ['hrm', 'hra', 'gm', 'ceo'],
     steps: ['Requests → "Needs my action" and open the request.', 'Check the details, attachments and history.', 'Choose: "Recommend & send up" (HR Manager), "Approve" (HR Admin / GM), "Return for info" or "Reject".', 'Write a comment (required for return and reject) and confirm.'],
-    shots: ['request-detail'],
-    important: 'Rejections and every General Manager decision go to the CEO\'s review list.' },
+    shots: ['request-detail'] },
   { id: 'apply', group: 'Requests', title: 'Apply an approved request to the worker record', roles: ['hrm', 'hra', 'gm', 'ceo'],
     steps: ['Requests → "Needs my action" shows requests marked "Approved – to apply".', 'Open the request and tap "Apply to worker record & close".', 'Check the changes the app will make (leave balance, pay, outlet…) and tap "Apply & close".'],
     shots: ['request-apply'] },
   { id: 'assign', group: 'Requests', title: 'Assign or escalate a request (CEO / General Manager)', roles: ['ceo', 'gm'],
     intro: 'Use Assign to move a request to a specific person at any level — for example when someone is on leave or the request needs a different decision-maker.',
-    steps: ['Open the request.', 'Under Actions, tap "Assign…".', 'Choose the Role, then the Person (the list shows the people who can see this request), and add a note if you like — staff only, the worker never sees it.', 'Tap "Assign". The person is notified and the request moves to their queue; the request shows "Assigned to: <name>" at the top, and while assigned only that person (or the CEO) can decide it.'],
+    steps: ['Open the request.', 'Under Actions, tap "Assign…".', 'Choose the Role, then the Person (the list shows the people who can see this request), and add a note if you like — staff only, the worker never sees it.', 'Tap "Assign". The person is notified and the request moves to their queue; the request shows "Assigned to: <name>" at the top, and while assigned, that person makes the decision.'],
     shots: ['request-assign', 'request-assign-modal'],
-    tip: 'Skipped steps are recorded in the timeline. When the General Manager assigns, the CEO is told as well.' },
+    tip: 'Skipped steps are recorded in the timeline.' },
   { id: 'ceo-review', group: 'Requests', title: 'CEO review: overrule, amend, recall, mark reviewed', roles: ['ceo'],
     steps: ['Open CEO review (left menu, or More on a phone). "To review" shows the decisions waiting for you; "Any request (recall)" lets you pick any request.', 'Open a decision and read its history.', 'Mark reviewed — you agree with the decision; it moves to "Reviewed".', 'Overrule… — choose Your decision (Approve, Amend, Reject, Cancel, Recall to me or Keep — mark reviewed), write the reason and tap "Confirm — final decision". The request is then locked: only you can change it.', 'Amend — change the amount, dates or details with a change note; the original stays in the history. Tick "Amend details only — keep it moving" to leave it at its current step instead of deciding it.', 'Recall — take the request back for your own decision. On any request page you can also use "Overrule / amend / recall / review…".'],
     shots: ['ceo-review', 'ceo-overrule'] },
@@ -223,14 +222,14 @@ export const GUIDES: Guide[] = [
     steps: ['Open Reports.', 'Choose a report from the library (headcount, expiries, leave, passport register…).', 'Set the filters (company, outlet, dates).', 'Tap Print for an A4 page, or Export for Excel.'],
     shots: ['reports'] },
   { id: 'submissions', group: 'Reports & submissions', title: 'Required printed submissions and sign-off', roles: HR,
-    intro: 'Some reports must be printed and signed regularly. Sign-off order: HR Manager prepares → HR Admin verifies → General Manager reviews → CEO approves.',
+    intro: 'Some reports must be printed and signed regularly. Sign-off order: HR Manager prepares → HR Admin verifies → General Manager reviews → final approval.',
     steps: ['Reports → "Required submissions" shows what is due or overdue.', 'Open the task, check the report and tap your sign-off step.', 'Print it, sign the paper, and upload the signed copy if asked.', 'The next person is notified automatically.'],
     shots: ['submissions'],
-    tip: 'The CEO sets which reports are required and how often in Settings → Requests & submissions.' },
+    tip: 'Settings → Requests & submissions lists which reports are required and how often.' },
 
   /* ---------------- Users & access ---------------- */
   { id: 'add-user', group: 'Users & access', title: 'Add a user', roles: ['ceo', 'gm', 'hra'],
-    intro: 'Users are managed by the CEO, and by the General Manager and HR Admin when user management is part of their role settings.',
+    intro: 'Add and manage users in Settings → Users & access.',
     steps: ['Settings → Users & access → "Add user".', 'Type the name and email and choose the role.', 'For HR and Outlet Managers choose their companies / outlets.', 'Save. Give the person the temporary password shown, or let them set one from the email.'],
     shots: ['users'] },
   { id: 'manage-user', group: 'Users & access', title: 'Reset password, pause, resume or delete a user', roles: ['ceo', 'gm', 'hra'],
@@ -256,7 +255,7 @@ export const GUIDES: Guide[] = [
 
   /* ---------------- Settings & system ---------------- */
   { id: 'settings', group: 'Settings & system', title: 'Settings tabs', roles: ALL,
-    steps: ['Account — your name, theme, password.', 'Users & access — people and their roles (CEO and user managers).', 'Agencies, Organisation, Workers, Pay, Passport — company lists and rules.', 'Requests — request types, approval limits, required submissions.', 'Notifications — push and WhatsApp alerts.', 'Data & backup — export, backups, offline copy. About — version and app downloads.'],
+    steps: ['Account — your name, theme, password.', 'Users & access — people and their roles (for user managers).', 'Agencies, Organisation, Workers, Pay, Passport — company lists and rules.', 'Requests — request types, approval limits, required submissions.', 'Notifications — push and WhatsApp alerts.', 'Data & backup — export, backups, offline copy. About — version and app downloads.'],
     shots: ['settings'] },
   { id: 'notifications', group: 'Settings & system', title: 'Phone alerts (push / WhatsApp)', roles: ALL,
     steps: ['Settings → Notifications.', 'Under "Phone alerts" tap "Turn on phone alerts" and allow notifications when your phone or browser asks.', 'Under "My alerts" add your mobile number for WhatsApp / SMS and untick the events you do not want.'],
@@ -280,7 +279,7 @@ export interface Faq { q: string; a: string; roles: HelpRole[] }
 export const FAQS: Faq[] = [
   { roles: ALL, q: 'I forgot my password. What do I do?', a: 'The CEO or HR Admin resets it in Settings → Users & access. You get a temporary password; change it after you sign in (your initials → Change password).' },
   { roles: ALL, q: 'Does the app work without internet?', a: 'Yes. Your workers are copied to the device so you can look things up offline. Changes are saved and uploaded automatically when you are back online. Do not sign out while changes are waiting to upload.' },
-  { roles: ALL, q: 'Why does a colleague have a button I do not?', a: 'Each role has the buttons for its own work. For example HR roles have "App access", the CEO and General Manager have "Assign…", and the CEO has CEO review. See Help → My role.' },
+  { roles: ALL, q: 'Why does a colleague have a button I do not?', a: 'Each role has the buttons for its own work — for example, HR roles have "App access". Help → My role lists yours.' },
   { roles: ALL, q: 'How do I switch between light and dark mode?', a: 'Tap your initials at the top right and choose Light, Dark or Auto.' },
   { roles: ALL, q: 'Can two people share one account?', a: 'No. Every action is recorded under the signed-in person, so everyone gets their own account.' },
   { roles: ALL, q: 'Where do I get the PDF manual?', a: 'Help → User manual → "Download PDF manual". You get the manual for your own role.' },
@@ -307,13 +306,13 @@ export const FAQS: Faq[] = [
 
   { roles: ['hra'], q: 'When do I escalate instead of approving?', a: 'When the amount or type is above your limit (the app shows it), or when management should decide. Escalate sends it to the General Manager.' },
   { roles: ['hra'], q: 'How do I add users?', a: 'When user management is part of your HR Admin settings, use Settings → Users & access → Add user.' },
-  { roles: ['hra'], q: 'How do I move a request to someone else?', a: 'Tap Escalate to send it to the General Manager. Assigning to a specific person is done by the CEO and General Manager.' },
+  { roles: ['hra'], q: 'How do I move a request to someone else?', a: 'Tap Escalate to send it to the General Manager.' },
   { roles: ['hra'], q: 'What does "verify" mean on a submission?', a: 'You check the report HR Manager prepared is complete and correct, then sign off. It then goes to the General Manager.' },
 
-  { roles: ['gm'], q: 'Is my approval final?', a: 'Yes. Every General Manager decision also appears in the CEO\'s review list.' },
-  { roles: ['gm', 'ceo'], q: 'When should I use Assign…?', a: 'When a request is stuck (someone is on leave) or needs a particular person. Under Actions tap \"Assign…\", choose the Role and Person and add a note; they are notified and only they (or the CEO) decide at that step. Steps in between are marked as skipped in the timeline.' },
-  { roles: ['gm'], q: 'Which settings do I manage?', a: 'The ones in your General Manager powers (Settings → Users & access shows them). The CEO sets these powers and can add more.' },
-  { roles: ['gm'], q: 'Do I approve printed submissions?', a: 'You review them after HR Admin verifies. The CEO gives the final approval.' },
+  { roles: ['gm'], q: 'Is my approval final?', a: 'Yes. Your decision is final and the request moves on to be applied to the worker record.' },
+  { roles: ['gm', 'ceo'], q: 'When should I use Assign…?', a: 'When a request is stuck (someone is on leave) or needs a particular person. Under Actions tap \"Assign…\", choose the Role and Person and add a note; they are notified and make the decision at that step. Steps in between are marked as skipped in the timeline.' },
+  { roles: ['gm'], q: 'Which settings do I manage?', a: 'The ones in your General Manager powers (Settings → Users & access shows them).' },
+  { roles: ['gm'], q: 'Do I approve printed submissions?', a: 'You review them after HR Admin has verified them; they then move on for final approval.' },
   { roles: ['gm', 'hra'], q: 'Where is the audit log?', a: 'Settings → Users & access → Audit log, when audit access is part of your role settings.' },
 
   { roles: ['ceo'], q: 'What is CEO review?', a: 'A list of every General Manager decision and every rejection. Mark each reviewed, or overrule, amend or recall it. The badge shows how many are waiting.' },
@@ -324,7 +323,7 @@ export const FAQS: Faq[] = [
   { roles: ['ceo'], q: 'How are backups made?', a: 'The cloud database is backed up automatically every day (the Control Center shows its status). Settings → Data & backup lets you download an extra JSON copy or restore one.' },
   { roles: ['ceo'], q: 'Someone left the company. Pause or delete?', a: 'Pause first. Delete only when you are sure; their history stays in the audit log either way.' },
   { roles: ['ceo'], q: 'Can I see what a worker sees in FW Worker?', a: 'Workers see their own documents, requests and simple status only (e.g. "With HR Admin") — never internal notes or managers\' names.' },
-  { roles: ['viewer'], q: 'What is the Viewer role for?', a: 'Viewer is a read-only role for looking things up and printing reports. The CEO can give you a different role if your work changes.' },
+  { roles: ['viewer'], q: 'What is the Viewer role for?', a: 'Viewer is a read-only role for looking things up and printing reports.' },
 ]
 
 export const guidesFor = (r: HelpRole) => GUIDES.filter((g) => g.roles.includes(r))

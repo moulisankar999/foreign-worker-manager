@@ -414,7 +414,7 @@ export function RequestDetail() {
 
       {(actions.length > 0 || assignable) && (
         <Card title="Actions">
-          {r.assigned_to && r.assigned_to !== uidMe && !isSuper && <p className="muted small">Assigned to {r.assigned_to_name} ({shortRole(r.assigned_role)}) — only they or the CEO can decide it now.</p>}
+          {r.assigned_to && r.assigned_to !== uidMe && !isSuper && <p className="muted small">Assigned to {r.assigned_to_name} ({shortRole(r.assigned_role)}) — they make the decision at this step.</p>}
           <div className="row gap-s wrap">
             {assignable && <Btn kind="secondary" icon="users" onClick={() => setAssignOpen(true)}>Assign…</Btn>}
             {actions.filter((a) => a !== 'comment').map((a) => (

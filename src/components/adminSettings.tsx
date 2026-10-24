@@ -29,7 +29,7 @@ export function ApprovalRulesCard() {
     <Card title="Approval rules" actions={isSuper && (edit
       ? <><Btn small onClick={() => setEdit(null)}>Cancel</Btn> <Btn small kind="primary" onClick={() => saveConfig('approval_rules', edit).then(() => setEdit(null), err)}>Save rules</Btn></>
       : <Btn small icon="edit" onClick={() => setEdit(structuredClone(cfg.approval_rules))}>Edit</Btn>)}>
-      <p className="muted small">Flow: Outlet manager → HR Manager (return / reject / recommend) → final approver below → HR Manager applies → closed. HR Admin escalates to CEO when a request is above the RM limit. Loans and salary increments always go to the CEO. The database enforces these rules{isSuper ? '' : ' (the CEO sets them)'}.</p>
+      <p className="muted small">Flow: Outlet manager → HR Manager (return / reject / recommend) → final approver below → HR Manager applies → closed. HR Admin escalates to CEO when a request is above the RM limit. Loans and salary increments always go to the CEO. The database enforces these rules.</p>
       <div className="tbl-wrap"><table className="tbl">
         <thead><tr><th>Request</th><th>On</th><th>Final approver</th><th className="num">CEO above (RM)</th></tr></thead>
         <tbody>{groups.map((g) => [
@@ -58,7 +58,7 @@ export function HrFlagsCard() {
   const f = useConfig().hr_admin
   return (
     <Card title="HR Admin permissions">
-      <p className="muted small">What HR Admins may do in addition to approving requests. {isSuper ? 'Changes apply immediately for everyone.' : 'Set by the CEO.'}</p>
+      <p className="muted small">What HR Admins may do in addition to approving requests. {isSuper ? 'Changes apply immediately for everyone.' : 'Shown here for reference.'}</p>
       {(Object.keys(FLAG_LABEL) as (keyof HrAdminFlags)[]).map((k) => (
         <label key={k} className="check"><input type="checkbox" checked={!!f[k]} disabled={!isSuper} onChange={(e) => saveConfig('hr_admin', { ...f, [k]: e.target.checked }).catch(err)} /> {FLAG_LABEL[k]}</label>
       ))}

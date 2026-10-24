@@ -96,10 +96,11 @@ function staffBody(role) {
   html += `<p class="lead">${md(R.purpose)}</p>`
   const me = { ceo: 5, gm: 4, hra: 3, hrm: 2, om: 1 }[role]
   html += h2('The approval chain') + `<div class="chain">${C.CHAIN.map((c, i) => `<span class="n${i === me ? ' me' : ''}">${esc(c)}</span>`).join('<span class="a">→</span>')}</div>`
-  html += `<p>${md('Requests move up this chain one step at a time. The CEO reviews decisions and can overrule, amend, recall or mark them reviewed. The CEO and the General Manager can assign or escalate a request to any person at any level.')} Your place in the chain is shown in red.</p>`
+  html += `<p>${md('Requests move up this chain one step at a time.' + (role === 'ceo' ? ' The CEO reviews decisions and can overrule, amend, recall or mark them reviewed. The CEO and the General Manager can assign or escalate a request to any person at any level.' : role === 'gm' ? ' You can assign or escalate a request to any person at any level.' : ''))} Your place in the chain is shown in red.</p>`
   html += `<div class="grid2"><div class="box"><h3>Who you report to</h3><p>${md(R.reportsTo)}</p></div><div class="box"><h3>Where requests and approvals go</h3><p>${md(R.approvals)}</p></div></div>`
   html += h2('Responsibilities and access') + `<div class="box"><h3>What you see</h3><ul>${R.sees.map((x) => `<li>${md(x)}</li>`).join('')}</ul></div>`
-  html += `<div class="grid2" style="margin-top:4mm"><div class="box ok"><h3>✔ What you own and do</h3><ul>${R.can.map((x) => `<li>${md(x)}</li>`).join('')}</ul></div><div class="box shared"><h3>↔ How the work is shared</h3><ul>${R.cannot.map((x) => `<li>${md(x)}</li>`).join('')}</ul></div></div>`
+  const ownBox = `<div class="box ok"><h3>✔ What you own and do</h3><ul>${R.can.map((x) => `<li>${md(x)}</li>`).join('')}</ul></div>`
+  html += R.cannot.length ? `<div class="grid2" style="margin-top:4mm">${ownBox}<div class="box shared"><h3>↔ How the work is shared</h3><ul>${R.cannot.map((x) => `<li>${md(x)}</li>`).join('')}</ul></div></div>` : `<div style="margin-top:4mm">${ownBox}</div>`
   html += h2('Your daily routine') + `<ol class="steps">${R.daily.map((x) => `<li>${md(x)}</li>`).join('')}</ol>`
   html += `<div class="call tip"><b class="t">Tip</b>${md('In the app, open Help → My role to see this page at any time. Help → FAQ answers the most common questions for your role.')}</div>`
   // How-to sections by group
@@ -123,7 +124,7 @@ function staffBody(role) {
   // support
   html += sec('Getting help'); sub = 0
   html += `<p>Help inside the app: <b>Help</b> in the left menu (on a phone: <b>More → Help</b>) has your role page, the FAQ and these step-by-step guides. The <b>Download PDF manual</b> button there always gives the newest version of this document.</p>
-  <p>Account matters (forgotten password, paused account, role settings) are handled by the CEO and HR Admin.</p><p>Software problems: the CEO can see errors in Software Control → Errors. ${esc(DEV)}.</p>`
+  <p>Account matters (forgotten password, paused account, role settings) are handled by the CEO and HR Admin.</p><p>Software problems: ${role === 'ceo' ? 'open Software Control → Errors to see the details.' : 'report them to the CEO.'} ${esc(DEV)}.</p>`
   return { html: page(html), toc }
 }
 

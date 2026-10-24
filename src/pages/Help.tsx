@@ -27,7 +27,7 @@ function RoleTab({ r }: { r: HelpRole }) {
       </Card>
       <Card title="What you see"><ul className="help-list">{i.sees.map((x) => <li key={x}>{x}</li>)}</ul></Card>
       <Card title="What you own and do"><ul className="help-list ok">{i.can.map((x) => <li key={x}>{x}</li>)}</ul></Card>
-      <Card title="How the work is shared"><ul className="help-list shared">{i.cannot.map((x) => <li key={x}>{x}</li>)}</ul></Card>
+      {i.cannot.length > 0 && <Card title="How the work is shared"><ul className="help-list shared">{i.cannot.map((x) => <li key={x}>{x}</li>)}</ul></Card>}
       <Card title="Every day"><ol className="help-list">{i.daily.map((x) => <li key={x}>{x}</li>)}</ol></Card>
     </div>
   )

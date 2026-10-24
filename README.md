@@ -205,6 +205,10 @@ Everyone can see **Settings → About** (app version, build, "Developed by Mouli
 - "Clear list" (`clear_client_errors()`, migration 032) now also resets the "App errors" health tile and writes an audit entry. The Errors tab badge and the Software Control sidebar badge update straight away.
 - Tests: `UI_URL=<TEST build> node tests/platform-ui.mjs` (TEST only; mocks Capacitor ios/android via `window.CapacitorCustomPlatform`).
 
+### Role help shows only the role's own work (v1.3.7)
+
+Help, FAQ and manuals for non-CEO roles no longer describe the CEO's powers or oversight, or who sets a role's powers. "How the work is shared" lists only genuine handoffs and is hidden when empty (General Manager). No permissions changed.
+
 ### Tone of help and messages (v1.3.6)
 
 Every role is described by what it owns and does. Limits are written as how the work is shared (e.g. "PIN resets are handled by HR Manager and above"), never as "if the CEO allows" / "you cannot". The Help page and PDF manuals use the headings "What you see", "What you own and do" and "How the work is shared". No permissions changed.
