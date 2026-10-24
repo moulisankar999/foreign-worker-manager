@@ -14,7 +14,7 @@ TAG="worker-v$VERSION-android"; ROLL="worker-android-latest"
 [ -n "${VITE_SUPABASE_URL:-}" ] && { echo "Refusing: VITE_SUPABASE_URL is set (release builds must use the live backend)"; exit 1; }
 [ "${1:-}" = "--skip-build" ] || npm run worker:android:apk
 APK=release/FW-Worker.apk
-"${ANDROID_HOME:-$HOME/opt/android-sdk}"/build-tools/*/apksigner verify "$APK" >/dev/null && echo "APK signature OK"
+"$(ls -d "${ANDROID_HOME:-$HOME/opt/android-sdk}"/build-tools/* | tail -1)"/apksigner verify "$APK" >/dev/null && echo "APK signature OK"
 LATEST_BEFORE=$(gh release view --json tagName -q .tagName)
 NOTES="FW Worker $VERSION for Android — the worker self-service app (sign in with passport number + 6-digit PIN from HR).
 Install: download FW-Worker.apk on the phone and open it (allow installing from this source)."
