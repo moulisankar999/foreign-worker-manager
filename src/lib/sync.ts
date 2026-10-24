@@ -415,7 +415,7 @@ export async function localOnlyData(): Promise<LocalOnly> {
   return { workers, outlets, jobs, dupJobs, settings }
 }
 export async function uploadLocalData() {
-  if (!canWrite) throw new Error('Only HR staff can upload data')
+  if (!canWrite) throw new Error('Data imports are handled by HR staff')
   const lo = await localOnlyData()
   const now = new Date().toISOString()
   const workers = await db.workers.bulkGet(lo.workers)

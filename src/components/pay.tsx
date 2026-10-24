@@ -302,7 +302,7 @@ export function PayRulesSettings() {
   const put = <K extends keyof RatesConfig>(k: K) => (rows: RatesConfig[K]) => save({ ...rates, [k]: rows })
   return (
     <>
-      <p className="callout">These rates drive the payslip helper, the pay checks on the dashboard and the leave balances. Each rate has a start date, so old months keep the old rate. Built-in values are as of October 2026. Where a rule is uncertain the app says “{CHECK}”. {!canRates && <strong>You can view these rules; only the CEO, HR Admin or a General Manager with the “Statutory rates” power can change them.</strong>}</p>
+      <p className="callout">These rates drive the payslip helper, the pay checks on the dashboard and the leave balances. Each rate has a start date, so old months keep the old rate. Built-in values are as of October 2026. Where a rule is uncertain the app says “{CHECK}”. {!canRates && <strong>These rules are shown for reference; the CEO, HR Admin and the General Manager (with the “Statutory rates” power) keep them up to date.</strong>}</p>
       {msg && <p className={msg.startsWith('Saved') ? 'ok-msg' : 'err'} role="status">{msg}</p>}
       <DatedTable title="💰 Minimum wage" help="Domestic servants are not covered. Employers with fewer than 5 workers moved to RM1,700 from 1 Aug 2025." rows={rates.minWage} canEdit={canRates} onSave={put('minWage')}
         cols={[{ key: 'monthly', label: 'Monthly RM' }, { key: 'hourly', label: 'Hourly RM' }, { key: 'daily6', label: 'Daily (6-day wk)' }, { key: 'daily5', label: 'Daily (5-day wk)' }, { key: 'daily4', label: 'Daily (4-day wk)' }]} />

@@ -7,7 +7,7 @@ export const MANUALS_BUCKET = 'manuals'
 
 export async function manualUrl(file: string, seconds = 600) {
   const { data, error } = await supabase.storage.from(MANUALS_BUCKET).createSignedUrl(file, seconds, { download: file })
-  if (error || !data) throw new Error(/not.?found|object/i.test(error?.message || '') ? 'The manual is not available yet. Please ask the CEO.' : error?.message || 'Could not open the manual')
+  if (error || !data) throw new Error(/not.?found|object/i.test(error?.message || '') ? 'The manual is being prepared and will be here soon.' : error?.message || 'Could not open the manual')
   return data.signedUrl
 }
 

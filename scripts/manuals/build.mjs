@@ -57,7 +57,7 @@ figcaption { font-size: 8.5pt; color: #64748b; margin-top: 1mm; }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 4mm; }
 .box { border: 1px solid #e2e8f0; border-radius: 2mm; padding: 2.5mm 3.5mm; break-inside: avoid; }
 .box h3 { margin-top: 0; }
-.ok h3 { color: #15803d; } .no h3 { color: #b91c1c; }
+.ok h3 { color: #15803d; } .shared h3 { color: #475569; }
 .chain { display: flex; flex-wrap: wrap; align-items: center; gap: 1.5mm; margin: 3mm 0; }
 .chain span.n { background: #0b3b36; color: #fff; border-radius: 2mm; padding: 1.5mm 2.5mm; font-weight: 600; font-size: 9pt; }
 .chain span.n.me { background: #dc2626; } .chain span.a { color: #64748b; font-weight: 700; }
@@ -79,7 +79,7 @@ const page = (body, extra = '') => `<!doctype html><html><head><meta charset="ut
 
 function coverHtml(title, role, sub = '') {
   return page(`<div class="cover"><div class="band"><div class="logo">${logo}</div><h1>${esc(title)}</h1><div class="role">${role}</div>${sub}</div>
-  <div class="meta"><b>Version ${esc(VERSION)}</b> · ${esc(DATE)}<br>${esc(DEV)}<br><span style="font-size:9pt">Screenshots use made-up test data only. Your screens may differ slightly by device and by the permissions your company has set.</span></div></div>`)
+  <div class="meta"><b>Version ${esc(VERSION)}</b> · ${esc(DATE)}<br>${esc(DEV)}<br><span style="font-size:9pt">Screenshots use made-up test data only. Your screens may differ slightly by device and by the role settings your company uses.</span></div></div>`)
 }
 function tocHtml(entries, pages, offset, heading = 'Contents') {
   return page(`<h1>${heading}</h1><div class="toc">${entries.map((e) => `<div class="row l${e.level}"><span>${esc(e.label)}</span><span class="dots"></span><span>${pages[e.id] ? pages[e.id] + offset : '–'}</span></div>`).join('')}</div>`)
@@ -98,8 +98,8 @@ function staffBody(role) {
   html += h2('The approval chain') + `<div class="chain">${C.CHAIN.map((c, i) => `<span class="n${i === me ? ' me' : ''}">${esc(c)}</span>`).join('<span class="a">→</span>')}</div>`
   html += `<p>${md('Requests move up this chain one step at a time. The CEO reviews decisions and can overrule, amend, recall or mark them reviewed. The CEO and the General Manager can assign or escalate a request to any person at any level.')} Your place in the chain is shown in red.</p>`
   html += `<div class="grid2"><div class="box"><h3>Who you report to</h3><p>${md(R.reportsTo)}</p></div><div class="box"><h3>Where requests and approvals go</h3><p>${md(R.approvals)}</p></div></div>`
-  html += h2('Responsibilities and access') + `<div class="box"><h3>What you can see</h3><ul>${R.sees.map((x) => `<li>${md(x)}</li>`).join('')}</ul></div>`
-  html += `<div class="grid2" style="margin-top:4mm"><div class="box ok"><h3>✔ What you can do</h3><ul>${R.can.map((x) => `<li>${md(x)}</li>`).join('')}</ul></div><div class="box no"><h3>✖ What you cannot do</h3><ul>${R.cannot.map((x) => `<li>${md(x)}</li>`).join('')}</ul></div></div>`
+  html += h2('Responsibilities and access') + `<div class="box"><h3>What you see</h3><ul>${R.sees.map((x) => `<li>${md(x)}</li>`).join('')}</ul></div>`
+  html += `<div class="grid2" style="margin-top:4mm"><div class="box ok"><h3>✔ What you own and do</h3><ul>${R.can.map((x) => `<li>${md(x)}</li>`).join('')}</ul></div><div class="box shared"><h3>↔ How the work is shared</h3><ul>${R.cannot.map((x) => `<li>${md(x)}</li>`).join('')}</ul></div></div>`
   html += h2('Your daily routine') + `<ol class="steps">${R.daily.map((x) => `<li>${md(x)}</li>`).join('')}</ol>`
   html += `<div class="call tip"><b class="t">Tip</b>${md('In the app, open Help → My role to see this page at any time. Help → FAQ answers the most common questions for your role.')}</div>`
   // How-to sections by group
@@ -123,7 +123,7 @@ function staffBody(role) {
   // support
   html += sec('Getting help'); sub = 0
   html += `<p>Help inside the app: <b>Help</b> in the left menu (on a phone: <b>More → Help</b>) has your role page, the FAQ and these step-by-step guides. The <b>Download PDF manual</b> button there always gives the newest version of this document.</p>
-  <p>Problems with your account (forgotten password, paused account, missing permissions): ask the CEO or HR Admin.</p><p>Software problems: the CEO can see errors in Software Control → Errors. ${esc(DEV)}.</p>`
+  <p>Account matters (forgotten password, paused account, role settings) are handled by the CEO and HR Admin.</p><p>Software problems: the CEO can see errors in Software Control → Errors. ${esc(DEV)}.</p>`
   return { html: page(html), toc }
 }
 

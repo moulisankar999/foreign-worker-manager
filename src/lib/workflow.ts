@@ -8,10 +8,10 @@ export const ROLE_LABEL: Record<string, string> = {
 }
 export const ROLE_HELP: Record<string, string> = {
   super_admin: 'Owner: everything, reviews and can overrule any decision (only one person should have this)',
-  general_manager: 'Final approvals and day-to-day admin, with the powers the CEO allows',
-  hr_admin: 'Approves requests within limits; can manage users (if allowed)',
+  general_manager: 'Final approvals and day-to-day admin, with the General Manager powers',
+  hr_admin: 'Approves requests within limits and manages users when set up for it',
   hr_manager: 'Keeps worker records, reviews requests, applies approved requests',
-  outlet_manager: 'Sees only workers of his outlets; raises requests, adds remarks & documents',
+  outlet_manager: 'Leads the workers of his outlets; raises requests, adds remarks & documents',
   viewer: 'Read only (no salary details)',
 }
 /** approval authority: higher number can approve more */

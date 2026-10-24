@@ -103,7 +103,7 @@ export async function prepareLogo(file: File): Promise<{ blob: Blob; ext: 'png' 
   }
   throw new Error('Could not make this image small enough (max 200 KB).')
 }
-const clean = (e: { message: string } | null) => { if (e) throw new Error(/row-level|not allowed|unauthori/i.test(e.message) ? 'You are not allowed to change this logo.' : e.message.replace(/^.*?ERROR:\s*/, '')) }
+const clean = (e: { message: string } | null) => { if (e) throw new Error(/row-level|not allowed|unauthori/i.test(e.message) ? 'This logo is managed by the CEO and admins.' : e.message.replace(/^.*?ERROR:\s*/, '')) }
 export async function uploadLogo(kind: 'company' | 'outlet', id: string, file: File): Promise<string> {
   if (!navigator.onLine) throw new Error('You are offline. Logos need an internet connection.')
   const { blob, ext } = await prepareLogo(file)

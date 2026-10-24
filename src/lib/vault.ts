@@ -100,7 +100,7 @@ export async function uploadDoc(meta: NewDoc, file: { blob: Blob; name: string; 
   checkLimit(file.blob)
   const path = `vault/${meta.workerId}/${Date.now()}-${uid().slice(0, 8)}-${safe(file.name)}`
   const up = await supabase.storage.from(BUCKET).upload(path, file.blob, { contentType: file.blob.type, upsert: false })
-  if (up.error) throw new Error(up.error.message.includes('row-level') ? 'You are not allowed to upload documents for this worker' : up.error.message)
+  if (up.error) throw new Error(up.error.message.includes('row-level') ? 'Documents for this worker are handled by his outlet and HR' : up.error.message)
   const { data: u } = await supabase.auth.getUser()
   const row = {
     worker_id: meta.workerId, category: meta.category, title: meta.title || file.name, doc_no: meta.docNo || null,
@@ -109,13 +109,13 @@ export async function uploadDoc(meta: NewDoc, file: { blob: Blob; name: string; 
     request_id: meta.requestId || null, source: meta.source || 'upload', notes: meta.notes || null, uploaded_by: u.user?.id,
   }
   const { data, error } = await supabase.from('documents').insert(row).select().single()
-  if (error) throw new Error(error.message.includes('row-level') ? `You are not allowed to upload "${meta.category}" documents` : error.message)
+  if (error) throw new Error(error.message.includes('row-level') ? `"${meta.category}" documents are handled by HR` : error.message)
   docsChanged()
   return data as DocRow
 }
 export async function updateDoc(id: string, patch: Partial<Pick<DocRow, 'title' | 'doc_no' | 'issue_date' | 'expiry_date' | 'notes' | 'category' | 'deleted'>>) {
   const { error } = await supabase.from('documents').update(patch).eq('id', id)
-  if (error) throw new Error(error.message.includes('row-level') ? 'Only HR can change documents' : error.message)
+  if (error) throw new Error(error.message.includes('row-level') ? 'Documents are kept up to date by HR' : error.message)
   docsChanged()
 }
 

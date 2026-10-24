@@ -717,7 +717,7 @@ img, video, canvas, svg { max-width: 100%; }
 .help-step.me b { color: #fff; }
 .help-list { margin: 0; padding-left: 20px; display: grid; gap: 6px; }
 .help-list.ok li::marker { content: '✓  '; color: var(--green); }
-.help-list.no li::marker { content: '✕  '; color: var(--red); }
+.help-list.shared li::marker { content: '↔  '; color: var(--muted); }
 .help-search { margin-bottom: 12px; }
 .help-faq details, .help-guide { border-bottom: 1px solid var(--line); padding: 10px 2px; }
 .help-faq summary, .help-guide summary { cursor: pointer; font-weight: 600; list-style-position: outside; }

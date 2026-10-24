@@ -56,7 +56,7 @@ export const isSafeUrl = (u: string) => /^https:\/\/[^\s/$.?#].[^\s]*$/i.test(u.
 export async function saveAgencies(cfg: AgenciesConfig) {
   for (const a of cfg.items) if (!isSafeUrl(a.url)) throw new Error(`${a.short}: the link must start with https://`)
   const { error } = await supabase.rpc('set_agencies', { p_value: cfg })
-  if (error) throw new Error(/permission|not allowed|denied/i.test(error.message) ? 'Only the CEO, General Manager or HR Admin can change agency links' : error.message)
+  if (error) throw new Error(/permission|not allowed|denied/i.test(error.message) ? 'Agency links are managed by the CEO, General Manager and HR Admin' : error.message)
 }
 
 /* ---------- per-worker status checks ---------- */

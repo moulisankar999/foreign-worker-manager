@@ -175,7 +175,7 @@ export function NewRequest() {
   const level = t ? requiredLevel(cfg.approval_rules, type, amount) : null
   const enabledTypes = REQUEST_TYPES.filter((x) => ruleFor(cfg.approval_rules, x.key).enabled)
   const groups = [...new Set(enabledTypes.map((x) => x.group))]
-  if (!canRequest) return <div className="page"><Empty title="Your role cannot create requests" /></div>
+  if (!canRequest) return <div className="page"><Empty title="Requests are raised by managers and HR" /></div>
 
   const set = (k: string, val: unknown) => setV({ ...v, [k]: val })
   const fieldEl = (f: ReqField) => {
@@ -367,7 +367,7 @@ export function RequestDetail() {
           ...(r.applied_by_name ? [['Applied by', `${r.applied_by_name}${r.result?.summary ? ' — ' + r.result.summary : ''}`] as [string, string]] : []),
           ...(r.result?.ticketDecision ? [['Ticket decision', String(r.result.ticketDecision).replace('_', ' ')] as [string, string]] : []),
         ]} />
-        {r.ceo_locked && !isSuper && <p className="callout small mt-s">🔒 Updated by CEO{r.ceo_updated_at ? ` · ${new Date(r.ceo_updated_at).toLocaleString()}` : ''}. This decision is final — only the CEO can change it.</p>}
+        {r.ceo_locked && !isSuper && <p className="callout small mt-s">🔒 Updated by CEO{r.ceo_updated_at ? ` · ${new Date(r.ceo_updated_at).toLocaleString()}` : ''}. This is the CEO's final decision.</p>}
         {r.ceo_locked && isSuper && <p className="callout small mt-s">🔒 Your decision is final and locks this request for everyone else.</p>}
       </Card>
 

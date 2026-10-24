@@ -121,7 +121,7 @@ export function stopConfig() {
 /** CEO only (the database refuses everyone else). */
 export async function saveConfig<K extends keyof AppConfig>(key: K, value: AppConfig[K]) {
   const { error } = await supabase.from('app_config').upsert({ key, value })
-  if (error) throw new Error(error.message.includes('row-level') ? 'Only the CEO (or a General Manager allowed to) can change this setting' : error.message)
+  if (error) throw new Error(error.message.includes('row-level') ? 'This setting is managed by the CEO and the General Manager (with this power)' : error.message)
   set({ ...raw, [key]: value })
 }
 export const getConfig = () => cfg
@@ -137,14 +137,14 @@ export function setAgenciesLocal(v: AgenciesConfig) { set({ ...raw, agencies: v 
 
 export async function saveConsentTranslation(lang: string, entry: import('./consentText').ConsentOverride | null) {
   const { data, error } = await supabase.rpc('set_consent_translation', { p_lang: lang, p_text: entry })
-  if (error) throw new Error(/permission|not allowed|denied/i.test(error.message) ? 'Only the CEO, General Manager or HR Admin can change translations' : error.message)
+  if (error) throw new Error(/permission|not allowed|denied/i.test(error.message) ? 'Translations are managed by the CEO, General Manager and HR Admin' : error.message)
   set({ ...raw, consent_translations: data ?? raw.consent_translations })
 }
 
 /** CEO, HR Admin or a General Manager with the compliance power: save pay rates or the holiday list (server function, audited). */
 export async function savePayConfig<K extends 'rates' | 'holidays'>(key: K, value: AppConfig[K]) {
   const { data, error } = await supabase.rpc('set_pay_config', { p_key: key, p_value: value })
-  if (error) throw new Error(/permission|not allowed|denied/i.test(error.message) ? 'Only the CEO, HR Admin or a General Manager with this power can change pay rules' : error.message)
+  if (error) throw new Error(/permission|not allowed|denied/i.test(error.message) ? 'Pay rules are managed by the CEO, HR Admin and the General Manager (with this power)' : error.message)
   set({ ...raw, [key]: data ?? value })
 }
 

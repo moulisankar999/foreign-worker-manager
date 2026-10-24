@@ -79,7 +79,7 @@ function RiskTab() {
       <Card title="How the score works">
         <p className="small">Each outlet gets 0–100. Every item below adds points depending on how many of the outlet’s workers it affects. 45 or more = High, 20–44 = Medium. It is a guide for where to look first — not a legal finding.</p>
         <ul className="rows compact">{RISK_WEIGHTS.filter((p) => (canSeeSalary || !p.pay) && (p.key !== 'complaints' || isHr)).map((p) => <li key={p.key}><span>{p.label}</span><Chip>{p.weight} pts max</Chip></li>)}</ul>
-        {!canSeeSalary && <p className="muted small">Pay items are left out because you do not have salary access; the score is rescaled.</p>}
+        {!canSeeSalary && <p className="muted small">Pay items are shown to roles with salary access, so they are left out here; the score is rescaled.</p>}
       </Card>
     </>
   )

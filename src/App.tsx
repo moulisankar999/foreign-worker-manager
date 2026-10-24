@@ -129,7 +129,7 @@ function MainApp() {
         </header>
         <main className="content">
           {IS_TEST_BUILD && <p className="banner small warn" style={{ marginBottom: 12 }}>TEST BUILD — connected to the test project, not live data.</p>}
-          {role === 'viewer' && <p className="banner small" style={{ marginBottom: 12 }}>You have <strong>view-only</strong> access. Ask your CEO for more access to add or edit.</p>}
+          {role === 'viewer' && <p className="banner small" style={{ marginBottom: 12 }}>You have <strong>view-only</strong> access for looking things up and printing reports.</p>}
           {(loc.pathname === '/' || loc.pathname.startsWith('/dashboard')) && <div style={{ marginBottom: 12 }}><LocalDataBanner compact /></div>}
           <Routes>
             <Route path="/" element={<Dashboard />} />

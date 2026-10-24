@@ -29,7 +29,7 @@ export function ApprovalRulesCard() {
     <Card title="Approval rules" actions={isSuper && (edit
       ? <><Btn small onClick={() => setEdit(null)}>Cancel</Btn> <Btn small kind="primary" onClick={() => saveConfig('approval_rules', edit).then(() => setEdit(null), err)}>Save rules</Btn></>
       : <Btn small icon="edit" onClick={() => setEdit(structuredClone(cfg.approval_rules))}>Edit</Btn>)}>
-      <p className="muted small">Flow: Outlet manager → HR Manager (return / reject / recommend) → final approver below → HR Manager applies → closed. HR Admin escalates to CEO when a request is above the RM limit. Loans and salary increments always go to the CEO. The database enforces these rules{isSuper ? '' : ' (only the CEO can change them)'}.</p>
+      <p className="muted small">Flow: Outlet manager → HR Manager (return / reject / recommend) → final approver below → HR Manager applies → closed. HR Admin escalates to CEO when a request is above the RM limit. Loans and salary increments always go to the CEO. The database enforces these rules{isSuper ? '' : ' (the CEO sets them)'}.</p>
       <div className="tbl-wrap"><table className="tbl">
         <thead><tr><th>Request</th><th>On</th><th>Final approver</th><th className="num">CEO above (RM)</th></tr></thead>
         <tbody>{groups.map((g) => [

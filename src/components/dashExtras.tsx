@@ -91,7 +91,7 @@ export function OmDashboard({ workers, alerts, extra }: { workers: Worker[]; ale
   return (
     <div className="page dash-tabs">
       <div className="page-h"><Greeting sub={`My outlet${myOutlets.length > 1 ? 's' : ''} · ${cur.length} workers`} /></div>
-      {myOutlets.length === 0 && <p className="banner warn">No outlets are assigned to you yet. Ask your HR / CEO to assign your outlet(s) in Settings → Users.</p>}
+      {myOutlets.length === 0 && <p className="banner warn">No outlets are linked to your account yet. HR or the CEO links them in Settings → Users.</p>}
       <Tabs tabs={OM_TABS.map((t) => ({ ...t, badge: t.id === 'requests' ? extra.length || undefined : undefined }))} value={tab} onChange={setTab} />
       <div role="tabpanel" className="page dash-panel">
         {tab === 'overview' && <>

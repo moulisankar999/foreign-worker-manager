@@ -187,7 +187,7 @@ function UserRow({ u, me, roles, allowed, companies, outlets, may, onSaved, focu
     const { data, error } = await supabase.from('profiles').update(patch).eq('id', u.id).select('role, company_ids, outlet_ids').maybeSingle()
     setBusy(false)
     if (error || !data) {
-      const t = !error ? 'Not saved — you are not allowed to change this user.' : /at least one active/i.test(error.message) ? 'Not saved — you need at least one active CEO.' : 'Not saved — ' + error.message.replace(/^.*?ERROR:\s*/, '')
+      const t = !error ? 'Not saved — this user is managed by the CEO or another user manager.' : /at least one active/i.test(error.message) ? 'Not saved — you need at least one active CEO.' : 'Not saved — ' + error.message.replace(/^.*?ERROR:\s*/, '')
       setMsg({ ok: false, text: t }); toast(t, 'err'); return
     }
     const nowRole = ROLE_LABEL[normRole((data as Profile).role) || ''] || (data as Profile).role

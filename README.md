@@ -205,6 +205,10 @@ Everyone can see **Settings → About** (app version, build, "Developed by Mouli
 - "Clear list" (`clear_client_errors()`, migration 032) now also resets the "App errors" health tile and writes an audit entry. The Errors tab badge and the Software Control sidebar badge update straight away.
 - Tests: `UI_URL=<TEST build> node tests/platform-ui.mjs` (TEST only; mocks Capacitor ios/android via `window.CapacitorCustomPlatform`).
 
+### Tone of help and messages (v1.3.6)
+
+Every role is described by what it owns and does. Limits are written as how the work is shared (e.g. "PIN resets are handled by HR Manager and above"), never as "if the CEO allows" / "you cannot". The Help page and PDF manuals use the headings "What you see", "What you own and do" and "How the work is shared". No permissions changed.
+
 ### Help, FAQ and user manuals (v1.3.5, FW Worker 1.0.2, migration 033)
 - FW Manager: **Help** (sidebar / More, and the user menu) has *My role*, *FAQ* and *User manual* tabs. Each user sees only their own role's responsibilities, FAQs and how-to guides, and downloads only their own illustrated PDF manual (CEO, General Manager, HR Admin, HR Manager, Outlet Manager). HR roles can also download the FW Worker guide (Tamil / English) to give workers. The viewer role has no manual.
 - FW Worker: the **?** button opens a paged Help sheet (FAQ + How to, no scrolling) in the worker's language (Tamil, Hindi, Malay, Nepali, Bengali, English; other languages show English) and a link to the PDF guide.
