@@ -36,7 +36,9 @@ const TYPE_KEY: Record<string, Key> = {
   salary_advance: 't_salary_advance', loan: 't_loan', salary_increment: 't_salary_increment', resignation: 't_resignation',
   permit_renewal: 't_renewal', passport: 't_passport', complaint: 't_complaint', fomema: 'doc_fomema', document_copy: 't_document_copy',
 }
-function statusInfo(s: string): { key: Key; cls: string } {
+const WITH_KEY: Record<string, Key> = { hr_manager: 'st_w_hrm', hr_admin: 'st_w_hra', gm: 'st_w_gm', ceo: 'st_w_ceo', general_manager: 'st_w_gm', super_admin: 'st_w_ceo', manager: 'st_manager_review', outlet_manager: 'st_manager_review' }
+function statusInfo(s: string, w?: string | null): { key: Key; cls: string } {
+  if (w && WITH_KEY[w] && ['manager_review', 'submitted', 'recommended', 'escalated'].includes(s)) return { key: WITH_KEY[w], cls: w === 'manager' ? 'ch-amber' : 'ch-blue' }
   if (s === 'manager_review') return { key: 'st_manager_review', cls: 'ch-amber' }
   if (s === 'returned') return { key: 'st_returned', cls: 'ch-violet' }
   if (s === 'approved') return { key: 'st_approved', cls: 'ch-green' }
@@ -265,7 +267,7 @@ function HomeTab({ t, lang, me, reqs, go }: { t: T; lang: Lang; me: Me; reqs: WR
         <div className="tile"><span className="k">{t('loanLeft')}</span><span className="v" data-testid="home-loan">{money(me.loanBalance)}</span></div>
         <button className="tile" onClick={() => go('req')}><span className="k">{t('openReq')}</span><span className="v">{open}</span></button>
         <button className="tile" onClick={() => go(latest ? 'req' : 'new')}>
-          {latest ? <><span className="k ell">{t(TYPE_KEY[latest.type] || 't_complaint')}</span><span className={'chip ' + statusInfo(latest.status).cls} style={{ alignSelf: 'flex-start', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t(statusInfo(latest.status).key)}</span></>
+          {latest ? <><span className="k ell">{t(TYPE_KEY[latest.type] || 't_complaint')}</span><span className={'chip ' + statusInfo(latest.status, latest.with).cls} style={{ alignSelf: 'flex-start', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t(statusInfo(latest.status, latest.with).key)}</span></>
             : <><span className="k">{t('tabNew')}</span><span className="v">＋</span></>}
         </button>
       </div>
@@ -308,7 +310,7 @@ function ReqTab({ t, lang, reqs, reload, onEnded, toast }: { t: T; lang: Lang; r
       <div className="list" ref={ref} data-testid="req-list">
         {reqs.length === 0 ? <div className="center muted">{t('noRequests')}</div>
           : shown.map((r) => {
-            const s = statusInfo(r.status)
+            const s = statusInfo(r.status, r.with)
             return (
               <button key={r.id} className="row" onClick={() => setOpenId(r.id)} data-testid="req-row">
                 <div style={{ minWidth: 0 }}>
@@ -342,7 +344,7 @@ function ReqSheet({ t, lang, r, onClose, reload, onEnded, toast }: { t: T; lang:
   const [err, setErr] = useState<string | null>(null)
   const [answer, setAnswer] = useState('')
   const [confirmCancel, setConfirmCancel] = useState(false)
-  const s = statusInfo(r.status)
+  const s = statusInfo(r.status, r.with)
   const canCancel = r.mine && ['manager_review', 'submitted', 'returned'].includes(r.status)
   const returned = r.mine && r.status === 'returned'
   const lastReason = [...r.events].reverse().find((e) => ['mgr_reject', 'reject', 'return'].includes(e.action) && e.comment)
@@ -372,7 +374,7 @@ function ReqSheet({ t, lang, r, onClose, reload, onEnded, toast }: { t: T; lang:
       <div className="card grow" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         <div className="muted small">{t('history')}</div>
         {evs.map((e, i) => (
-          <div className="ev" key={i}><span className="dot" /><span className="ell">{t(EV_KEY[e.action] || 'ev_submit')}</span><span className="muted small">{fmtDate(e.at, lang)}</span></div>
+          <div className="ev" key={i}><span className="dot" /><span className="ell">{t((e.action === 'assign' || e.action === 'escalate') && e.role && WITH_KEY[e.role] ? WITH_KEY[e.role] : EV_KEY[e.action] || 'ev_submit')}</span><span className="muted small">{fmtDate(e.at, lang)}</span></div>
         ))}
       </div>
       {returned && (

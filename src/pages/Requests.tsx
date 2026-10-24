@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { Btn, Card, Chip, Empty, KV, Modal, SelectFilter, Tabs, Toolbar } from '../components/ui'
 import { FilePick } from '../components/filePick'
@@ -9,11 +9,11 @@ import { db, updateWorker } from '../lib/db'
 import { outletName } from '../lib/calc'
 import { useOutlets, useSettings, useWorkers } from '../lib/hooks'
 import { slipPdf } from '../lib/passport'
-import { actRequest, applyRequest, createRequest, emergencyMisuse, noteRequest, proofDue, proofState, refNo, useRequest, useRequests, type ApplyChoice } from '../lib/requests'
+import { actRequest, applyRequest, assignRequest, createRequest, listAssignees, type Assignee, type RequestEvent, emergencyMisuse, noteRequest, proofDue, proofState, refNo, useRequest, useRequests, type ApplyChoice } from '../lib/requests'
 import { uploadDoc, useDocs, type DocRow } from '../lib/vault'
 import {
   ACTION_LABEL, EMERGENCY_PROOF_CATEGORY, IMMEDIATE_FAMILY, OPEN_STATUSES, REQUEST_TYPE, REQUEST_TYPES, ROLE_LABEL, STATUS_LABEL, STATUS_TONE,
-  availableActions, needsMyAction, requiredLevel, ruleFor, type ReqField, type RequestRow,
+  availableActions, canAssign, needsMyAction, requiredLevel, ruleFor, type ReqField, type RequestRow,
 } from '../lib/workflow'
 import { fmtDate, rm, todayISO } from '../lib/util'
 import { isExited } from '../lib/calc'
@@ -27,6 +27,38 @@ const ago = (iso: string) => {
   return h < 1 ? 'just now' : h < 24 ? `${h} h ago` : `${Math.floor(h / 24)} d ago`
 }
 const err = (e: unknown) => alert((e as Error).message)
+/** short role names for the timeline ("Assigned by CEO (Mouli Sankar) → GM: Aisyah, 24 Oct 10:55") */
+const SHORT_ROLE: Record<string, string> = { super_admin: 'CEO', admin: 'Admin', general_manager: 'GM', hr_admin: 'HR Admin', hr_manager: 'HR Manager', outlet_manager: 'Outlet Manager', worker: 'Worker' }
+const shortRole = (r?: string | null) => (r ? SHORT_ROLE[r] || ROLE_LABEL[r] || r : '')
+const when = (iso: string) => {
+  const d = new Date(iso)
+  return `${d.getDate()} ${d.toLocaleString('en-GB', { month: 'short' })} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+}
+const who = (e: Pick<RequestEvent, 'by_role' | 'by_name'>) => `${shortRole(e.by_role)}${e.by_name ? ` (${e.by_name})` : ''}`
+/** one readable timeline line for assign / escalate / skipped / CEO steps; null = use the default line */
+function eventLine(e: RequestEvent): string | null {
+  const meta = (e.meta || {}) as { kind?: string }
+  if (e.action === 'assign' || e.action === 'escalate')
+    return `${e.action === 'assign' ? 'Assigned' : 'Escalated'} by ${who(e)} → ${shortRole(e.to_role)}${e.to_name ? `: ${e.to_name}` : ''}, ${when(e.at)}`
+  if (e.action === 'skipped') return `${shortRole(e.to_role)} step skipped by ${who(e)}, ${when(e.at)}`
+  if (e.action === 'ceo_reviewed') return `Reviewed by ${who(e)}, ${when(e.at)}`
+  if (e.action === 'ceo_recall') return `Recalled by ${who(e)} → CEO${e.to_name ? `: ${e.to_name}` : ''}, ${when(e.at)}`
+  if (e.action === 'ceo_overrule' && meta.kind === 'amend') return `Amended by ${who(e)}, ${when(e.at)}`
+  return null
+}
+/** "Before" values kept when the CEO amends a request (the original stays in the history) */
+function AmendDiff({ e }: { e: RequestEvent }) {
+  const m = (e.meta || {}) as { kind?: string; before?: Record<string, unknown>; after?: Record<string, unknown> }
+  if (m.kind !== 'amend' || !m.before) return null
+  const rows: string[] = []
+  const b = m.before, a = m.after || {}
+  const fmt = (x: unknown) => (x === null || x === undefined || x === '' ? '—' : typeof x === 'object' ? JSON.stringify(x) : String(x))
+  if ('title' in a && fmt(b.title) !== fmt(a.title)) rows.push(`Title: ${fmt(b.title)} → ${fmt(a.title)}`)
+  if ('amount' in a && fmt(b.amount) !== fmt(a.amount)) rows.push(`Amount: ${fmt(b.amount)} → ${fmt(a.amount)}`)
+  const bd = (b.data || {}) as Record<string, unknown>, ad = (a.data || {}) as Record<string, unknown>
+  Object.keys(ad).forEach((k) => { if (fmt(bd[k]) !== fmt(ad[k])) rows.push(`${k}: ${fmt(bd[k])} → ${fmt(ad[k])}`) })
+  return rows.length ? <ul className="small muted">{rows.map((x) => <li key={x}>{x}</li>)}</ul> : null
+}
 
 /* ======================= list ======================= */
 type ListTab = 'mine_action' | 'open' | 'done' | 'all' | 'tasks'
@@ -252,7 +284,7 @@ export function NewRequest() {
 export function RequestDetail() {
   const { id } = useParams()
   const nav = useNavigate()
-  const { session, role, canWrite, isHr, can, route, isSuper } = useAuth()
+  const { session, role, canWrite, isHr, can, route, isSuper, isGm } = useAuth()
   const { req: r, events, loading, error } = useRequest(id)
   const reqTasks = useHrTasks(isHr && !!id, id)
   const [detailSp] = useSearchParams()
@@ -267,6 +299,7 @@ export function RequestDetail() {
   const [up, setUp] = useState<{ category: string; title: string } | null>(null)
   const [applyOpen, setApplyOpen] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [assignOpen, setAssignOpen] = useState(false)
   const uidMe = session?.user.id || ''
   const w = workers.find((x) => x.id === r?.worker_id)
   const t = r ? REQUEST_TYPE[r.type] : undefined
@@ -274,6 +307,7 @@ export function RequestDetail() {
   if (loading) return <div className="page"><p className="muted">Loading…</p></div>
   if (!r) return <div className="page"><Empty title="Request not found">{error && <p className="muted">{error}</p>}<Btn onClick={() => nav('/requests')}>Back</Btn></Empty></div>
 
+  const assignable = (isSuper || isGm) && canAssign(r, role || '', uidMe)
   const tickets = docs.filter((d) => d.category === 'Flight ticket')
   const proofs = docs.filter((d) => d.category === EMERGENCY_PROOF_CATEGORY)
   const others = docs.filter((d) => !tickets.includes(d) && !proofs.includes(d))
@@ -307,6 +341,10 @@ export function RequestDetail() {
     <div className="page narrow">
       <div className="page-h"><div className="row gap-s"><Btn kind="ghost" icon="back" onClick={() => nav(-1)} title="Back" /><h1>{t?.icon} {t?.label || r.type}</h1></div></div>
       <Card>
+        {r.assigned_to && (
+          <p className="callout small mb-s"><strong>Assigned to: {r.assigned_to_name || '—'} ({shortRole(r.assigned_role)})</strong>
+            {r.assigned_by_name && <span className="muted"> · by {shortRole(r.assigned_by_role)} ({r.assigned_by_name}){r.assigned_at ? `, ${when(r.assigned_at)}` : ''}</span>}</p>
+        )}
         <div className="row gap-s wrap">
           <Chip tone={STATUS_TONE[r.status]}>{STATUS_LABEL[r.status]}</Chip>
           <Chip tone="gray">{refNo(r)}</Chip>
@@ -335,8 +373,8 @@ export function RequestDetail() {
 
       {isSuper && (
         <Card title="CEO" className="card-ceo">
-          <p className="muted small">Overrule, amend, recall or mark reviewed. Your decision is final and locks the request.</p>
-          <Btn kind="primary" onClick={() => setCeoOpen(true)}>Overrule / recall…</Btn>
+          <p className="muted small">Overrule (final, locks the request), amend with a change note, recall to you or mark reviewed. To send it to someone, use <strong>Assign…</strong> under Actions.</p>
+          <Btn kind="primary" onClick={() => setCeoOpen(true)}>Overrule / amend / recall / review…</Btn>
         </Card>
       )}
       {isHr && reqTasks.length > 0 && <HrTasksCard tasks={reqTasks} />}
@@ -374,9 +412,11 @@ export function RequestDetail() {
         {others.length === 0 ? <p className="muted small">None</p> : <ul className="rows">{others.map((d) => <DocRowItem key={d.id} d={d} />)}</ul>}
       </Card>
 
-      {actions.length > 0 && (
+      {(actions.length > 0 || assignable) && (
         <Card title="Actions">
+          {r.assigned_to && r.assigned_to !== uidMe && !isSuper && <p className="muted small">Assigned to {r.assigned_to_name} ({shortRole(r.assigned_role)}) — only they or the CEO can decide it now.</p>}
           <div className="row gap-s wrap">
+            {assignable && <Btn kind="secondary" icon="users" onClick={() => setAssignOpen(true)}>Assign…</Btn>}
             {actions.filter((a) => a !== 'comment').map((a) => (
               <Btn key={a} kind={a === 'approve' || a === 'apply' || a === 'forward' || a === 'mgr_approve' ? 'primary' : a === 'reject' || a === 'mgr_reject' ? 'danger' : 'secondary'} disabled={busy}
                 onClick={() => (a === 'apply' ? setApplyOpen(true) : a === 'resubmit' ? doAct('resubmit') : setAct(a))}>{ACTION_LABEL[a]}</Btn>
@@ -400,10 +440,11 @@ export function RequestDetail() {
             <li key={e.id}>
               <span className="tl-dot" />
               <div>
-                <strong>{e.action === 'ceo_overrule' || e.action === 'ceo_recall' ? `${ACTION_LABEL[e.action]} ${e.by_name}: ${STATUS_LABEL[e.from_status as keyof typeof STATUS_LABEL] || e.from_status} → ${STATUS_LABEL[e.to_status as keyof typeof STATUS_LABEL] || e.to_status}` : ACTION_LABEL[e.action] || (e.action === 'submit' ? 'Submitted' : e.action === 'update' ? 'Updated' : e.action)}</strong>
+                {eventLine(e) ? <strong>{eventLine(e)}</strong> : <><strong>{e.action === 'ceo_overrule' || e.action === 'ceo_recall' ? `${ACTION_LABEL[e.action]} ${e.by_name}: ${STATUS_LABEL[e.from_status as keyof typeof STATUS_LABEL] || e.from_status} → ${STATUS_LABEL[e.to_status as keyof typeof STATUS_LABEL] || e.to_status}` : ACTION_LABEL[e.action] || (e.action === 'submit' ? 'Submitted' : e.action === 'update' ? 'Updated' : e.action)}</strong>
                 {e.to_status && e.action !== 'submit' && !e.action.startsWith('ceo_') && <> → <Chip tone={STATUS_TONE[e.to_status as keyof typeof STATUS_TONE] || 'gray'}>{STATUS_LABEL[e.to_status as keyof typeof STATUS_LABEL] || e.to_status}</Chip></>}
-                <small className="muted"> · {e.by_name} ({ROLE_LABEL[e.by_role || ''] || e.by_role}) · {new Date(e.at).toLocaleString()}</small>
-                {e.comment && <p className="tl-c">{e.comment}</p>}
+                <small className="muted"> · {e.by_name} ({ROLE_LABEL[e.by_role || ''] || e.by_role}) · {new Date(e.at).toLocaleString()}</small></>}
+                {e.comment && e.action !== 'skipped' && <p className="tl-c">{e.comment}</p>}
+                <AmendDiff e={e} />
               </div>
             </li>
           ))}
@@ -413,8 +454,53 @@ export function RequestDetail() {
       {up && w && <UploadDoc workerId={w.id} requestId={r.id} category={up.category} lockCategory={up.category !== 'Other'} title={up.title} onClose={() => setUp(null)}
         onDone={async (d) => { try { if (d.category === 'Flight ticket') await onTicketUploaded(d); if (d.category === EMERGENCY_PROOF_CATEGORY) await noteRequest(r.id, { proofReceived: true }, 'Proof uploaded') } catch (e) { err(e) } }} />}
       {ceoOpen && isSuper && <OverruleDialog r={r} workerName={w?.fullName} onClose={() => setCeoOpen(false)} />}
+      {assignOpen && <AssignModal r={r} onClose={() => setAssignOpen(false)} />}
       {applyOpen && <ApplyModal r={r} ticketDocId={tickets[0]?.id} company={s.companyName} onClose={() => setApplyOpen(false)} />}
     </div>
+  )
+}
+
+/** CEO / GM: assign or escalate the request to a specific person at any level (server: request_assign). */
+function AssignModal({ r, onClose }: { r: RequestRow; onClose: () => void }) {
+  const [list, setList] = useState<Assignee[] | null>(null)
+  const [loadErr, setLoadErr] = useState('')
+  const [roleSel, setRoleSel] = useState('')
+  const [userSel, setUserSel] = useState('')
+  const [note, setNote] = useState('')
+  const [busy, setBusy] = useState(false)
+  useEffect(() => { listAssignees(r.id).then(setList).catch((e) => setLoadErr((e as Error).message)) }, [r.id])
+  const roles = useMemo(() => Array.from(new Map((list || []).map((a) => [a.role, a.roleLabel])).entries()), [list])
+  const people = (list || []).filter((a) => a.role === roleSel)
+  const go = async () => {
+    if (!userSel) return alert('Choose the person')
+    setBusy(true)
+    try {
+      const x = await assignRequest(r.id, userSel, note)
+      const p = people.find((a) => a.id === userSel)
+      toast(`${refNo(r)} ${x.status === 'escalated' && (roleSel === 'super_admin' || roleSel === 'general_manager') ? 'escalated' : 'assigned'} to ${p?.name || ''} (${shortRole(roleSel)})`)
+      onClose()
+    } catch (e) { err(e) } finally { setBusy(false) }
+  }
+  return (
+    <Modal title={`Assign ${refNo(r)}`} onClose={onClose} footer={<><Btn onClick={onClose}>Cancel</Btn><Btn kind="primary" icon="check" disabled={busy || !userSel} onClick={go}>{busy ? 'Assigning…' : 'Assign'}</Btn></>}>
+      <p className="muted small">Send this request to any level and person. Steps in between are marked as skipped; the person is notified and it moves to their queue{r.confidential ? '. Confidential: outlet managers are never offered' : ''}.</p>
+      {loadErr && <p className="warn">{loadErr}</p>}
+      {!list && !loadErr && <p className="muted">Loading people…</p>}
+      {list && list.length === 0 && <p className="muted">Nobody else can take this request in its company / outlet.</p>}
+      {list && list.length > 0 && (
+        <div className="grid-form">
+          <div className="field"><label htmlFor="as-r">Role</label>
+            <select id="as-r" value={roleSel} onChange={(e) => { setRoleSel(e.target.value); setUserSel('') }}>
+              <option value="">Choose…</option>{roles.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+            </select></div>
+          <div className="field"><label htmlFor="as-u">Person</label>
+            <select id="as-u" value={userSel} disabled={!roleSel} onChange={(e) => setUserSel(e.target.value)}>
+              <option value="">Choose…</option>{people.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+            </select></div>
+          <div className="field full"><label htmlFor="as-n">Note (optional — staff only, the worker never sees it)</label><textarea id="as-n" rows={2} value={note} onChange={(e) => setNote(e.target.value)} /></div>
+        </div>
+      )}
+    </Modal>
   )
 }
 

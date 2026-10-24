@@ -14,7 +14,7 @@ export interface Effect { kind: string; effect: string; task: string }
 export type CeoDecision = 'approve' | 'amend' | 'reject' | 'cancel' | 'recall' | 'reviewed'
 
 export const REVIEW_REASON: Record<string, string> = {
-  gm_approved: 'Approved by General Manager', gm_rejected: 'Rejected by General Manager', rejected: 'Rejected', recalled: 'You recalled it', manual: 'Reviewed',
+  gm_approved: 'Approved by General Manager', gm_rejected: 'Rejected by General Manager', rejected: 'Rejected', recalled: 'You recalled it', manual: 'Reviewed', gm_assigned: 'Assigned / escalated by General Manager',
 }
 
 /** CEO only: the server returns nothing to anybody else (RLS) */

@@ -9,7 +9,8 @@ import { REQUEST_TYPE, type RequestRow } from './workflow'
 import { daysBetweenInclusive, todayISO, uid } from './util'
 import type { LeaveRec, MemoRec, PassportMove, Worker, WorkerStatus } from './types'
 
-export interface RequestEvent { id: number; request_id: string; at: string; by_name: string | null; by_role: string | null; action: string; from_status: string | null; to_status: string | null; comment: string | null }
+export interface RequestEvent { id: number; request_id: string; at: string; by_name: string | null; by_role: string | null; action: string; from_status: string | null; to_status: string | null; comment: string | null
+  to_user?: string | null; to_name?: string | null; to_role?: string | null; meta?: Record<string, unknown> | null }
 export const refNo = (r: Pick<RequestRow, 'ref_no'>) => `REQ-${r.ref_no}`
 
 const err = (e: { message: string } | null) => {
@@ -90,6 +91,19 @@ export async function actRequest(id: string, action: string, comment?: string, p
   const { data, error } = action === 'mgr_approve' || action === 'mgr_reject'
     ? await supabase.rpc('request_manager_act', { p_id: id, p_action: action === 'mgr_approve' ? 'approve' : 'reject', p_comment: comment || null })
     : await supabase.rpc('request_act', { p_id: id, p_action: action, p_comment: comment || null, p_patch: patch || null })
+  err(error)
+  requestsChanged()
+  return data as RequestRow
+}
+/* ---------- assign / escalate (CEO and GM only; enforced by request_assign on the server) ---------- */
+export interface Assignee { id: string; name: string; role: string; roleLabel: string }
+export async function listAssignees(id: string): Promise<Assignee[]> {
+  const { data, error } = await supabase.rpc('request_assignees', { p_id: id })
+  err(error)
+  return (data || []) as Assignee[]
+}
+export async function assignRequest(id: string, userId: string, note?: string): Promise<RequestRow> {
+  const { data, error } = await supabase.rpc('request_assign', { p_id: id, p_user: userId, p_note: note?.trim() || null })
   err(error)
   requestsChanged()
   return data as RequestRow

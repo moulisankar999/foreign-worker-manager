@@ -105,7 +105,7 @@ export default function CeoReviewPage() {
 
 const CHOICES: { d: CeoDecision; label: string; help: string }[] = [
   { d: 'approve', label: 'Approve', help: 'Final approval. HR then applies it.' },
-  { d: 'amend', label: 'Amend, then approve', help: 'Change amount / dates / details, then approve.' },
+  { d: 'amend', label: 'Amend', help: 'Change amount / dates / details with a change note (the original stays in the history). Approve it now, or tick “keep it moving”.' },
   { d: 'reject', label: 'Reject', help: 'Final rejection.' },
   { d: 'cancel', label: 'Cancel', help: 'Stop the request (no decision on the merits).' },
   { d: 'recall', label: 'Recall to me', help: 'Take it back for your own decision (status: waiting for decision).' },
@@ -123,12 +123,14 @@ export function OverruleDialog({ r, initial, workerName, onClose }: { r: Request
   const editable = (t?.fields || []).filter((f) => !f.type || ['text', 'textarea', 'date', 'number', 'select'].includes(f.type))
   const [patch, setPatch] = useState<Record<string, string>>(() => Object.fromEntries(editable.map((f) => [f.key, r.data[f.key] === undefined ? '' : String(r.data[f.key])])))
   const [amount, setAmount] = useState(r.amount === null || r.amount === undefined ? '' : String(r.amount))
+  const canKeep = ['manager_review', 'submitted', 'returned', 'recommended', 'escalated', 'approved'].includes(r.status)
+  const [keep, setKeep] = useState(canKeep && r.status !== 'approved')
   useEffect(() => { requestEffects(r.id).then(setFx).catch(() => setFx([])) }, [r.id])
   const choices = CHOICES.filter((c) => !(c.d === 'approve' && (r.status === 'approved' || r.status === 'completed')) && !(c.d === 'reject' && r.status === 'rejected') && !(c.d === 'cancel' && r.status === 'cancelled'))
   const willUndo = d === 'reject' || d === 'cancel' || d === 'amend'
   const go = async () => {
     setError('')
-    if (d !== 'reviewed' && !reason.trim()) return setError('Write a short reason — it goes in the history and to the people involved.')
+    if (d !== 'reviewed' && !reason.trim()) return setError(d === 'amend' ? 'Write a change note — it goes in the history (the original details are kept).' : 'Write a short reason — it goes in the history and to the people involved.')
     let p: Record<string, unknown> | undefined
     if (d === 'amend') {
       const data: Record<string, unknown> = {}
@@ -136,18 +138,19 @@ export function OverruleDialog({ r, initial, workerName, onClose }: { r: Request
       p = { data }
       if (amount !== (r.amount === null || r.amount === undefined ? '' : String(r.amount))) p.amount = amount
       if (!Object.keys(data).length && !('amount' in p)) return setError('Change at least one detail, or choose Approve.')
+      if (keep && canKeep) p.keepStatus = true
     }
     setBusy(true)
     try {
       await ceoDecide(r.id, d, reason, p)
-      toast(d === 'reviewed' ? `Marked reviewed ✓ — ${refNo(r)}` : `Done ✓ — ${refNo(r)} is now final (locked)`)
+      toast(d === 'reviewed' ? `Marked reviewed ✓ — ${refNo(r)}` : d === 'amend' && keep && canKeep ? `Amended ✓ — ${refNo(r)} keeps moving` : `Done ✓ — ${refNo(r)} is now final (locked)`)
       onClose()
     } catch (e) { setError((e as Error).message) } finally { setBusy(false) }
   }
   return (
     <Modal title={`Overrule ${refNo(r)} — ${t?.label || r.type}`} onClose={onClose} wide footer={<>
       <Btn onClick={onClose}>Cancel</Btn>
-      <Btn kind={d === 'reject' || d === 'cancel' ? 'danger' : 'primary'} disabled={busy} onClick={go}>{busy ? 'Saving…' : d === 'reviewed' ? 'Mark reviewed' : 'Confirm — final decision'}</Btn>
+      <Btn kind={d === 'reject' || d === 'cancel' ? 'danger' : 'primary'} disabled={busy} onClick={go}>{busy ? 'Saving…' : d === 'reviewed' ? 'Mark reviewed' : d === 'amend' && keep && canKeep ? 'Save changes' : 'Confirm — final decision'}</Btn>
     </>}>
       <p className="small">{workerName ? <strong>{workerName}</strong> : null} · now <Chip tone={STATUS_TONE[r.status]}>{STATUS_LABEL[r.status]}</Chip> {decidedLine(r) && <span className="muted">· {decidedLine(r)}</span>}</p>
       <fieldset className="radio-set">
@@ -156,6 +159,9 @@ export function OverruleDialog({ r, initial, workerName, onClose }: { r: Request
           <label key={c.d} className="check"><input type="radio" name="ceo-d" checked={d === c.d} onChange={() => setD(c.d)} /> <span><strong>{c.label}</strong> <small className="muted">— {c.help}</small></span></label>
         ))}
       </fieldset>
+      {d === 'amend' && canKeep && (
+        <label className="check mt-s"><input type="checkbox" checked={keep} onChange={(e) => setKeep(e.target.checked)} /> <span><strong>Amend details only — keep it moving</strong> <small className="muted">— the request stays at its current step (not locked); the original details stay in the history</small></span></label>
+      )}
       {d === 'amend' && (
         <div className="grid2 mt-s">
           {r.amount !== null && r.amount !== undefined && <div className="field"><label htmlFor="am-amt">Amount (RM)</label><input id="am-amt" type="number" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} /></div>}
@@ -169,7 +175,7 @@ export function OverruleDialog({ r, initial, workerName, onClose }: { r: Request
           ))}
         </div>
       )}
-      {d !== 'reviewed' && <div className="field full mt-s"><label htmlFor="ceo-why">Reason (required)</label><textarea id="ceo-why" rows={2} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. Amount too high for this month" /></div>}
+      {d !== 'reviewed' && <div className="field full mt-s"><label htmlFor="ceo-why">{d === 'amend' ? 'Change note (required)' : 'Reason (required)'}</label><textarea id="ceo-why" rows={2} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. Amount too high for this month" /></div>}
       {willUndo && fx && fx.length > 0 && (
         <div className="callout warn mt-s" role="alert">
           <strong>⚠ Things already happened for this request:</strong>
@@ -177,7 +183,7 @@ export function OverruleDialog({ r, initial, workerName, onClose }: { r: Request
           <p className="small">Nothing is reversed automatically (money is never taken back by the app). HR Managers / HR Admins get these tasks.</p>
         </div>
       )}
-      {d !== 'reviewed' && <p className="muted small mt-s">History will show “Overruled by CEO: {STATUS_LABEL[r.status]} → {STATUS_LABEL[d === 'recall' ? 'escalated' : d === 'reject' ? 'rejected' : d === 'cancel' ? 'cancelled' : 'approved']}”. The request is then locked: only you can change it. The people involved are notified; the General Manager sees a neutral “Updated by CEO” note.</p>}
+      {d !== 'reviewed' && !(d === 'amend' && keep && canKeep) && <p className="muted small mt-s">History will show “Overruled by CEO: {STATUS_LABEL[r.status]} → {STATUS_LABEL[d === 'recall' ? 'escalated' : d === 'reject' ? 'rejected' : d === 'cancel' ? 'cancelled' : 'approved']}”. The request is then locked: only you can change it. The people involved are notified; the General Manager sees a neutral “Updated by CEO” note.</p>}
       {error && <p className="warn small" role="alert">{error}</p>}
     </Modal>
   )

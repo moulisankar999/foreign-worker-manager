@@ -111,7 +111,16 @@ export interface RequestRow {
   required_level: Level; created_by: string; created_by_name: string | null; created_at: string; updated_at: string
   source?: 'manager' | 'worker'; confidential?: boolean; manager_due_at?: string | null; manager_overdue?: boolean; manager_decided_by_name?: string | null; manager_decided_at?: string | null
   decided_by_name?: string | null; decided_by_role?: string | null; decided_at?: string | null; ceo_locked?: boolean; ceo_updated_at?: string | null; applied_by_name?: string | null; applied_at?: string | null; result?: Record<string, unknown> | null
+  /** set when the CEO / GM assigned or escalated the request to a specific person (cleared once the request moves on) */
+  assigned_to?: string | null; assigned_to_name?: string | null; assigned_role?: string | null
+  assigned_by?: string | null; assigned_by_name?: string | null; assigned_by_role?: string | null; assigned_at?: string | null
 }
+/** assigned to someone else at this stage: only that person (or the CEO) decides — same rule as request_act on the server */
+export const assignedToOther = (r: Pick<RequestRow, 'assigned_to'>, userId: string, role: string) => !!r.assigned_to && r.assigned_to !== userId && role !== 'super_admin'
+/** may this user use the Assign button (server: request_assign) */
+export const canAssign = (r: Pick<RequestRow, 'status' | 'ceo_locked' | 'assigned_to' | 'assigned_by_role'>, role: string, userId: string) =>
+  ['manager_review', 'submitted', 'returned', 'recommended', 'escalated'].includes(r.status) &&
+  (role === 'super_admin' || (role === 'general_manager' && !r.ceo_locked && !(r.assigned_to && r.assigned_to !== userId && (r.assigned_by_role === 'super_admin' || r.assigned_by_role === 'admin'))))
 
 /** Who takes the final ("top") decision: the General Manager if one is active with the matching power, otherwise the CEO. */
 export interface ApprovalRoute { gmFinal?: boolean; gmLoans?: boolean; gmIncrements?: boolean }
@@ -129,8 +138,9 @@ export function canTop(type: string, c: ActCtx): boolean {
 const rankFor = (type: string, c: ActCtx) => (canTop(type, c) ? 3 : c.role === 'general_manager' ? 0 : RANK[c.role] || 0)
 
 /** Is this request waiting for ME to do something? (drives badges and the daily alert) */
-export function needsMyAction(r: Pick<RequestRow, 'status' | 'created_by' | 'required_level' | 'type' | 'ceo_locked'>, role: string, userId: string, c?: Partial<ActCtx>): boolean {
+export function needsMyAction(r: Pick<RequestRow, 'status' | 'created_by' | 'required_level' | 'type' | 'ceo_locked' | 'assigned_to'>, role: string, userId: string, c?: Partial<ActCtx>): boolean {
   const ctx: ActCtx = { role, userId, ...c }
+  if (r.assigned_to && r.status !== 'returned' && r.status !== 'approved') return r.assigned_to === userId // assigned by the CEO / GM: it waits for that person only
   if (r.status === 'manager_review') return role === 'outlet_manager' // raised by a worker in the FW Worker app: his outlet manager decides first
   if (r.status === 'returned') return r.created_by === userId
   if (r.status === 'approved') return role === 'hr_manager'
@@ -158,6 +168,12 @@ export function availableActions(r: RequestRow, role: string, userId: string, c?
   const ceo = role === 'super_admin'
   const open = OPEN_STATUSES.includes(r.status)
   const stage = STAGE_RANK[r.status]
+  if (assignedToOther(r, userId, role) && r.status !== 'approved' && r.status !== 'returned') {
+    // assigned by the CEO / GM to someone else: they decide (the CEO can always step in)
+    if (open && (mine || (role === 'general_manager' && ctx.can?.('requests.cancel')))) out.push('cancel')
+    out.push('comment')
+    return out
+  }
   if (r.status === 'manager_review') {
     // worker request at the outlet-manager step (server: request_manager_act). Higher roles may step in.
     if (role === 'outlet_manager' || (RANK[role] || 0) >= 1) out.push('mgr_approve', 'mgr_reject')
@@ -190,6 +206,7 @@ export const ACTION_LABEL: Record<string, string> = {
   approve: 'Approve', forward: 'Recommend & send up', return: 'Return for info', reject: 'Reject', apply: 'Apply to worker record & close',
   mgr_approve: 'Approve → send to HR', mgr_reject: 'Reject', worker_submit: 'Raised by worker (app)', auto_escalate: 'Sent to HR (outlet manager did not answer in time)', worker_cancel: 'Cancelled by worker', worker_resubmit: 'Resubmitted by worker',
   resubmit: 'Resubmit', cancel: 'Cancel request', comment: 'Add comment', ceo_overrule: 'Overruled by CEO', ceo_recall: 'Recalled by CEO', ceo_reviewed: 'Reviewed by CEO',
+  assign: 'Assigned', escalate: 'Escalated', skipped: 'Skipped', ceo_amend: 'Amended by CEO',
 }
 
 export const VAULT_CATEGORIES = ['Photo', 'Passport (bio page)', 'Passport (full copy)', 'PLKS / Visa', 'FOMEMA / Medical', 'Insurance', 'SOCSO / PERKESO', 'Contract / Offer letter', 'Checkout memo', 'Return memo', 'Exit clearance memo', 'Warning letter', 'MC', 'Payslip', 'Bank', 'IC / i-Kad', 'Police report', 'Flight ticket', 'Passport safekeeping consent', 'Passport release slip', 'Emergency leave proof', 'Other']

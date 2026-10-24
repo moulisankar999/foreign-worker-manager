@@ -76,6 +76,8 @@ export type ReqEvent = { at: string; action: string; to: string | null; role: st
 export type WReq = {
   id: string; ref: string; type: string; status: string; source: string; createdAt: string; updatedAt: string; amount: number | null
   overdue: boolean; mine: boolean; from: string | null; to: string | null; lastDay: string | null; confidential: boolean; events: ReqEvent[]
+  /** who has it now (simple, no names): manager | hr_manager | hr_admin | gm | ceo — older servers omit it */
+  with?: string | null
 }
 export const getMe = () => rpc<Me>('worker_me')
 export const getRequests = () => rpc<WReq[]>('worker_requests')

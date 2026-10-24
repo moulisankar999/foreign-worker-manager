@@ -177,6 +177,27 @@ Everyone can see **Settings → About** (app version, build, "Developed by Mouli
 - **Requests** page: requests raised from the FW Worker app show chips for source (worker app), overdue and confidential. Outlet Managers approve or reject first (a reason is required to reject), then HR. Complaints marked confidential skip the outlet manager and go to HR only.
 - **Worker → 📱 App access** (CEO / GM / HR): turn the worker's app login on or off and issue a new 6-digit PIN. The PIN is shown once and never stored in readable form. Server side: migration `030_worker_app.sql`.
 
+### Quieter error list (v1.3.3)
+- A request that fails with no answer at all ("Failed to fetch" / "Load failed") is usually the phone itself: offline, switching Wi-Fi and mobile data, or the app coming back from the background (iOS cancels requests that were in progress while the app was suspended). These are no longer logged as errors while the device is offline or in the background, or for 30 s after the app comes back or the network changes.
+- Read-only calls (sync, permissions, approval route) are retried once, quietly. A failure is only logged if the same endpoint still has not answered after 75 s (more than one sync cycle). A burst of failures is grouped into one entry. HTTP errors (5xx / 400 / 403) and JavaScript errors are still logged right away.
+- The platform shown in the error list now comes from the app itself. iPads were shown as "android" because iPadOS reports a Mac user agent.
+- Unit test: `node tests/error-noise.test.mjs`.
+
+### Assign / escalate and CEO actions on requests (v1.3.3, migration 031)
+- **Who:** only the CEO and the General Manager can send a request to someone. The button is **Assign…** under the request's *Actions*. Nobody else can, and the server enforces this (`request_assign`, SECURITY DEFINER). Every assignment is recorded in the audit log as `request.assign` or `request.escalate`.
+- **What:** pick a level (Outlet Manager, HR Manager, HR Admin, GM or CEO), then a person in the request's company/outlet, and add an optional note. This works at any stage, including staff self-requests and confidential complaints. A confidential complaint is never offered to, or routed to, an Outlet Manager.
+- **Effects:** the request moves to that person's queue. Steps that were jumped over are shown as "<step> skipped by CEO/GM (name)". The new assignee is notified in-app and by push (`request_assigned`), and their timers start again. While a request is assigned, only that person (or the CEO) can decide it. The assignment clears as soon as they act.
+- **GM:** when the GM assigns, the CEO is notified (`gm_assigned`) and the request appears in *CEO review*. The CEO can reassign anything the GM assigned. The GM can't change an assignment the CEO made. The GM still needs the matching GM power to approve a request type. Without it, he can only pass the request on, for example escalate it to the CEO.
+- **Wording:** the request header shows "Assigned to: name (role)". Timeline entries read "Assigned by CEO (name) → GM: name, 24 Oct 10:55" plus the note. A GM sending a request up to the CEO reads "Escalated by GM (name) → CEO: name".
+- **Worker app:** the worker sees only a simple status, such as "With HR Admin". Names and notes are never shown.
+- **CEO actions** (*Overrule / amend / recall / review…*, via `ceo_decide`):
+  - Overrule: final, and locks the request.
+  - Amend: needs a change note. Before → after is kept in the timeline. "Keep it moving" leaves the request where it is.
+  - Recall: assigns the request to the CEO.
+  - Mark reviewed: adds "Reviewed by CEO" and clears it from the review list.
+- **GM limits:** the GM gets Assign/Escalate plus the GM powers ticked in Settings. The GM gets no CEO-only actions.
+- **Tests (TEST project only):** `tests/assign-test.sql` (40 server checks, all in one rolled-back transaction) and `tests/assign-ui.mjs` (Playwright, 14 checks, `UI_URL=<test build>`).
+
 ## Features
 
 ### Dashboard
