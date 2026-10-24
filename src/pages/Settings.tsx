@@ -29,7 +29,7 @@ import { loadSampleData } from '../lib/sample'
 import { RemoveDemoCard, isDemoName } from '../components/demoCleanup'
 import { BUSINESS_TYPES, SKILL_LEVELS, type BusinessType, type Settings } from '../lib/types'
 import { download, todayISO, uid } from '../lib/util'
-import { ANDROID_APK_URL, APP_VERSION, isNative } from '../lib/platform'
+import { ANDROID_APK_URL, APP_VERSION, isNative, platformLabel } from '../lib/platform'
 import { PayRulesSettings } from '../components/pay'
 import { REST_DAYS, STATES } from '../lib/pay'
 
@@ -364,7 +364,7 @@ function AboutBuild() {
     void import('@capacitor/app').then(({ App }) => App.getInfo()).then((i) => setBuild(i.build || '?'), () => setBuild('?'))
   }, [])
   const built = new Date(__BUILD_TIME__)
-  const platform = !isNative() ? 'Web app' : /iPhone|iPad|iOS/i.test(navigator.userAgent) ? 'iPhone / iPad app' : 'Android app'
+  const platform = platformLabel()
   return (
     <dl className="about-kv">
       <div><dt>App</dt><dd>FW Manager</dd></div>

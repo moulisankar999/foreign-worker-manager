@@ -9,7 +9,7 @@ import { Btn, Card, Chip, Empty, Tabs } from '../components/ui'
 import { toast } from '../components/toast'
 
 export type Health = { check_key: string; status: 'green' | 'amber' | 'red' | 'grey'; title: string | null; summary: string | null; advice: string | null; area: string | null; detail: Record<string, unknown>; source: string | null; sort: number; checked_at: string; changed_at: string; prev_status: string | null }
-type AppError = { id: number; created_at: string; last_seen: string; count: number; user_role: string | null; kind: string; message: string; detail: string | null; url: string | null; app_version: string | null; platform: string | null }
+type AppError = { id: number; created_at: string; last_seen: string; count: number; user_role: string | null; kind: string; message: string; detail: string | null; url: string | null; app_version: string | null; platform: string | null; user_agent?: string | null }
 type Block =
   | { t: 'text'; text: string }
   | { t: 'kv'; rows: [string, string, string?][] }
@@ -67,19 +67,22 @@ export default function ControlPage() {
   useEffect(() => { if (isSuper) void refresh() }, [isSuper, refresh])
   useEffect(() => {
     if (!isSuper || tab !== 'errors') return
-    supabase.from('app_errors').select('id,created_at,last_seen,count,user_role,kind,message,detail,url,app_version,platform').order('last_seen', { ascending: false }).limit(200)
+    supabase.from('app_errors').select('id,created_at,last_seen,count,user_role,kind,message,detail,url,app_version,platform,user_agent').order('last_seen', { ascending: false }).limit(200)
       .then(({ data }) => setErrs((data || []) as AppError[]))
   }, [isSuper, tab])
   if (!isSuper) return <div className="page"><Empty icon="lock" title="Not available">Software Control is only for the CEO.</Empty></div>
   const bad = health.filter((h) => h.status === 'red' || h.status === 'amber').length
-  const e24 = Number((health.find((h) => h.check_key === 'app_errors')?.detail as { count24h?: number } | undefined)?.count24h || 0)
+  const tile24 = Number((health.find((h) => h.check_key === 'app_errors')?.detail as { count24h?: number } | undefined)?.count24h || 0)
+  // once the list is loaded, the badge follows it (the tile is only refreshed every 30 min)
+  const dayAgo = Date.now() - 86_400_000
+  const e24 = errs ? errs.filter((r) => Date.parse(r.last_seen) > dayAgo).reduce((n, r) => n + (r.count || 1), 0) : tile24
   return (
     <div className="page ctl">
       <h1>Software Control</h1>
       <Tabs tabs={[{ id: 'health' as Tab, label: 'Control Center', badge: bad || undefined }, { id: 'errors' as Tab, label: 'Errors', badge: e24 || undefined }, { id: 'map' as Tab, label: 'Know-how / System Map' }]}
         value={tab} onChange={(t) => nav(t === 'health' ? '/control' : '/control/' + t, { replace: true })} />
       {tab === 'health' && <HealthBoard health={health} onChange={setHealth} refresh={refresh} />}
-      {tab === 'errors' && <ErrorList rows={errs} onClear={() => setErrs([])} />}
+      {tab === 'errors' && <ErrorList rows={errs} onClear={() => { setErrs([]); void refresh() }} />}
       {tab === 'map' && <SystemMap health={health} />}
     </div>
   )
@@ -132,6 +135,13 @@ function HealthBoard({ health, refresh }: { health: Health[]; onChange: (h: Heal
   )
 }
 
+/** Apps before 1.3.3 guessed the platform from the user agent, so iPads/iPhones were stored as "android". */
+export function platformShown(r: { platform: string | null; app_version: string | null; user_agent?: string | null }): string {
+  const old = !r.app_version || r.app_version.localeCompare('1.3.3', undefined, { numeric: true }) < 0
+  if (old && r.platform === 'android' && /iPad|iPhone|iPod|Macintosh/.test(r.user_agent || '')) return 'unknown (old app)'
+  return r.platform === 'ios' ? 'iOS' : r.platform === 'android' ? 'Android' : r.platform || ''
+}
+
 function ErrorList({ rows, onClear }: { rows: AppError[] | null; onClear: () => void }) {
   const [open, setOpen] = useState<number | null>(null)
   const clear = async () => {
@@ -148,7 +158,7 @@ function ErrorList({ rows, onClear }: { rows: AppError[] | null; onClear: () => 
             <li key={r.id} onClick={() => setOpen(open === r.id ? null : r.id)}>
               <div className="r-main">
                 <strong className="err-msg">{r.message}</strong>
-                <small>{ist(r.last_seen)} · {r.kind}{r.count > 1 ? ` · ×${r.count}` : ''} · screen {r.url || '-'} · {r.user_role === 'super_admin' ? 'CEO' : r.user_role || '?'} · {r.platform || ''} {r.app_version || ''}</small>
+                <small>{ist(r.last_seen)} · {r.kind}{r.count > 1 ? ` · ×${r.count}` : ''} · screen {r.url || '-'} · {r.user_role === 'super_admin' ? 'CEO' : r.user_role || '?'} · {platformShown(r)} {r.app_version || ''}</small>
                 {open === r.id && r.detail && <pre className="err-detail">{r.detail}</pre>}
               </div>
             </li>

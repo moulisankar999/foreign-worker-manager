@@ -198,6 +198,12 @@ Everyone can see **Settings → About** (app version, build, "Developed by Mouli
 - **GM limits:** the GM gets Assign/Escalate plus the GM powers ticked in Settings. The GM gets no CEO-only actions.
 - **Tests (TEST project only):** `tests/assign-test.sql` (40 server checks, all in one rolled-back transaction) and `tests/assign-ui.mjs` (Playwright, 14 checks, `UI_URL=<test build>`).
 
+
+### Platform label and "Clear list" fix (v1.3.4, migration 032)
+- Settings → About → Platform now comes from Capacitor (`platformLabel()` in `src/lib/platform.ts`), not the browser user-agent. iPadOS apps send a Mac user-agent, so earlier builds showed iPads as "Android app". In a browser on an iPad it shows "Web app (iPhone / iPad)".
+- Software Control → Errors: older rows (app before 1.3.3) that say `android` but came from an Apple user-agent are shown as "unknown (old app)". Stored data is not changed.
+- "Clear list" (`clear_client_errors()`, migration 032) now also resets the "App errors" health tile and writes an audit entry. The Errors tab badge and the Software Control sidebar badge update straight away.
+- Tests: `UI_URL=<TEST build> node tests/platform-ui.mjs` (TEST only; mocks Capacitor ios/android via `window.CapacitorCustomPlatform`).
 ## Features
 
 ### Dashboard

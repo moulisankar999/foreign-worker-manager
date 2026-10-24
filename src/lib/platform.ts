@@ -4,7 +4,18 @@ import { Capacitor, registerPlugin } from '@capacitor/core'
 export const isNative = () => Capacitor.isNativePlatform()
 export const platform = () => Capacitor.getPlatform() as 'android' | 'ios' | 'web'
 
-export const APP_VERSION = '1.3.3'
+/** iPhone / iPad (also iPadOS, which reports a Mac user agent: "Macintosh" + touch screen). */
+export const isAppleMobile = () => typeof navigator !== 'undefined' &&
+  (/iPad|iPhone|iPod/.test(navigator.userAgent) || (/Macintosh|MacIntel/.test(navigator.userAgent + ' ' + navigator.platform) && navigator.maxTouchPoints > 1))
+/** Human label for where the app runs — from Capacitor (the native shell), never guessed from the user agent. */
+export function platformLabel(): string {
+  const p = platform()
+  if (p === 'ios') return 'iPhone / iPad app'
+  if (p === 'android') return 'Android app'
+  return isAppleMobile() ? 'Web app (iPhone / iPad)' : 'Web app'
+}
+
+export const APP_VERSION = '1.3.4'
 export { APP_PUBLIC_URL } from './appUrl'
 export const ANDROID_APK_URL = 'https://github.com/moulisankar999/foreign-worker-manager/releases/latest/download/FW-Manager.apk'
 
