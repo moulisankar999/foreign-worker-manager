@@ -16,6 +16,13 @@ grep -q 'gnepquxtwkyffjmoydnv' dist/worker/assets/*.js || { echo "worker bundle 
 grep -q "'worker/'" dist/sw.js || { echo "manager service worker does not skip /worker/"; exit 1; }
 echo "Built: manager $(node -p "require('./package.json').version"), worker $(node -p "require('./worker/package.json').version")"
 [ "${1:-}" = "--dry-run" ] && { echo "dry run: not published"; exit 0; }
-cd dist && touch .nojekyll && rm -rf .git && git init -q -b gh-pages && git add -A && git commit -qm "deploy: manager + worker" \
-  && git push -f https://github.com/moulisankar999/foreign-worker-manager.git gh-pages
+MV=$(node -p "require('./package.json').version"); WV=$(node -p "require('./worker/package.json').version"); SHA=$(git rev-parse --short HEAD)
+GN=$(git config user.name); GE=$(git config user.email)
+cd dist
+touch .nojekyll
+rm -rf .git
+git init -q -b gh-pages
+git add -A
+git -c user.name="$GN" -c user.email="$GE" commit -qm "Deploy v$MV + worker $WV ($SHA)"
+git push -f https://github.com/moulisankar999/foreign-worker-manager.git gh-pages
 echo "Published to gh-pages."
