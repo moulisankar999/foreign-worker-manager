@@ -651,3 +651,17 @@ img, video, canvas, svg { max-width: 100%; }
   .wlist li, .wlist a { min-width: 0; max-width: 100%; }
 }
 @media (max-width: 860px) { .dash-add { display: none; } .dash-tabs .greet { gap: 10px; } }
+
+/* v1.2.4: the sidebar (iPad, Android tablets, desktop) stays put; only the main content scrolls.
+   It is pinned to the viewport, full height, and scrolls on its own only if its links don't fit. */
+@media (min-width: 861px) {
+  .side { position: fixed; top: 0; left: 0; bottom: 0; height: auto; z-index: 30;
+    width: calc(240px + env(safe-area-inset-left));
+    padding: max(18px, env(safe-area-inset-top)) 14px max(18px, env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left));
+    overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+  .main { margin-left: calc(240px + env(safe-area-inset-left)); }
+  .top { padding-top: max(10px, env(safe-area-inset-top)); padding-right: max(20px, env(safe-area-inset-right)); }
+  .content { padding-right: max(20px, env(safe-area-inset-right)); padding-bottom: max(20px, env(safe-area-inset-bottom)); }
+}
+.side > * { flex-shrink: 0; }
+@media print { .main { margin-left: 0 !important; } }
