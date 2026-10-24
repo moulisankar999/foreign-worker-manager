@@ -8,7 +8,7 @@ export JAVA_HOME="${JAVA_HOME:-$HOME/opt/jdk21}"
 export ANDROID_HOME="${ANDROID_HOME:-$HOME/opt/android-sdk}"
 set -a; . ./.secrets.env; set +a
 [ -f "$FWM_KEYSTORE" ] || { echo "Keystore not found (see README → Android)"; exit 1; }
-VERSION=$(node -p "require('./package.json').version")
+VERSION=$(node -p "require('./worker/package.json').version")
 (cd worker/android && ./gradlew --no-daemon -q assembleRelease bundleRelease)
 mkdir -p release
 cp worker/android/app/build/outputs/apk/release/app-release.apk release/FW-Worker.apk

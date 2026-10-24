@@ -339,6 +339,15 @@ Every automated test runs against a separate Supabase **test** project. Each scr
 - `tests/sms-rules.test.mjs`: the SMS message rules
 - `tests/ui-smoke.test.mjs`: a browser smoke test of a build pointed at the test project with `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` The browser only uses the public project URL, the anon key and the VAPID **public** key (`src/lib/supabase.ts`).
 
+## FW Worker app (worker self-service)
+A separate, simple app for workers on the same backend: sign in with passport number + 6-digit PIN (issued by CEO/GM/HR in FW Manager → worker → 📱 App access), see their documents' expiry, pay and loan balance, and raise requests (leave, advance, loan, increment, renewal, passport return, complaint, resignation). Requests go to the outlet manager first, then HR; complaints about the manager go straight to HR (confidential). Tamil first, 10 languages, no scrolling on any screen.
+- Web: **https://fw.sunrisebayumas.com/worker/** (published together with the manager by `bash scripts/deploy-web.sh`)
+- Android: `bash scripts/release-android-worker.sh` → releases `worker-v<version>-android` and the rolling `worker-android-latest` (never the repo's "Latest", so FW Manager's latest/download link is unaffected). Stable link: `https://github.com/moulisankar999/foreign-worker-manager/releases/download/worker-android-latest/FW-Worker.apk`
+- iPhone: `gh workflow run ios-worker-testflight.yml` (bundle `com.moulisankar.fwworker`, profile secret `IOS_WORKER_PROFILE_B64`)
+- Code: `src/worker/`, `worker/` (HTML entry, PWA files, Capacitor shells), `vite.worker.config.ts`; version in `worker/package.json`
+- Server: migration `030_worker_app.sql`, edge functions `worker-auth` and `worker-access` (secret `WORKER_PIN_PEPPER`; deploy with `--no-verify-jwt` for worker-auth)
+- Tests (TEST project only): `tests/worker-app.test.mjs` (security, 99 checks), `tests/worker-ui.test.mjs` (UI + no-scroll at 6 screen sizes and 10 languages)
+
 ## Deploy (GitHub Pages, custom domain)
 The app is served at **https://fw.sunrisebayumas.com/**. The domain is a DNS CNAME to `moulisankar999.github.io`, and HTTPS is enforced in the Pages settings. The production build is published to the `gh-pages` branch. `public/CNAME` is copied into every build, so redeploys keep the custom domain.
 ```bash
