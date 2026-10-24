@@ -129,8 +129,13 @@ jobs:
       - name: Upload to TestFlight
         run: |
           IPA=$(ls "$RUNNER_TEMP"/export/*.ipa | head -1)
-          API_PRIVATE_KEYS_DIR="$RUNNER_TEMP/private_keys" xcrun altool --upload-app -f "$IPA" -t ios \
-            --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID"
+          # altool can exit 0 even when the upload is refused, so check its output too
+          set +e
+          OUT=$(API_PRIVATE_KEYS_DIR="$RUNNER_TEMP/private_keys" xcrun altool --upload-app -f "$IPA" -t ios \
+            --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID" 2>&1); RC=$?
+          set -e
+          echo "$OUT"
+          if [ $RC -ne 0 ] || echo "$OUT" | grep -q "ERROR:"; then echo "::error::App Store Connect refused the upload (see above)"; exit 1; fi
           echo "Uploaded FW Manager $(node -p "require('./package.json').version") build $BUILD_NUMBER to App Store Connect."
 
       - name: Clean up key and build outputs
