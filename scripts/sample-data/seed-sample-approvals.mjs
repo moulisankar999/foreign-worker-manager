@@ -47,8 +47,10 @@ const cfgGet = async (k) => ok(await admin.from('app_config').select('value').eq
 const companies = await cfgGet('companies')
 if (companies.items.some((c) => String(c.id).startsWith('sample-'))) { console.error('ABORT: sample companies already exist — remove the sample data first.'); process.exit(1) }
 ok(await admin.from('app_config').update({ value: { ...companies, items: [...companies.items, ...CO.map((c) => ({ id: c.id, name: c.name, sector: c.label, demo: true, sample: true }))] } }).eq('key', 'companies'), 'companies')
-const hostels = await cfgGet('hostels')
-if (!hostels.items.some((h) => h.id === HOSTEL)) ok(await admin.from('app_config').update({ value: { ...hostels, items: [...hostels.items, { id: HOSTEL, name: 'SAMPLE Hostel (fictitious address)', capacity: 60, certExpiry: '2027-12-31', companyId: 'sample-fnb' }] } }).eq('key', 'hostels'), 'hostels')
+const SAMPLE_HOSTEL = { id: HOSTEL, name: 'SAMPLE Hostel (fictitious address)', capacity: 60, certExpiry: '2027-12-31', companyId: 'sample-fnb' }
+const hrow = ok(await admin.from('app_config').select('value').eq('key', 'hostels').maybeSingle(), 'hostels')
+if (!hrow) ok(await admin.from('app_config').insert({ key: 'hostels', value: { items: [SAMPLE_HOSTEL] } }), 'hostels') // no hostels saved yet (the app default is an empty list)
+else if (!(hrow.value?.items || []).some((h) => h.id === HOSTEL)) ok(await admin.from('app_config').update({ value: { ...hrow.value, items: [...(hrow.value?.items || []), SAMPLE_HOSTEL] } }).eq('key', 'hostels'), 'hostels')
 const now = new Date().toISOString()
 ok(await admin.from('records').upsert(CO.map((c) => ({ entity: 'outlets', id: `sample-o-${c.code.toLowerCase()}`, client_ts: now, data: { id: `sample-o-${c.code.toLowerCase()}`, name: `SAMPLE ${c.label} site`, type: c.outletType, companyId: c.id, address: 'Fictitious address (sample)' } }))), 'outlets')
 log('companies, hostel and outlets added')
