@@ -1,6 +1,7 @@
 /* v1.4 Quota & Recruitment — CEO, GM, HR Admin, HR Manager only.
  * The quota is kept like a bank account: an approval letter opens it, every movement is an append-only ledger line,
  * every use needs a Quota Use Request approved by the CEO (GM first, or the CEO alone), and exits / runaways reconcile it. */
+import { FollowUps, MasterTable } from './Extras'
 import { useMemo, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { Card, Chip, Empty, SelectFilter, Stat, Tabs, Toolbar } from '../../components/ui'
@@ -122,6 +123,9 @@ function Overview({ company }: { company: string }) {
         {alerts.length ? <ul className="alist">{alerts.sort((a, b) => (a.level === 'red' ? -1 : 1) - (b.level === 'red' ? -1 : 1)).map((a, i) => (
           <li key={i}><RagDot rag={a.level} /> <Link to={a.link}>{a.text}</Link></li>))}</ul> : <p className="muted">All clear.</p>}
       </Card>
+
+      {ctx.rank >= 3 && <FollowUps company={company} />}
+      <MasterTable company={company} />
 
       <Card title="Quota health — per letter and country">
         <DataTable label="Quota health" rows={tally} rowKey={(t) => `${t.quota_id}|${t.country}`} dense

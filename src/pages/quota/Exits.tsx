@@ -9,6 +9,7 @@ import { useWorkers } from '../../lib/hooks'
 import type { Worker } from '../../lib/types'
 import { daysUntil, fmtDate, todayISO } from '../../lib/util'
 import { inCompany, addDaysISO, atMyt, EXIT_KIND, EXIT_STATUS, fileBytes, qcall, rmFmt, RUN_OUTCOME, useQuota, type Exit, type Runaway } from '../../lib/quota'
+import { bondChip, ExitFollowUp, ReplacementsTab, WindowsTab } from './Extras'
 import { FileField, FileLink, NoteAsk, QForm, s, useQCtx, type V } from './shared'
 
 const docNo = (w: Worker, t: string) => [...(w.documents || [])].reverse().find((d) => d.type === t)?.number || ''
@@ -16,11 +17,12 @@ const workerFields = (w: Worker) => ({ worker_id: w.id, worker_no: w.workerNo, w
 
 export function ExitsTab({ company }: { company: string }) {
   const [sp, setSp] = useSearchParams()
-  const [sub, setSub] = useState<'cmo' | 'run'>(sp.get('run') || sp.get('newrun') ? 'run' : 'cmo')
+  const d = useQuota()
+  const [sub, setSub] = useState<'cmo' | 'run' | 'repl' | 'win'>(sp.get('run') || sp.get('newrun') ? 'run' : 'cmo')
   useEffect(() => { if (sp.get('run') || sp.get('newrun')) setSub('run') }, [sp])
   return <div className="qr-grid">
-    <Tabs tabs={[{ id: 'cmo', label: 'CMO register' }, { id: 'run', label: 'Runaway (no CMO)' }]} value={sub} onChange={(t) => { setSub(t); setSp({ tab: 'exits' }, { replace: true }) }} />
-    {sub === 'cmo' ? <CmoRegister company={company} /> : <Runaways company={company} />}
+    <Tabs tabs={[{ id: 'cmo', label: 'CMO register' }, { id: 'run', label: 'Runaway (no CMO)' }, { id: 'repl', label: 'Replacement (Immigration)', badge: d.replacements.filter((c) => inCompany(company, c.company_id) && ['to_apply', 'applied', 'approval_uploaded'].includes(c.status)).length || undefined }, { id: 'win', label: 'Government windows' }]} value={sub} onChange={(t) => { setSub(t); setSp({ tab: 'exits' }, { replace: true }) }} />
+    {sub === 'cmo' ? <CmoRegister company={company} /> : sub === 'run' ? <Runaways company={company} /> : sub === 'repl' ? <ReplacementsTab company={company} /> : <WindowsTab />}
   </div>
 }
 
@@ -29,6 +31,7 @@ function CmoRegister({ company }: { company: string }) {
   const d = useQuota()
   const [form, setForm] = useState<V | null>(null)
   const [voidX, setVoidX] = useState<Exit | null>(null)
+  const [fu, setFu] = useState<Exit | null>(null)
   const rows = d.exits.filter((x) => inCompany(company, x.company_id))
   const verify = async (x: Exit) => {
     const f = d.files.find((y) => y.id === x.file_id); if (!f) return toast('No copy stored.', 'err')
@@ -49,13 +52,15 @@ function CmoRegister({ company }: { company: string }) {
         ]}
         expand={(x) => <Details items={[['Passport', x.passport_no || '—'], ['PLKS', x.permit_no || '—'], ['Reason', x.exit_reason || '—'], ['Departure', [fmtDate(x.departure_date || ''), x.flight_no].filter(Boolean).join(' · ') || '—'],
           ['Copy', <span key="f"><FileLink f={d.files.find((f) => f.id === x.file_id)} /> {x.file_id && <small className="muted">SHA-256 {d.files.find((f) => f.id === x.file_id)?.sha256.slice(0, 12)}…</small>}</span>],
-          ['Claim', d.claims.find((c) => c.id === x.claim_id) ? `C-${d.claims.find((c) => c.id === x.claim_id)!.ref_no}` : '—'], ['Recorded', `${ctx.who(x.created_by_name, null)} · ${atMyt(x.created_at)}`], ['Void reason', x.void_reason || '—']]} />}
+          ['Claim', d.claims.find((c) => c.id === x.claim_id) ? `C-${d.claims.find((c) => c.id === x.claim_id)!.ref_no}` : '—'], ['Recorded', `${ctx.who(x.created_by_name, null)} · ${atMyt(x.created_at)}`], ['Void reason', x.void_reason || '—'], ['Departure letter', <FileLink key="dl" f={d.files.find((f) => f.id === x.depart_letter_file)} />], ['Bond refund', bondChip(x) || 'Not applicable']]} />}
         actions={(x) => <Actions>
+          {x.status !== 'void' && <IconAction kind="depart" label="Departure letter & bond refund" onClick={() => setFu(x)} />}
           {x.file_id && <IconAction kind="refresh" label="Verify the stored copy (checksum)" onClick={() => verify(x)} />}
           {ctx.isGmUp && x.created_by !== ctx.profile?.id && ['eligible', 'not_eligible'].includes(x.status) && <IconAction kind="reject" label="Void (wrong entry — the record and copy stay)" onClick={() => setVoidX(x)} />}
         </Actions>}
         empty={<Empty title="No exits recorded" />} />
       {form && <ExitForm v={form} onClose={() => setForm(null)} />}
+      {fu && <ExitFollowUp x={fu} onClose={() => setFu(null)} />}
       {voidX && <NoteAsk title={`Void ${voidX.cmo_ref || EXIT_KIND[voidX.kind]} — ${voidX.worker_name}`} label="Reason" danger confirm="Void" onClose={() => setVoidX(null)} onOk={(n) => qcall('qr_void_exit', { p_id: voidX.id, p_reason: n })} />}
     </Card>
   )

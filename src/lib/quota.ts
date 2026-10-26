@@ -111,6 +111,7 @@ export interface Tally {
   company_id: string; quota_id: string; ref_no: string; kind: string; expiry_date: string | null; status: string; country: string
   approved: number; available: number; reserved: number; used: number; lapsed: number; active_workers: number; in_pipeline: number
   exited_cmo: number; exited_other: number; runaways: number; exited_unrecorded: number; repl_eligible: number; repl_applied: number; repl_approved: number; mismatch: number
+  pending_cancel?: number; used_not_arrived?: number; imm_restored?: number
 }
 export interface QData {
   loaded: boolean; error?: string

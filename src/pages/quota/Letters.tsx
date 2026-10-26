@@ -8,6 +8,7 @@ import { Preview } from '../../reports/Preview'
 import type { Block } from '../../reports/types'
 import { addMonths, fmtDate, todayISO } from '../../lib/util'
 import { inCompany, atMyt, COUNTRIES, ENTRY_LABEL, qcall, useQuota, type Entry, type Quota } from '../../lib/quota'
+import { QuotaAppChecklist } from './Extras'
 import { companyOpts, FileField, FileLink, NoteAsk, QForm, s, useQCtx, useSheetMeta, type V } from './shared'
 
 const KIND_LABEL: Record<string, string> = { new: 'New quota', replacement: 'Replacement (CMO / gantian)', transfer: 'Transfer', additional: 'Additional (government window)' }
@@ -63,6 +64,7 @@ export function LettersTab({ company }: { company: string }) {
             { key: 'exp', label: 'Expires', hide: 'phone', render: (q) => fmtDate(q.expiry_date || ''), sort: (q) => q.expiry_date },
           ]}
           expand={(q) => <>
+            {q.status !== 'rejected' && <QuotaAppChecklist q={q} />}
             <Details items={[['Sector', [q.sector, q.subsector].filter(Boolean).join(' / ') || '—'], ['Job title', q.job_title || '—'], ['Section 60K', [q.section60k_ref, q.section60k_expiry && `exp ${fmtDate(q.section60k_expiry)}`].filter(Boolean).join(' · ') || '—'],
               ['Conditions', q.conditions || '—'], ['Levy', q.levy_note || '—'], ['Letter copy', <FileLink key="f" f={d.files.find((f) => f.id === q.letter_file)} />],
               ['Recorded by', `${ctx.who(q.created_by_name, null)} · ${atMyt(q.created_at)}`], ['Opened by', q.opened_at ? `${q.opened_by_name} · ${atMyt(q.opened_at)}` : '—'],

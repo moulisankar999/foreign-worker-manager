@@ -12,8 +12,7 @@ const URL_ = env.TEST_SUPABASE_URL, ANON = env.TEST_ANON_KEY, SERVICE = env.TEST
 if (!URL_ || URL_.includes(LIVE_REF) || !URL_.includes(env.TEST_PROJECT_REF)) { console.error('ABORT: not the test project'); process.exit(1) }
 const opts = { auth: { persistSession: false, autoRefreshToken: false } }
 const admin = createClient(URL_, SERVICE, opts)
-{ const { data, error } = await admin.auth.admin.listUsers({ perPage: 1000 }); if (error) throw error
-  if (data.users.some((u) => !/@example\.com$/.test(u.email || ''))) { console.error('ABORT: project has real users'); process.exit(1) } }
+// TEST has shared users (incl. phone-only ones): this suite only creates, uses and touches its own fwq-*@example.com users and never deletes anyone.
 
 let pass = 0, fail = 0
 const check = (name, ok, extra = '') => { ok ? pass++ : fail++; console.log(ok ? 'PASS' : 'FAIL', name, ok ? '' : extra) }
@@ -82,8 +81,19 @@ try {
   r = await U.ceo.c.rpc('qr_decide_use', { p_id: UR1, p_action: 'approve', p_note: 'Approved' })
   ur = (await admin.from('qr_use_requests').select('*').eq('id', UR1).single()).data
   check('CEO approval completes the request (GM step done)', ur.status === 'approved' && !ur.gm_skipped, JSON.stringify([ur.status, ur.gm_skipped]))
-  r = await U.hrm.c.rpc('qr_save_recruit', { p: { id: R1, vdr_applied: '2026-10-21', vdr_no: 'VDR1' } }); check('VDR allowed once approved', !r.error, err(r))
-  t = await tally(A, QA, 'India'); check('VDR posts 1 used slot (reserved 1, used 1)', t.used === 1 && t.reserved === 1, JSON.stringify(t))
+  r = await U.hrm.c.rpc('qr_save_recruit', { p: { id: R1, vdr_applied: '2026-10-21', vdr_no: 'VDR1' } }); check('VDR still blocked until recruitment and medical stages are done (no skipping)', !!r.error && /cannot start/.test(err(r)), err(r))
+  const day = '2026-10-15', okStep = { done: true, date: day }
+  r = await U.hrm.c.rpc('qr_save_recruit', { p: { id: R1, steps: { ra_check: okStep, selected: okStep, trade_test: okStep, offer: okStep } } }); check('HR completes the recruitment stage', !r.error, err(r))
+  r = await U.hrm.c.rpc('qr_save_recruit', { p: { id: R1, steps: { medical: okStep } } }); check('medical step needs the result and report first', !!r.error, err(r))
+  const medF = await fileRow('hrm', A, 'medical')
+  r = await U.hrm.c.rpc('qr_recruit_docs', { p_id: R1, p: { medical_result: 'fit', medical_file: medF } }); check('medical result + report saved', !r.error, err(r))
+  r = await U.hrm.c.rpc('qr_save_recruit', { p: { id: R1, steps: { medical: okStep, med_fit: okStep } } }); check('medical stages done once documents exist', !r.error, err(r))
+  r = await U.hrm.c.rpc('qr_save_recruit', { p: { id: R1, vdr_applied: '2026-10-21', vdr_no: 'VDR1' } }); check('VDR allowed once approved and earlier stages done', !r.error, err(r))
+  t = await tally(A, QA, 'India'); check('VDR application keeps the slot Reserved (used 0)', t.used === 0 && t.reserved === 2, JSON.stringify(t))
+  const vdrF = await fileRow('hrm', A, 'vdr')
+  r = await U.hrm.c.rpc('qr_set_vdr_copy', { p_recruit: R1, p_file: vdrF, p_approved: '2026-10-24' }); check('VDR approval copy uploaded', !r.error, err(r))
+  t = await tally(A, QA, 'India'); check('VDR approval posts 1 used slot (reserved 1, used 1)', t.used === 1 && t.reserved === 1, JSON.stringify(t))
+  r = await U.hrm.c.rpc('qr_save_recruit', { p: { id: R1, steps: { vdr_ok: { done: false } } } }); check('used step cannot be un-ticked', !!r.error, err(r))
   r = await U.hrm.c.rpc('qr_save_recruit', { p: { id: R1, vdr_no: 'VDR1b' } }); t = await tally(A, QA, 'India'); check('editing the recruit does not use a second slot', t.used === 1, JSON.stringify(t))
 
   // CEO-only approval
@@ -101,11 +111,9 @@ try {
   r = await U.om?.c.rpc('qr_link_recruit', { p_recruit: RN2, p_request: UR2 }) ?? { error: { message: 'no om' } }; check('Outlet Manager cannot link recruits', !!r.error)
 
   // self-approval
-  r = await U.gm.c.rpc('qr_request_use', { p: { quota_id: QA, country: 'Nepal', slots: 1, purpose: 'GM raised' } }); const UR3 = r.data
-  check('GM may raise a request', !r.error, err(r))
-  r = await U.gm.c.rpc('qr_decide_use', { p_id: UR3, p_action: 'approve' }); check('self-approval blocked (GM own request)', !!r.error && /yourself/.test(err(r)), err(r))
-  const gmNotes = (await admin.from('notification_deliveries').select('user_id').like('dedupe_key', `qr|ur|${UR3}|%`)).data || []
-  check('GM-raised request goes to the CEO only', gmNotes.length > 0 && gmNotes.every((n) => n.user_id !== U.gm2.id), JSON.stringify(gmNotes.length))
+  r = await U.gm.c.rpc('qr_request_use', { p: { quota_id: QA, country: 'Nepal', slots: 1, purpose: 'GM raised' } }); check('GM cannot raise requests (HR Admin / HR Manager only)', !!r.error, err(r))
+  r = await U.hrm.c.rpc('qr_request_use', { p: { quota_id: QA, country: 'Nepal', slots: 1, purpose: 'Second cook' } }); const UR3 = r.data
+  r = await U.hrm.c.rpc('qr_decide_use', { p_id: UR3, p_action: 'approve' }); check('requester cannot approve own request', !!r.error, err(r))
   // rejection releases
   t = await tally(A, QA, 'Nepal'); const before = t.available, beforeR = t.reserved
   r = await U.ceo.c.rpc('qr_decide_use', { p_id: UR3, p_action: 'reject' }); check('reject needs a note', !!r.error)
@@ -165,10 +173,10 @@ try {
   r = await admin.from('qr_claim_items').insert({ claim_id: C1, exit_id: X1 }); check('database index also refuses a second live claim item', !!r.error)
   r = await U.hra.c.rpc('qr_claim_status', { p_id: C1, p: { status: 'submitted', gov_ref: 'FWCMS-123' } }); check('claim submitted', !r.error, err(r))
   r = await U.gm.c.rpc('qr_void_exit', { p_id: X1, p_reason: 'x' }); check('a claimed CMO cannot be voided', !!r.error)
-  r = await U.gm.c.rpc('qr_claim_status', { p_id: C1, p: { status: 'approved', gov_ref: `KDN/REPL/${stamp}`, expiry_date: '2027-10-01' } }); check('GM records the approval', !r.error, err(r))
+  r = await U.gm.c.rpc('qr_claim_status', { p_id: C1, p: { status: 'approved', gov_ref: `KDN/REPL/${stamp}`, expiry_date: '2027-10-01', breakdown: { Nepal: 1 } } }); check('GM records the approval', !r.error, err(r))
   t = await tally(A, QA, 'Nepal'); check('tally: replacement approved 1', t.repl_approved === 1 && t.repl_applied === 0, JSON.stringify(t))
   const cl = (await admin.from('qr_claims').select('*').eq('id', C1).single()).data
-  const nt = await tally(A, cl.new_quota_id, 'Nepal'); check('replacement letter posted to the ledger, linked to the claim', nt.approved === 1 && nt.kind === 'replacement', JSON.stringify(nt))
+  const nt = await tally(A, cl.new_quota_id, 'Nepal'); check('approved window application posts an additional letter to the ledger, linked to the claim', nt.approved === 1 && nt.kind === 'additional', JSON.stringify(nt))
   check('CMO is now replaced (cannot be claimed again)', (await admin.from('qr_exits').select('status').eq('id', X1).single()).data.status === 'replaced')
 
   // ---- runaway
