@@ -14,7 +14,9 @@ import { syncNow } from '../../lib/sync'
 import type { DocRec, Worker } from '../../lib/types'
 import type { CostRec } from '../../lib/trackers'
 import { addMonths, fmtDate, todayISO, uid } from '../../lib/util'
-import { atMyt, daysInStage, missingFor, PAY_CATS, payLabel, progress, qcall, regNum, rmFmt, stageLabelIn, stageSkipped, stepCtx, stepDone, stepsOf, tplOf, UR_STATUS, useQuota, type Recruit, type TplStep } from '../../lib/quota'
+import { Ring } from '../../components/viz'
+import { Icon } from '../../components/Icon'
+import { atMyt, nextStep, daysInStage, missingFor, PAY_CATS, payLabel, progress, qcall, regNum, rmFmt, stageLabelIn, stageSkipped, stepCtx, stepDone, stepsOf, tplOf, UR_STATUS, useQuota, type Recruit, type TplStep } from '../../lib/quota'
 import { useOutlets } from '../../lib/hooks'
 import type { FieldDef } from '../../components/ui'
 import { FileField, FileLink, NoteAsk, QForm, s, useQCtx, useSheetMeta } from './shared'
@@ -52,12 +54,14 @@ export default function RecruitPage({ id }: { id: string }) {
   const pays = d.payments.filter((p) => p.recruit_id === r.id)
   const evs = d.events.filter((e) => e.recruit_id === r.id).sort((a, b) => b.id - a.id)
   const p = progress(r, tpl, sc)
+  const nx = r.status === 'active' ? nextStep(r, tpl, sc) : undefined
   const curStage = recruitStage(d, r)
   const tplRow = d.reg.find((x) => x.id === r.template_id)
   const active = r.status === 'active'
   const hostel = ctx.cfg.hostels.items.find((h) => h.id === r.hostel_id)
   const isDone = (st: CStep) => stepDone(r, st.key, sc)
   const fomemaDays = regNum(d.reg, 'fomema_days', 30, (r.arrived_at || '').slice(0, 10) || undefined)
+  const stuckDays = regNum(d.reg, 'stage_alert_days', 14)
   const immHours = regNum(d.reg, 'imm_clear_hours', 6, (r.arrived_at || '').slice(0, 10) || undefined)
 
   const save = (patch: Record<string, unknown>) => qcall('qr_save_recruit', { p: { id: r.id, ...patch } })
@@ -136,8 +140,10 @@ export default function RecruitPage({ id }: { id: string }) {
     <div className="page qr-page">
       <header className="page-h">
         <IconAction kind="close" label="Back to the pipeline" onClick={() => nav('/quota?tab=pipeline')} />
+        <span className="rc-av" aria-hidden="true">{r.full_name.split(/\s+/).slice(0, 2).map((w) => w[0]).join('').toUpperCase()}</span>
         <div><h1>{r.full_name}</h1><small className="muted">{r.country}{r.ecr ? ` · ${r.ecr}` : ''} · {ctx.cName(r.company_id)}{batch && <> · <Link to="/quota?tab=pipeline">{batch.title}</Link></>}</small></div>
         <span className="spacer" />
+        <span className="rc-ring" title={`Why you see this: ${p.done} of ${p.total} required steps are done.`}><Ring value={p.pct} size={46} stroke={5} tone="var(--pri)" label={`${p.pct}% of the journey done`}>{`${p.pct}%`}</Ring></span>
         <Chip tone={r.status === 'active' ? 'blue' : r.status === 'converted' ? 'green' : 'gray'}>{r.status === 'active' ? stageLabelIn(tpl, curStage) : r.status === 'converted' ? 'Converted to worker' : r.out_kind === 'medical_unfit' ? 'Medical unfit' : r.out_kind === 'vdr_rejected' ? 'VDR rejected' : 'Dropped'}</Chip>
         {active && <div className="row gap-s qr-finish">
           <Btn small kind="primary" icon="userplus" disabled={!r.arrived_at} title={r.arrived_at ? undefined : 'Available once he has arrived'} onClick={() => setEdit('convert')}>Convert to worker</Btn>
@@ -148,7 +154,10 @@ export default function RecruitPage({ id }: { id: string }) {
 
       <Card className="qs-card" title={<>Pipeline <Chip tone="gray">{p.done} / {p.total}</Chip></>} actions={ctx.isCeo && active && curStage !== 'quota' && curStage !== 'onboard' ? <IconAction kind="unlock" label="CEO: mark the current stage done with a note" onClick={() => setEdit('override')} /> : undefined}>
         <div className="row gap-s qs-meta"><div className="qr-bar big" style={{ flex: 1 }}><i style={{ width: `${p.pct}%` }} /></div>
-          <small className="muted">Template {tplRow ? `from ${fmtDate(tplRow.effective_from)}` : 'default'} · {daysInStage(r)} day(s) in “{stageLabelIn(tpl, curStage)}”</small></div>
+          <small className="muted">Template {tplRow ? `from ${fmtDate(tplRow.effective_from)}` : 'default'} {!nx && <> · {daysInStage(r)} day(s) in “{stageLabelIn(tpl, curStage)}”</>}</small></div>
+        {nx && <p className="rc-next" title="Why you see this: it is the first required step of the checklist that is not done yet.">
+          <span className="rc-next-l"><Icon name="spark" size={14} /> Next step</span> <b>{nx.label}</b>{nx.hint && <small className="muted"> — {nx.hint}</small>}
+          <span className={`chip ${daysInStage(r) > stuckDays ? 'chip-amber' : 'chip-gray'}`} title={daysInStage(r) > stuckDays ? `Why you see this: this stage has been open longer than ${stuckDays} days (Rules → stage_alert_days) — check if something is stuck.` : undefined}>{daysInStage(r)} d in stage</span></p>}
         <RuleFlags f={r.rule_flags} />
         {r.country === 'India' && !r.ecr && <div className="note-box">Set ECR or ECNR in the details to get the right India steps.</div>}
         {narrow ? (

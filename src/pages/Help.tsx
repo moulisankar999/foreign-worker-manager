@@ -2,6 +2,7 @@
 import { useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
+import { openTour } from '../components/tour'
 import { Btn, Card, Tabs } from '../components/ui'
 import { Icon } from '../components/Icon'
 import { APP_VERSION } from '../lib/platform'
@@ -106,7 +107,7 @@ export default function HelpPage() {
   const tab: HelpTab = params.tab === 'faq' || params.tab === 'manual' ? params.tab : 'role'
   return (
     <div className="page narrow help-page">
-      <div className="page-h"><div><h1><Icon name="help" /> Help</h1><p className="muted">For your role: <strong>{ROLE_TITLE[r]}</strong> · FW Manager {APP_VERSION}</p></div></div>
+      <div className="page-h"><div><h1><Icon name="help" /> Help</h1><p className="muted">For your role: <strong>{ROLE_TITLE[r]}</strong> · FW Manager {APP_VERSION}</p></div><button className="btn btn-secondary btn-s" onClick={openTour}><Icon name="spark" size={16} /> Take the tour</button></div>
       <Tabs tabs={TABS} value={tab} onChange={(t) => nav(t === 'role' ? '/help' : `/help/${t}`, { replace: true })} />
       {tab === 'role' && <RoleTab r={r} />}
       {tab === 'faq' && <FaqTab r={r} />}

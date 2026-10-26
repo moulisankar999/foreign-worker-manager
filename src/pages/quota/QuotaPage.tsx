@@ -24,6 +24,7 @@ import { ArrivalsTab } from './Arrivals'
 import { RulesTab } from './Rules'
 import RecruitPage from './Recruit'
 import './quota.css'
+import { CountUp, Donut, Spark } from '../../components/viz'
 
 type TabId = 'overview' | 'letters' | 'approvals' | 'pipeline' | 'arrivals' | 'costs' | 'exits' | 'recon' | 'claims' | 'rules'
 
@@ -83,6 +84,45 @@ export default function QuotaPage() {
   )
 }
 
+/* v1.6.0: quota at a glance — donut of the balance, pace of new recruits (sparkline) and a simple run-out forecast */
+function QuotaHero({ tally, recruits, spend, go }: { tally: Tally[]; recruits: { created_at: string; status: string }[]; spend: number; go: (t: string) => void }) {
+  const approved = sum(tally, 'approved'), avail = sum(tally, 'available'), resv = sum(tally, 'reserved'), used = sum(tally, 'used')
+  const now = Date.now(), wk = 7 * 864e5
+  const weeks = Array.from({ length: 12 }, (_, i) => recruits.filter((r) => { const t = Date.parse(r.created_at); return t > now - (12 - i) * wk && t <= now - (11 - i) * wk }).length)
+  const last90 = recruits.filter((r) => Date.parse(r.created_at) > now - 90 * 864e5).length
+  const perDay = last90 / 90
+  const days = perDay > 0 ? Math.round(avail / perDay) : null
+  const runOut = days != null ? new Date(now + days * 864e5).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' }) : null
+  const pct = approved ? Math.round(((used + resv) / approved) * 100) : 0
+  return (
+    <section className="qr-hero hero160" aria-label="Quota at a glance">
+      <button type="button" className="qr-donut" onClick={() => go('letters')} title="Why you see this: the balance of all active approval letters in view. Click for letters & ledger.">
+        <Donut size={132} stroke={16} label={`Quota: ${used} used, ${resv} reserved, ${avail} available of ${approved}`}
+          parts={[{ v: used, color: 'var(--pri)', name: 'Used' }, { v: resv, color: 'var(--amber)', name: 'Reserved' }, { v: avail, color: 'var(--green)', name: 'Available' }]}
+          center={<span className="dn-c"><b><CountUp value={avail} /></b><small>available</small></span>} />
+        <span className="qr-leg">
+          <span><i style={{ background: 'var(--pri)' }} />Used <b>{used}</b></span>
+          <span><i style={{ background: 'var(--amber)' }} />Reserved <b>{resv}</b></span>
+          <span><i style={{ background: 'var(--green)' }} />Available <b>{avail}</b></span>
+          <span className="muted small">of {approved} approved · {pct}% committed</span>
+        </span>
+      </button>
+      <div className="qr-fc" title="Why you see this: new recruits added in the last 90 days set the pace; at that pace the available slots last this long. It is an estimate, not a rule.">
+        <span className="small muted">Forecast</span>
+        <b className="qr-fc-v">{days == null ? 'No recent use' : days > 730 ? 'Over 2 years' : `~${days < 60 ? `${days} days` : `${Math.round(days / 30)} months`}`}</b>
+        <span className="small muted">{days == null ? 'No new recruits in 90 days' : `Slots run out around ${runOut} at today’s pace`}</span>
+        <span className="qr-spark"><Spark data={weeks} w={150} h={30} color="var(--pri)" /><small className="muted">new recruits · 12 weeks</small></span>
+      </div>
+      <div className="stats stats-4 hero-stats qr-mini">
+        <Stat label="In pipeline" value={<CountUp value={sum(tally, 'in_pipeline')} />} icon="plane" onClick={() => go('pipeline')} />
+        <Stat label="COM — replaceable" value={<CountUp value={sum(tally, 'repl_eligible')} />} tone="teal" icon="exit" onClick={() => go('claims')} />
+        <Stat label="Runaways (no COM)" value={<CountUp value={sum(tally, 'runaways')} />} tone="red" icon="alert" onClick={() => go('exits')} />
+        <Stat label="Spent" value={rmFmt(spend)} icon="money" onClick={() => go('costs')} />
+      </div>
+    </section>
+  )
+}
+
 function sum(t: Tally[], k: keyof Tally) { return t.reduce((a, x) => a + (Number(x[k]) || 0), 0) }
 
 function Overview({ company }: { company: string }) {
@@ -110,16 +150,7 @@ function Overview({ company }: { company: string }) {
   const taskPage = usePaged(taskItems, 8)
   return (
     <div className="qr-grid">
-      <div className="stats">
-        <Stat label="Approved slots" value={sum(tally, 'approved')} icon="doc" onClick={() => go('letters')} />
-        <Stat label="Available" value={sum(tally, 'available')} tone="green" icon="check" onClick={() => go('letters')} />
-        <Stat label="Reserved (requests)" value={sum(tally, 'reserved')} tone="amber" icon="lock" onClick={() => go('approvals')} />
-        <Stat label="Used" value={sum(tally, 'used')} tone="blue" icon="users" onClick={() => go('recon')} />
-        <Stat label="In pipeline" value={sum(tally, 'in_pipeline')} icon="plane" onClick={() => go('pipeline')} />
-        <Stat label="COM — replaceable" value={sum(tally, 'repl_eligible')} tone="teal" icon="exit" onClick={() => go('claims')} />
-        <Stat label="Runaways (no COM)" value={sum(tally, 'runaways')} tone="red" icon="alert" onClick={() => go('exits')} />
-        <Stat label="Spent" value={rmFmt(spend)} icon="money" onClick={() => go('costs')} />
-      </div>
+      <QuotaHero tally={tally} recruits={d.recruits.filter(inC)} spend={spend} go={go} />
 
       {ctx.rank >= 3 && (
         <Card fold="open" title={<>Waiting for your approval {waiting.length > 0 && <Chip tone="red">{waiting.length}</Chip>}</>}>

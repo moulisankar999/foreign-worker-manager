@@ -17,6 +17,7 @@ export default function More() {
     ...(isSuper || ai?.enabled ? [['/assistant', 'spark', 'Assistant', ai?.enabled ? 'Ask about workers, expiries, quota, requests and the app' : 'Not switched on yet'] as [string, string, string, string]] : []),
     ...(isSuper ? [['/ceo-review', 'lock', `CEO review${ceoN ? ` (${ceoN})` : ''}`, 'GM decisions & rejections — overrule, recall, mark reviewed'] as [string, string, string, string]] : []),
     ...(isSuper ? [['/control', 'shield', `Software Control${ctlN ? ` (${ctlN})` : ''}`, 'Health monitor, app errors, system map & renewals'] as [string, string, string, string]] : []),
+    ...(qRank(role) > 0 ? [['/requests', 'check', 'Requests', 'Leave, passport, transfer and other requests — raise or decide'] as [string, string, string, string]] : []),
     ['/documents', 'doc', 'Document library', 'All scanned documents & expiries'],
     ['/alerts', 'bell', 'Alerts', 'Expiries, overdue passports, proof pending'],
     ['/reports', 'chart', 'Reports', 'Headcount, leave, emergency leave, passport register'],
