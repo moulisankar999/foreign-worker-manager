@@ -216,6 +216,7 @@ begin
 
   -- notify(): a superior's name / role / CEO note never reaches a lower level
   src := pg_get_functiondef('public.notify(text,text,uuid,jsonb,text,uuid[])'::regprocedure);
+  if src not like '%vr jsonb; v_ar int%' then  -- re-running 034 leaves an already-patched notify() alone
   src := replace(src, $q$  rec record; ch text;$q$, $q$  vr jsonb; v_ar int := coalesce(public.user_rank(auth.uid()), 0); rec record; ch text;$q$);
   src := replace(src, $q$select distinct p.id, coalesce(nullif(p.full_name, ''), p.email) as name,$q$, $q$select distinct p.id, p.role, coalesce(nullif(p.full_name, ''), p.email) as name,$q$);
   n := position(E'  loop\n    foreach ch in array' in src);
@@ -230,6 +231,7 @@ begin
   end;
   if src not like '%vr := v;%' or src not like '%notify_render(ev->>''title'', vr)%' then raise exception 'notify(): render pattern not found'; end if;
   execute src;
+  end if;
 end $$;
 
 -- assign / escalate picker: people above the caller show as one neutral "Next approval step" (escalating stays allowed)
