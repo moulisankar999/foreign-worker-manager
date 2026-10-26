@@ -12,6 +12,7 @@ export interface Quota {
   sector: string | null; subsector: string | null; job_title: string | null; breakdown: Record<string, number>; conditions: string | null; levy_note: string | null; notes: string | null
   section60k_ref: string | null; section60k_expiry: string | null; letter_file: string | null; status: 'pending' | 'active' | 'rejected' | 'closed'
   extensions: { from: string; to: string; ref: string; at: string; by: string }[]; claim_id: string | null
+  expiry_auto?: boolean; rule_flags?: string[]; advert_ref?: string | null; advert_date?: string | null; app_steps?: Record<string, Record<string, unknown>>; levy_paid_on?: string | null; levy_file?: string | null
   created_by: string; created_by_name: string | null; created_at: string; opened_by_name: string | null; opened_at: string | null
 }
 export interface Entry {
@@ -34,7 +35,7 @@ export interface Batch {
   target_count: number; outlet_id: string | null; hostel_id: string | null; expected_arrival: string | null; budget: Record<string, number>; budget_total: number
   status: 'open' | 'closed'; notes: string | null; created_by_name: string | null; created_at: string
 }
-export interface StepVal { done?: boolean; date?: string; ref?: string; note?: string }
+export interface StepVal { done?: boolean; date?: string; ref?: string; note?: string; override?: boolean; by_name?: string }
 export interface Recruit {
   id: string; company_id: string; batch_id: string | null; use_request_id: string | null; country: string; full_name: string; passport_no: string | null; passport_expiry: string | null
   ecr: 'ECR' | 'ECNR' | null; dob: string | null; gender: string | null; job: string | null; phone: string | null; stage: string; steps: Record<string, StepVal>
@@ -42,6 +43,9 @@ export interface Recruit {
   pickup_by: string | null; transport: string | null; arrived_at: string | null; hostel_id: string | null; outlet_id: string | null; owner_id: string | null
   status: 'active' | 'dropped' | 'converted'; drop_reason: string | null; worker_id: string | null; created_at: string; updated_at: string
   vdr_file: string | null; stamped_on: string | null
+  medical_result: 'fit' | 'unfit' | null; medical_file: string | null; stamped_file: string | null; arrival_eta: string | null; ticket_file: string | null; klia_person: string | null
+  hr_ack_file: string | null; om_by_name: string | null; out_kind: string | null; out_at: string | null; used_not_arrived: boolean; stage_at: string | null; template_id: string | null
+  rule_flags: string[]; fomema_on: string | null; fomema_result: 'fit' | 'unfit' | null; fomema_file: string | null; accom_address: string | null; accom_confirmed_on: string | null; imm_cleared_at: string | null
 }
 export interface QEvent { id: number; at: string; company_id: string; recruit_id: string | null; batch_id: string | null; use_request_id: string | null; exit_id: string | null; runaway_id: string | null; claim_id: string | null; action: string; note: string | null; by_name: string | null; by_role: string | null }
 export interface Payment {
@@ -53,6 +57,7 @@ export interface Exit {
   id: string; company_id: string; quota_id: string | null; country: string | null; worker_id: string | null; worker_no: string | null; worker_name: string; passport_no: string | null; permit_no: string | null
   kind: 'cmo' | 'death' | 'transfer'; cmo_ref: string | null; cmo_date: string | null; exit_reason: string | null; departure_date: string | null; flight_no: string | null; file_id: string | null
   status: 'eligible' | 'claimed' | 'replaced' | 'not_eligible' | 'void'; claim_id: string | null; void_reason: string | null; created_by: string; created_by_name: string | null; created_at: string
+  depart_letter_file?: string | null; bond_refund_status?: 'not_applicable' | 'pending' | 'applied' | 'refunded' | null; bond_refund_on?: string | null; bond_refund_rm?: number | null
 }
 export interface Runaway {
   id: string; company_id: string; quota_id: string | null; country: string | null; worker_id: string | null; worker_no: string | null; worker_name: string; passport_no: string | null; permit_no: string | null
@@ -80,9 +85,24 @@ export interface AgentDoc {
 export interface MasterRow {
   level: 'letter' | 'company' | 'sector' | 'total'; company_id: string | null; sector: string | null; quota_id: string | null; ref_no: string | null; expiry_date: string | null
   days_left: number | null; letters: number; approved: number; reserved: number; used: number; available: number; lapsed: number; expiring_unused: number; runaways: number; active_workers: number
+  pending_cancel?: number; used_not_arrived?: number; in_pipeline?: number
 }
 export interface ServerAlert { level: 'red' | 'amber'; kind: string; company_id: string | null; ref_id: string; text: string; link: string }
 export interface ClaimItem { claim_id: string; exit_id: string; released: boolean; approved: boolean | null }
+/* ---------------- rules & regulations (versioned) ---------------- */
+export interface RegRule {
+  id: string; key: string; scope: string; value: unknown; effective_from: string; source_ref: string | null; source_url: string | null; file_id: string | null; note: string | null; verified: boolean
+  status: 'pending' | 'active' | 'rejected' | 'withdrawn' | 'superseded'; created_by: string | null; created_by_name: string | null; created_role: string | null; created_at: string
+  decided_by_name: string | null; decided_at: string | null; decide_note: string | null
+}
+export interface RegCat { key: string; grp: string; label: string; unit: string; kind: string; scope_kind: 'none' | 'sector' | 'country'; help: string; ord: number }
+export interface FollowUp { kind: string; ref: string; company_id: string | null; title: string; step: string; owner_id: string | null; owner_name: string | null; started: string | null; due: string | null; days_late: number; link: string; nudges: number }
+export interface Replacement {
+  id: string; ref_no: number; company_id: string; recruit_id: string | null; quota_id: string | null; country: string | null; worker_id: string | null; kind: 'not_arrived' | 'fomema_fail'; reason: string | null
+  trigger_date: string; fomema_file: string | null; repat_file: string | null; exit_id: string | null; status: 'to_apply' | 'applied' | 'approval_uploaded' | 'restored' | 'refused' | 'withdrawn'
+  applied_on: string | null; imm_ref: string | null; approval_file: string | null; approval_date: string | null; uploaded_by: string | null; uploaded_by_name?: string | null; uploaded_at: string | null
+  verified_by: string | null; verified_by_name?: string | null; ledger_id: number | null; owner_id: string | null; owner_name: string | null; closed_note: string | null; created_at: string
+}
 export interface Rules {
   cmo_missing_days: number; runaway_report_days: number; expiry_amber_days: number; expiry_mid_days: number; expiry_red_days: number; util_amber_pct: number; payment_check_rm: number
   default_country: string; letter_valid_months: number; stall_days: number; window_warn_days: number; templates: Record<string, unknown>
@@ -97,11 +117,12 @@ export interface QData {
   quotas: Quota[]; ledger: Entry[]; requests: UseReq[]; batches: Batch[]; recruits: Recruit[]; events: QEvent[]; payments: Payment[]
   exits: Exit[]; runaways: Runaway[]; claims: Claim[]; claimItems: ClaimItem[]; files: QFile[]; tally: Tally[]; rules: Rules
   windows: QWindow[]; agents: Agent[]; agentBatches: AgentBatch[]; agentDocs: AgentDoc[]; master: MasterRow[]; alerts: ServerAlert[]
+  reg: RegRule[]; regCat: RegCat[]; followups: FollowUp[]; replacements: Replacement[]
 }
 export const DEFAULT_RULES: Rules = { cmo_missing_days: 14, runaway_report_days: 14, expiry_amber_days: 90, expiry_mid_days: 60, expiry_red_days: 30, util_amber_pct: 80, payment_check_rm: 5000,
   default_country: 'India', letter_valid_months: 12, stall_days: 14, window_warn_days: 14, templates: {} }
 const EMPTY: QData = { loaded: false, quotas: [], ledger: [], requests: [], batches: [], recruits: [], events: [], payments: [], exits: [], runaways: [], claims: [], claimItems: [], files: [], tally: [], rules: DEFAULT_RULES,
-  windows: [], agents: [], agentBatches: [], agentDocs: [], master: [], alerts: [] }
+  windows: [], agents: [], agentBatches: [], agentDocs: [], master: [], alerts: [], reg: [], regCat: [], followups: [], replacements: [] }
 
 /* ---------------- store ---------------- */
 let state: QData = EMPTY
@@ -130,12 +151,17 @@ export function reloadQuota(): Promise<void> {
         supabase.from('qr_rules').select('*').maybeSingle().then((r) => ({ ...DEFAULT_RULES, ...((r.data as Rules) || {}) })),
       ])
       const rows = <T,>(q: PromiseLike<{ data: unknown; error: { message: string } | null }>) => Promise.resolve(q).then((r) => { if (r.error) throw r.error; return (r.data || []) as T[] })
+      const soft = <T,>(q: PromiseLike<{ data: unknown; error: { message: string } | null }>) => Promise.resolve(q).then((r) => (r.error ? [] : (r.data || []) as T[]))
+      const [reg, regCat, followups, replacements] = await Promise.all([
+        soft<RegRule>(supabase.from('qr_reg_rules').select('*').order('effective_from', { ascending: false })), soft<RegCat>(supabase.rpc('qr_reg_catalog')),
+        soft<FollowUp>(supabase.rpc('qr_followups')), soft<Replacement>(supabase.from('qr_replacements').select('*').order('created_at', { ascending: false })),
+      ])
       const [windows, agents, agentBatches, agentDocs, master, alerts] = await Promise.all([
         rows<QWindow>(supabase.from('qr_windows').select('*').order('close_date', { ascending: false })), rows<Agent>(supabase.from('qr_agents').select('*').order('agency')),
         rows<AgentBatch>(supabase.from('qr_agent_batches').select('*')), all<AgentDoc>('qr_agent_docs', 'submitted_at'),
         rows<MasterRow>(supabase.rpc('qr_master', { p_company: null })), rows<ServerAlert>(supabase.rpc('qr_alerts')),
       ])
-      state = { loaded: true, quotas, ledger, requests, batches, recruits, events, payments, exits, runaways, claims, claimItems, files, tally, rules, windows, agents, agentBatches, agentDocs, master, alerts }
+      state = { loaded: true, quotas, ledger, requests, batches, recruits, events, payments, exits, runaways, claims, claimItems, files, tally, rules, windows, agents, agentBatches, agentDocs, master, alerts, reg, regCat, followups, replacements }
     } catch (e) {
       state = { ...state, loaded: true, error: (e as Error).message }
     } finally { loading = null; emit() }
@@ -172,6 +198,20 @@ export async function uploadQuotaFile(company: string, kind: string, file: File 
   const up = await supabase.storage.from(QUOTA_BUCKET).upload(path, file, { contentType: mime, upsert: false })
   if (up.error) throw new Error(up.error.message)
   const { data, error } = await supabase.rpc('qr_add_file', { p_company: company, p_kind: kind, p_path: path, p_name: safe, p_mime: mime, p_size: file.size, p_sha256: hash })
+  if (error) throw new Error(error.message)
+  return data as string
+}
+/** a government circular (shared by all companies; HR Admin and above) */
+export async function uploadGovFile(file: File): Promise<string> {
+  if (file.size > 15 * 1024 * 1024) throw new Error('File is larger than 15 MB.')
+  const buf = await file.arrayBuffer()
+  const hash = await sha256(buf)
+  const safe = file.name.replace(/[^\w.-]+/g, '_').slice(-80)
+  const path = `_gov/circular/${crypto.randomUUID()}-${safe}`
+  const mime = file.type || 'application/pdf'
+  const up = await supabase.storage.from(QUOTA_BUCKET).upload(path, file, { contentType: mime, upsert: false })
+  if (up.error) throw new Error(up.error.message)
+  const { data, error } = await supabase.rpc('qr_add_gov_file', { p_path: path, p_name: safe, p_mime: mime, p_size: file.size, p_sha256: hash })
   if (error) throw new Error(error.message)
   return data as string
 }
@@ -242,21 +282,43 @@ export const PAY_CATS: { key: string; label: string; workerCost: string; stage: 
 export const payLabel = (k: string) => PAY_CATS.find((c) => c.key === k)?.label || k
 
 /* ---------------- pipeline: stages + country checklists (pure module, unit-tested) ---------------- */
-export { STAGES, stageLabel, COUNTRY_STEPS, COUNTRIES, stepsFor, progress, nextStep, daysInStage, slotWhere, DEFAULT_COUNTRY } from './quotaSteps'
-export type { CStep } from './quotaSteps'
-import { stepsFor } from './quotaSteps'
+export { DEFAULT_TEMPLATE, stepsOf, stageOf, nextStep, progress, daysInStage, stageSkipped, stageLabelIn, missingFor, reqOk, stepDone, stageCounts, slotUsed, liveStages, isReq, DEFAULT_COUNTRY } from './quotaSteps'
+export type { Template, TplStage, TplStep, Ctx as StepCtx } from './quotaSteps'
+import { DEFAULT_TEMPLATE, stageOf as stageOfT, type Ctx as StepCtx2, type Template as Tpl } from './quotaSteps'
+
+/** the version of a rule in force on a date (scope falls back Sector/Sub → Sector → * → '') */
+export function regAt<T = unknown>(reg: RegRule[], key: string, scope = '', at = todayISO()): RegRule & { value: T } | undefined {
+  const cands = [scope, scope.split('/')[0], '*', ''].filter((x, i, a) => a.indexOf(x) === i)
+  for (const sc of cands) {
+    const r = reg.filter((x) => x.key === key && x.scope === sc && x.status === 'active' && x.effective_from <= at).sort((a, b) => (a.effective_from < b.effective_from ? 1 : a.effective_from > b.effective_from ? -1 : a.created_at < b.created_at ? 1 : -1))[0]
+    if (r) return r as RegRule & { value: T }
+  }
+  return undefined
+}
+export const regNum = (reg: RegRule[], key: string, fallback: number, at?: string, scope = '') => { const v = regAt(reg, key, scope, at)?.value; return typeof v === 'number' ? v : Number(v ?? fallback) || fallback }
+/** the pipeline template a recruit is pinned to (falls back to the one in force for his country) */
+export function tplOf(d: Pick<QData, 'reg'>, r: { template_id?: string | null; country: string; created_at?: string }): Tpl {
+  const pinned = r.template_id ? d.reg.find((x) => x.id === r.template_id) : undefined
+  return ((pinned || regAt(d.reg, 'pipeline', r.country, (r.created_at || todayISO()).slice(0, 10)))?.value as Tpl) || DEFAULT_TEMPLATE
+}
+export function stepCtx(d: Pick<QData, 'requests' | 'agentDocs'>, r: Recruit): StepCtx2 {
+  return { quotaApproved: d.requests.find((u) => u.id === r.use_request_id)?.status === 'approved', agentDocs: d.agentDocs.filter((a) => a.recruit_id === r.id && a.status === 'accepted').map((a) => a.kind) }
+}
+export const recruitStageOf = (d: QData, r: Recruit) => stageOfT(r as never, tplOf(d, r), stepCtx(d, r))
+export const COUNTRIES = ['India', 'Nepal', 'Bangladesh', 'Myanmar', 'Indonesia', 'Sri Lanka', 'Pakistan', 'Vietnam', 'Cambodia', 'Laos', 'Thailand', 'Philippines', 'Uzbekistan', 'Kazakhstan', 'Turkmenistan']
+export const pipelineCountries = (reg: RegRule[]) => [...new Set(reg.filter((x) => x.key === 'pipeline' && x.status === 'active' && x.scope !== '*').map((x) => x.scope))]
 
 /* ---------------- RAG + alerts ---------------- */
 export type Rag = 'red' | 'amber' | 'green'
-export function quotaRag(t: { approved: number; available: number; reserved: number; used: number; mismatch: number; expiry_date: string | null }, rules: Rules): { rag: Rag; why: string[] } {
+export function quotaRag(t: { approved: number; available: number; reserved: number; used: number; mismatch: number; expiry_date: string | null }, rules: Rules, warn?: number[]): { rag: Rag; why: string[] } {
   const why: string[] = []
   let rag: Rag = 'green'
   const d = t.expiry_date ? (daysUntil(t.expiry_date) ?? 0) : null
   const util = t.approved ? Math.round(((t.used + t.reserved) / t.approved) * 100) : 0
   if (t.mismatch !== 0) { rag = 'red'; why.push(`Reconciliation off by ${t.mismatch}`) }
   if (d !== null && d < 0 && t.available > 0) { rag = 'red'; why.push(`${t.available} unused slot(s) on an expired letter`) }
-  else if (d !== null && d <= rules.expiry_red_days && t.available > 0) { rag = 'red'; why.push(`Expires in ${d} days with ${t.available} unused`) }
-  else if (d !== null && d <= rules.expiry_amber_days && t.available > 0) { if (rag === 'green') rag = 'amber'; why.push(`Expires in ${d} days`) }
+  else if (d !== null && d <= (warn?.[2] ?? rules.expiry_red_days) && t.available > 0) { rag = 'red'; why.push(`Expires in ${d} days with ${t.available} unused`) }
+  else if (d !== null && d <= (warn?.[0] ?? rules.expiry_amber_days) && t.available > 0) { if (rag === 'green') rag = 'amber'; why.push(`Expires in ${d} days`) }
   if (t.approved && t.available === 0 && t.reserved === 0) { if (rag === 'green') rag = 'amber'; why.push('Fully used') }
   else if (util >= rules.util_amber_pct) { if (rag === 'green') rag = 'amber'; why.push(`${util}% used`) }
   return { rag, why }
@@ -267,7 +329,7 @@ export function quotaAlerts(d: QData, workers: { id: string; fullName: string; w
   const today = todayISO()
   // runaway: Immigration report not filed within the deadline
   for (const r of d.runaways.filter((x) => x.outcome === 'open')) {
-    const due = addDaysISO(r.last_seen, d.rules.runaway_report_days)
+    const due = addDaysISO(r.last_seen, regNum(d.reg, 'runaway_report_days', d.rules.runaway_report_days, r.last_seen))
     if (!r.imm_ref) out.push({ level: due < today ? 'red' : 'amber', text: `${r.worker_name}: Immigration runaway report (FWCMS eRUNAWAY) ${due < today ? 'OVERDUE since' : 'due by'} ${due}`, link: `/quota?tab=exits&run=${r.id}`, company: r.company_id })
     if (!r.police_report_no) out.push({ level: 'red', text: `${r.worker_name}: police report not recorded`, link: `/quota?tab=exits&run=${r.id}`, company: r.company_id })
   }

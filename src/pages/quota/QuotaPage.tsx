@@ -7,7 +7,7 @@ import { Card, Chip, Empty, SelectFilter, Stat, Tabs, Toolbar } from '../../comp
 import { DataTable } from '../../components/dataTable'
 import { Actions, IconAction } from '../../components/iconAction'
 import { useWorkers } from '../../lib/hooks'
-import { inCompany, OTHER_CO, setKnownCompanies, atMyt, nextStep, quotaAlerts, quotaRag, rmFmt, stageLabel, UR_STATUS, useQuota, type Tally } from '../../lib/quota'
+import { inCompany, OTHER_CO, setKnownCompanies, atMyt, nextStep, quotaAlerts, quotaRag, rmFmt, stageLabelIn, stepCtx, tplOf, UR_STATUS, useQuota, type Tally } from '../../lib/quota'
 import { daysUntil, fmtDate } from '../../lib/util'
 import { RagDot, useQCtx } from './shared'
 import { LettersTab } from './Letters'
@@ -43,7 +43,7 @@ export default function QuotaPage() {
     { id: 'exits', label: 'CMO & runaways', badge: d.runaways.filter((r) => r.outcome === 'open' && !r.imm_ref).length || undefined },
     { id: 'recon', label: 'Reconciliation', badge: d.tally.filter((t) => t.mismatch !== 0).length || undefined },
     { id: 'claims', label: 'Replacement claims' },
-    { id: 'rules', label: 'Rules' },
+    { id: 'rules', label: 'Rules & regulations' },
   ]
   const want = sp.get('tab') as TabId
   const tab = tabs.some((t) => t.id === want) ? want : 'overview'
@@ -145,7 +145,7 @@ function Overview({ company }: { company: string }) {
           <ul className="alist">
             {myReturned.map((r) => <li key={r.id}><Chip tone="orange">Returned</Chip> <Link to={`/quota?tab=approvals&open=${r.id}`}>Q-{r.ref_no}: fix and resubmit — {r.close_note || r.gm_note || r.ceo_note}</Link></li>)}
             {arrivals.map((r) => <li key={r.id}><Chip tone="blue">Arrival</Chip> <Link to={`/quota/recruit/${r.id}`}>{r.full_name} lands {atMyt(r.flight_at)} — hostel bed, pickup, airport letter</Link></li>)}
-            {myRecruits.slice(0, 40).map((r) => { const st = nextStep(r, d.rules.templates); return st ? <li key={r.id}><Chip>{stageLabel(st.stage)}</Chip> <Link to={`/quota/recruit/${r.id}`}>{r.full_name}: {st.label}</Link></li> : null })}
+            {myRecruits.slice(0, 40).map((r) => { const t = tplOf(d, r); const st = nextStep(r, t, stepCtx(d, r)); return st ? <li key={r.id}><Chip>{stageLabelIn(t, st.stage)}</Chip> <Link to={`/quota/recruit/${r.id}`}>{r.full_name}: {st.label}</Link></li> : null })}
             {!myReturned.length && !arrivals.length && !myRecruits.length && <li className="muted">No open tasks.</li>}
           </ul>
         </Card>

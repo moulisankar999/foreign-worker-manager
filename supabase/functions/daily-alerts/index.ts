@@ -37,8 +37,14 @@ function summary(urgent: Alert[]) {
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
-  if (!HAS_VAPID) return json({ skipped: 'push not configured (VAPID keys missing)' })
   const db = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } })
+  // Quota & Recruitment: daily HR follow-up reminders + GM/CEO escalation (in-app). Missing function (older DB) is ignored.
+  let quotaSweep: unknown = null
+  if (!!CRON_SECRET && req.headers.get('x-cron-secret') === CRON_SECRET) {
+    const { data, error } = await db.rpc('qr_followups_sweep')
+    quotaSweep = error ? { error: error.message } : data
+  }
+  if (!HAS_VAPID) return json({ skipped: 'push not configured (VAPID keys missing)', quotaSweep })
 
   // --- who is calling? ---
   const isCron = !!CRON_SECRET && req.headers.get('x-cron-secret') === CRON_SECRET
@@ -133,5 +139,5 @@ Deno.serve(async (req) => {
   // a signed-in caller also gets their own urgent-alert count (lets "Test alerts" show what the daily push would say)
   const me = onlyUser ? (users || [])[0] : null
   const mineN = me ? (await forUser(me.role, me.outlet_ids, me.company_ids)).urgent.length : undefined
-  return json({ day, workers: workers.length, scopes: cache.size, recipients: ids.length, subscriptions: subs?.length || 0, sent, skipped, failed, removed, test, urgent: mineN })
+  return json({ day, workers: workers.length, scopes: cache.size, recipients: ids.length, subscriptions: subs?.length || 0, sent, skipped, failed, removed, test, urgent: mineN, quotaSweep })
 })

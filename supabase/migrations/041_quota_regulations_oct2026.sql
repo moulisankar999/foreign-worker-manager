@@ -300,3 +300,25 @@ begin
       return next 'Age ' || age || ' is outside ' || coalesce(rule->>'age_min', '?') || '–' || coalesce(rule->>'age_max', '?') || ' for this sector.'; end if;
   end if;
 end $$;
+
+/* ---------------- System Map (039 pipeline + 040/041 rules) ---------------- */
+insert into public.system_map (key, sort, title, content) values ('quota', 35, 'Quota & Recruitment module', jsonb_build_object('blocks', jsonb_build_array(
+  jsonb_build_object('t', 'text', 'text', 'Admin-only module (CEO, GM, HR Admin, HR Manager) for quota letters, their use and the road from quota approval to onboarding, plus exits (CMO register, runaway cases) and Immigration replacements. Outlet Managers see only the minimum for their outlet''s incoming recruits (name, arrival, their brief task). External agents get a separate, very small portal. Enforced by the database, not only the menu.'),
+  jsonb_build_object('t', 'kv', 'rows', jsonb_build_array(
+    jsonb_build_array('Rules & regulations', 'qr_reg_rules: every regulatory value and process is a versioned rule (key + scope) with effective-from date, source / circular reference, optional circular PDF, verified flag and who changed it. qr_reg(key, scope, date) returns the version in force on that date, so each record is judged by the rule in force at its own date. CEO edits apply at once; HR Admin edits wait for CEO approval (qr_reg_propose / qr_reg_decide). qr_reg_impact previews the effect before saving. All audited.'),
+    jsonb_build_array('Pipelines', 'Per-country pipeline templates are rules (stages, steps, documents, gates, owners, the step that marks the slot used). A recruit is pinned to the template version in force when added (qr_recruits.template_id), so changes never break recruits already in progress. Gate trigger qr_pipeline_gate enforces order; only the CEO overrides, with a note.'),
+    jsonb_build_array('Quota slots', 'Approved request = Reserved (awaiting VDR). The slot becomes Used only when the template''s use step is done (default: VDR approved with its copy). Dropping before that releases the slot with a reason. Used but not arrived / FOMEMA unfit → replacement application.'),
+    jsonb_build_array('Replacement (Immigration)', 'qr_replacements: HR applies, uploads Immigration''s approval, a different HR Admin verifies → ledger entry imm_replacement "Replacement approved by Immigration" restores 1 slot (once). Which exit types qualify and their documents come from replacement_rules (runaway, death, transfer: no).'),
+    jsonb_build_array('HR follow-ups', 'qr_followups(): replacements, runaway reports, missing CMOs, used-not-arrived, FOMEMA due / unfit, calling visa expiring, levy payment, bond refunds, agent uploads, idle approvals — each due date from the rule in force on the item''s date. GM / CEO nudge or reassign; qr_followups_sweep notifies owners daily and escalates.'),
+    jsonb_build_array('Sector & eligibility checks', 'Sector rules (source countries, jobs, Indian roles, no front-liners, cap, advert-first, age) and country checks (age at first entry, ECR conditions) store rule_flags on letters, requests and recruits; mode Block refuses.'),
+    jsonb_build_array('Quota application', 'quota_app checklist per letter (MyFutureJobs advert → day-8 interview form → PERKESO → Section 60K → FWCMS → OSC → SKB), in order; plantation skips the advert. Levy due within levy_payment_days of the SKB.'),
+    jsonb_build_array('Master table', 'qr_master(): per letter, company subtotal, sector total and grand total of approved / reserved / used / pending cancellation / balance / expiring unused / runaways; qr_stage_counts() for the stage board.'),
+    jsonb_build_array('Agents', 'Agent logins have no staff profile. They see only recruits of batches assigned to them, upload documents (HR accepts / rejects) and download the calling visa through an audited grant. Revoke ends access at once.'),
+    jsonb_build_array('Migration', '036–041 (additive only): 039 pipeline, 040 rules & regulations, 041 Oct 2026 research values'))),
+  jsonb_build_object('t', 'steps', 'items', jsonb_build_array(
+    'Quota application checklist → SKB recorded (valid per rule, default 12 months) → levy paid.',
+    'HR raises a Quota Use Request → GM recommends → CEO approves (final). Slots reserved.',
+    'Per recruit, following the country pipeline: recruitment → medical (Fit) → VDR applied → VDR approved + copy (slot USED) → agent → stamping → emigration (India ECR: eMigrate, PBBY, PoE) → ticket → departure → KLIA clearance → pickup → HQ → HR brief → outlet manager brief → onboard (worker record).',
+    'After arrival: accommodation address → FOMEMA within the rule''s days. Unfit → repatriate → replacement application.',
+    'On exit: CMO with its scan, Immigration departure letter, bond refund. Runaways: police + Immigration reports within the rule''s days.'))
+))) on conflict (key) do update set title = excluded.title, content = excluded.content, sort = excluded.sort, updated_at = now();

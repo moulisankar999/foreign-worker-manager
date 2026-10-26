@@ -10,7 +10,7 @@ import { addMonths, fmtDate, todayISO } from '../../lib/util'
 import { inCompany, atMyt, COUNTRIES, ENTRY_LABEL, qcall, useQuota, type Entry, type Quota } from '../../lib/quota'
 import { companyOpts, FileField, FileLink, NoteAsk, QForm, s, useQCtx, useSheetMeta, type V } from './shared'
 
-const KIND_LABEL = { new: 'New quota', replacement: 'Replacement (CMO / gantian)', transfer: 'Transfer' }
+const KIND_LABEL: Record<string, string> = { new: 'New quota', replacement: 'Replacement (CMO / gantian)', transfer: 'Transfer', additional: 'Additional (government window)' }
 const ST_TONE = { pending: 'amber', active: 'green', rejected: 'red', closed: 'gray' } as const
 const MANUAL = ['approved', 'expire', 'adjust_up', 'adjust_down', 'return', 'use_existing', 'transfer_out', 'transfer_in']
 
@@ -126,7 +126,7 @@ function LetterForm({ v, onClose }: { v: V; onClose: () => void }) {
       fields={[
         { key: 'company_id', label: 'Company', type: 'select', options: companyOpts(ctx.companies), required: true, show: () => isNew },
         { key: 'ref_no', label: 'Letter reference no.', required: true, show: () => !locked },
-        { key: 'kind', label: 'Type', type: 'select', options: Object.entries(KIND_LABEL).map(([value, label]) => ({ value, label })), show: () => isNew },
+        { key: 'kind', label: 'Type', type: 'select', options: Object.entries(KIND_LABEL).filter(([k]) => k !== 'additional').map(([value, label]) => ({ value, label })), show: () => isNew },
         { key: 'approval_date', label: 'Approval date', type: 'date', required: true, show: () => !locked },
         { key: 'expiry_date', label: 'Valid until', type: 'date', show: () => !locked, hint: 'From 15 Apr 2026 FWCMS eQuota letters are valid 12 months; older letters may say 18. Use the date on the letter.' },
         { key: 'sector', label: 'Sector', placeholder: 'Services' }, { key: 'subsector', label: 'Sub-sector', placeholder: 'Restaurant' }, { key: 'job_title', label: 'Job title' },

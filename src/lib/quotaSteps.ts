@@ -1,104 +1,107 @@
-/* Quota & Recruitment: stages and per-country checklists. Pure (no imports) so it is unit-tested directly.
-   India is the default and most detailed: ECR passports go through eMigrate (RA demand, registration, PBBY,
-   emigration clearance / POE); ECNR passports skip those steps. The database enforces the ECR flight gate too. */
+/* Quota & Recruitment: the recruitment pipeline, read from the versioned "pipeline" rule (Rules & regulations).
+   Pure (no imports) so it is unit-tested directly. Each recruit is pinned to the template version in force when he was
+   added (template_id), so a change to the template never moves recruits already in progress. The database enforces the
+   same order and documents (qr_pipeline_gate); this module only mirrors it for the screens. */
 export const DEFAULT_COUNTRY = 'India'
-export interface RecruitLike { country: string; ecr: 'ECR' | 'ECNR' | null; steps: Record<string, { done?: boolean; date?: string | null; at?: string | null } | undefined> | null; created_at?: string; status?: string }
-
-export const STAGES: { key: string; label: string }[] = [
-  { key: 'sourcing', label: 'Sourcing' }, { key: 'interview', label: 'Interview / selection' }, { key: 'offer', label: 'Offer & contract' },
-  { key: 'passport', label: 'Passport & documents' }, { key: 'medical', label: 'Medical' }, { key: 'vdr', label: 'Calling visa (VDR)' },
-  { key: 'clearance', label: 'Home-country clearance' }, { key: 'travel', label: 'Travel' }, { key: 'arrival', label: 'Arrived' },
-  { key: 'onboarding', label: 'FOMEMA / PLKS / onboarding' }, { key: 'ready', label: 'Ready to convert' },
-]
-export const stageLabel = (k: string) => STAGES.find((s) => s.key === k)?.label || (k === 'converted' ? 'Converted to worker' : k)
-export interface CStep { key: string; label: string; stage: string; hint?: string; ecr?: boolean; gate?: boolean }
-const COMMON_PRE: CStep[] = [
-  { key: 'selected', label: 'Candidate selected (agent CV / interview)', stage: 'interview' },
-  { key: 'trade_test', label: 'Trade test / skills check passed', stage: 'interview' },
-  { key: 'offer', label: 'Offer & employment contract signed (worker\'s language)', stage: 'offer', hint: 'Zero-cost: the worker pays no recruitment fee. Keep the signed contract in the documents.' },
-  { key: 'passport_ok', label: 'Passport valid ≥ 18 months, copy on file', stage: 'passport', hint: 'Malaysia needs enough passport validity to cover the PLKS. Renew before applying if short.' },
-  { key: 'pre_medical', label: 'Pre-departure medical at an approved clinic — fit', stage: 'medical' },
-  { key: 'quota_use', label: 'Quota Use Request approved by CEO', stage: 'vdr', gate: true, hint: 'Raised in Approvals. GM then CEO approve; CEO alone is enough. The database blocks the VDR until this is done.' },
-  { key: 'vdr_apply', label: 'Calling visa (VDR) applied in FWCMS', stage: 'vdr', gate: true, hint: 'Uses 1 quota slot. Levy, bond / insurance guarantee and FWCMS fees paid first.' },
-  { key: 'vdr_ok', label: 'Calling visa (VDR) approved — copy uploaded', stage: 'vdr', hint: 'Upload the approval copy on the recruit page. The assigned agent downloads it from the agent portal (audited).' },
-  { key: 'vdr_sent', label: 'Calling visa copy sent to the agent', stage: 'vdr', hint: 'Ticked automatically when the copy is uploaded and the batch has an agent.' },
-]
-const VISA_STAMP: CStep = { key: 'visa_stamp', label: 'Visa stamped at the Malaysian mission / VFS', stage: 'clearance', hint: 'Passport endorsed with the Visa with Reference (VDR) at the Malaysian High Commission / VFS centre in the home country.' }
-const COMMON_POST: CStep[] = [
-  { key: 'ticket', label: 'Flight booked (company pays)', stage: 'travel' },
-  { key: 'airport_letter', label: 'Airport authorisation letter issued', stage: 'travel', hint: 'A4 letter for the pickup person and the airport desk — print it from the recruit page.' },
-  { key: 'hostel_ready', label: 'Hostel bed confirmed (Act 446 capacity)', stage: 'travel' },
-  { key: 'arrived', label: 'Arrived — passport stamped at the airport', stage: 'arrival' },
-  { key: 'fomema', label: 'FOMEMA medical within 30 days of arrival — fit', stage: 'onboarding', hint: 'If unfit: Check Out Memo and send home within the time Immigration gives. Keep the CMO copy on file.' },
-  { key: 'plks', label: 'PLKS (work permit) endorsed', stage: 'onboarding' },
-  { key: 'spikpa', label: 'SPIKPA hospitalisation insurance active', stage: 'onboarding' },
-  { key: 'socso', label: 'SOCSO registered', stage: 'onboarding' },
-  { key: 'epf', label: 'EPF registered', stage: 'onboarding', hint: 'EPF for non-citizen employees (2% employer + 2% employee) — check the rate in force.' },
-  { key: 'sim', label: 'SIM card given', stage: 'onboarding' },
-  { key: 'bank', label: 'Bank account opened (salary by bank transfer)', stage: 'onboarding' },
-  { key: 'induction', label: 'Induction, rules & grievance channel explained', stage: 'ready' },
-]
-export const COUNTRY_STEPS: Record<string, CStep[]> = {
-  India: [
-    { key: 'ra_check', label: 'Recruiting Agent licensed (MEA eMigrate RA number)', stage: 'sourcing', hint: 'Check the RA licence number on emigrate.gov.in before sharing any demand.' },
-    ...COMMON_PRE,
-    { key: 'ecr_check', label: 'Passport type confirmed: ECR or ECNR', stage: 'clearance', hint: 'Look at the passport\'s ECR stamp / “Emigration Check Required”. ECR adds the eMigrate steps below; ECNR skips them. Set it on the recruit — the database will not book a flight without it.' },
-    { key: 'demand_letter', label: 'RA demand letter & power of attorney attested by the Indian mission in KL', stage: 'clearance', ecr: true, hint: 'ECR only. Needed for the demand registration in eMigrate.' },
-    { key: 'emigrate_reg', label: 'Employer, demand & contract registered in eMigrate', stage: 'clearance', ecr: true, hint: 'ECR only. The RA uploads the demand; the employer is registered as foreign employer.' },
-    { key: 'pbby', label: 'PBBY insurance (Pravasi Bhartiya Bima Yojana)', stage: 'clearance', ecr: true, hint: 'Compulsory for ECR before emigration clearance.' },
-    { key: 'emig_clear', label: 'Emigration clearance (POE) granted in eMigrate', stage: 'clearance', ecr: true, hint: 'ECR passports cannot leave India for work without it — the database blocks the flight until it is ticked.' },
-    { key: 'pdot', label: 'Pre-departure orientation (PDOT)', stage: 'clearance', hint: 'Compulsory for ECR; recommended for ECNR.' },
-    VISA_STAMP,
-    ...COMMON_POST,
-  ],
-  Nepal: [
-    { key: 'ra_check', label: 'Recruiting agency licensed by DoFE', stage: 'sourcing' },
-    ...COMMON_PRE,
-    { key: 'demand_attest', label: 'Demand letter & POA attested by Nepal Embassy KL', stage: 'clearance' },
-    { key: 'dofe_pre', label: 'DoFE pre-approval', stage: 'clearance' },
-    { key: 'orientation', label: 'Pre-departure orientation', stage: 'clearance' },
-    { key: 'insurance_np', label: 'Insurance + Foreign Employment Welfare Fund paid', stage: 'clearance' },
-    { key: 'labour_permit', label: 'DoFE labour permit (final approval / sticker)', stage: 'clearance', hint: 'Nepal–Malaysia MoU: employer pays recruitment fee, visa, ticket, medical and security screening.' },
-    VISA_STAMP,
-    ...COMMON_POST,
-  ],
-  Bangladesh: [
-    { key: 'ra_check', label: 'Recruiting agency on the approved list', stage: 'sourcing', hint: 'Malaysia stopped new Bangladeshi intake under the old approvals on 31 May 2024 — check the current KDN position before starting.' },
-    ...COMMON_PRE,
-    { key: 'attest_bd', label: 'Demand letter attested by Bangladesh High Commission KL', stage: 'clearance' },
-    { key: 'bmet', label: 'BMET registration & emigration clearance (smart card)', stage: 'clearance' },
-    { key: 'welfare_bd', label: 'Welfare fund & insurance (Wage Earners\' Welfare Board)', stage: 'clearance' },
-    VISA_STAMP,
-    ...COMMON_POST,
-  ],
-  Myanmar: [...COMMON_PRE, { key: 'owic', label: 'Overseas Worker Identification Card (OWIC) / labour clearance', stage: 'clearance' }, VISA_STAMP, ...COMMON_POST],
-  Indonesia: [...COMMON_PRE, { key: 'bp2mi', label: 'BP2MI / SISKOP2MI registration & E-KTKLN', stage: 'clearance', hint: 'Recruit through a licensed P3MI agency; check the One Channel System rules for the sector.' }, VISA_STAMP, ...COMMON_POST],
-  'Sri Lanka': [...COMMON_PRE, { key: 'slbfe', label: 'SLBFE registration & insurance', stage: 'clearance' }, VISA_STAMP, ...COMMON_POST],
-  Pakistan: [...COMMON_PRE, { key: 'beoe', label: 'BE&OE Protector of Emigrants stamp + OEC / insurance', stage: 'clearance' }, VISA_STAMP, ...COMMON_POST],
+export interface TplStep { key: string; label: string; req?: boolean; ecr?: 'ECR' | 'ECNR'; requires?: string[]; hint?: string; retired?: boolean }
+export interface TplStage { key: string; label: string; owner?: 'hr' | 'gm_ceo' | 'agent' | 'outlet_manager' | string; docs?: string[]; gate?: string; task?: string; skip_label?: string; retired?: boolean; steps: TplStep[] }
+export interface Template { use_step: string; stages: TplStage[] }
+export interface StepVal { done?: boolean; date?: string | null; at?: string | null; ref?: string; note?: string; override?: boolean; by_name?: string }
+export interface RecruitLike {
+  country: string; ecr: 'ECR' | 'ECNR' | null; steps: Record<string, StepVal | undefined> | null; created_at?: string; status?: string; stage_at?: string | null
+  template_id?: string | null
 }
-export const COUNTRIES = Object.keys(COUNTRY_STEPS)
-export const stepsFor = (country: string, ecr?: string | null, templates?: Record<string, unknown>): CStep[] => {
-  const over = templates?.[country] as CStep[] | undefined
-  const base = Array.isArray(over) && over.length ? over : COUNTRY_STEPS[country] || [...COMMON_PRE, VISA_STAMP, ...COMMON_POST]
-  return base.filter((s) => !(s.ecr && country === 'India' && ecr === 'ECNR'))
-}
-export const progress = (r: RecruitLike, templates?: Record<string, unknown>) => {
-  const st = stepsFor(r.country, r.ecr, templates)
-  const done = st.filter((s) => r.steps?.[s.key]?.done).length
-  return { done, total: st.length, pct: st.length ? Math.round((done / st.length) * 100) : 0 }
-}
-/** where a recruit stands: the stage of the first open step */
-export const nextStep = (r: RecruitLike, templates?: Record<string, unknown>) => stepsFor(r.country, r.ecr, templates).find((s) => !r.steps?.[s.key]?.done)
+export interface Ctx { quotaApproved?: boolean; agentDocs?: string[] }
 
+const st = (key: string, label: string, steps: TplStep[], extra: Partial<TplStage> = {}): TplStage => ({ key, label, steps, ...extra })
+/** used only if the rules could not be loaded (offline first start); the database template is the source of truth */
+export const DEFAULT_TEMPLATE: Template = {
+  use_step: 'vdr_ok',
+  stages: [
+    st('quota', 'Quota approval', [{ key: '_quota', label: 'Quota Use Request approved' }], { owner: 'gm_ceo' }),
+    st('recruit', 'Overseas recruitment', [{ key: 'ra_check', label: 'Agent licence checked', req: false }, { key: 'selected', label: 'Selected at interview' }, { key: 'trade_test', label: 'Trade test', req: false }, { key: 'offer', label: 'Offer accepted' }], { owner: 'hr' }),
+    st('medical', 'Medical overseas', [{ key: 'medical', label: 'Medical done', requires: ['medical_result', 'medical_file|agent:medical'] }], { owner: 'agent' }),
+    st('med_gate', 'Medical gate (Fit)', [{ key: 'med_fit', label: 'Medically fit', requires: ['medical_result=fit'] }], { owner: 'hr' }),
+    st('vdr', 'Calling visa (VDR) application', [{ key: 'vdr_apply', label: 'VDR applied' }], { owner: 'hr' }),
+    st('vdr_gate', 'Calling visa approved', [{ key: 'vdr_ok', label: 'VDR approved', requires: ['vdr_file'] }], { owner: 'hr' }),
+    st('sent', 'Sent to India (agent)', [{ key: 'vdr_sent', label: 'VDR downloaded by the agent', requires: ['vdr_file'] }], { owner: 'agent' }),
+    st('stamping', 'Visa stamping', [{ key: 'visa_stamp', label: 'Visa stamped', requires: ['stamped_file'] }], { owner: 'agent' }),
+    st('emigration', 'India emigration (eMigrate)', [{ key: '_ecr', label: 'Passport type (ECR / ECNR) recorded' },
+      { key: 'emigrate_employer', label: 'Employer eMigrate registration', ecr: 'ECR' }, { key: 'agent_poa', label: 'Agent power of attorney and worker count', ecr: 'ECR' },
+      { key: 'emigrate_reg', label: 'eMigrate demand raised', ecr: 'ECR' }, { key: 'contract_attest', label: 'Employment contract attested', ecr: 'ECR' },
+      { key: 'pbby', label: 'PBBY insurance', ecr: 'ECR' }, { key: 'emig_clear', label: 'Protector of Emigrants clearance', ecr: 'ECR' },
+      { key: 'pdot', label: 'Pre-departure orientation (PDOT)', req: false }], { owner: 'agent', skip_label: 'Not required (ECNR)' }),
+    st('ticket', 'Air ticket', [{ key: 'ticket', label: 'Ticket booked', requires: ['flight_no', 'flight_at', 'arrival_eta', 'ticket_file'] }], { owner: 'hr' }),
+    st('departure', 'Departure', [{ key: 'departed', label: 'Departed', requires: ['flight_at'] }], { owner: 'agent' }),
+    st('klia', 'KLIA airport clearance', [{ key: 'klia', label: 'Cleared at KLIA by the employer', requires: ['klia_person'] }], { owner: 'hr' }),
+    st('pickup', 'Airport pickup', [{ key: 'pickup', label: 'Picked up', requires: ['pickup_by', 'transport'] }], { owner: 'hr' }),
+    st('hq', 'Arrival at HQ', [{ key: 'arrived_hq', label: 'Arrived at HQ', requires: ['arrived_at'] }], { owner: 'hr' }),
+    st('hr_brief', 'HR brief', [{ key: 'hr_brief', label: 'HR brief done', requires: ['hr_ack_file'] }], { owner: 'hr' }),
+    st('om_brief', 'Outlet manager brief', [{ key: 'om_brief', label: 'Outlet manager confirmed', requires: ['outlet_id'] }], { owner: 'outlet_manager' }),
+    st('onboard', 'Onboard', [{ key: 'onboard', label: 'Worker record created' }], { owner: 'hr' }),
+  ],
+}
 
-/** days since the last recorded step (or since the recruit was added) — "days in this stage" */
-export const daysInStage = (r: RecruitLike, today = new Date()) => {
-  const ts = Object.values(r.steps || {}).filter((v) => v?.done).map((v) => v?.at || v?.date || '').filter(Boolean).map((x) => new Date(x as string).getTime())
-  const last = ts.length ? Math.max(...ts) : r.created_at ? new Date(r.created_at).getTime() : today.getTime()
+export const isReq = (s: TplStep) => s.req !== false
+/** live stages of a template (retired stages stay on older versions only) */
+export const liveStages = (t: Template) => t.stages.filter((s) => !s.retired)
+/** the steps that apply to this passport type, in order, with their stage */
+export function stepsOf(t: Template, ecr: string | null | undefined): (TplStep & { stage: string; stageLabel: string; idx: number })[] {
+  const out: (TplStep & { stage: string; stageLabel: string; idx: number })[] = []
+  liveStages(t).forEach((s, i) => s.steps.filter((x) => !x.retired && (!x.ecr || x.ecr === ecr)).forEach((x) => out.push({ ...x, stage: s.key, stageLabel: s.label, idx: i })))
+  return out
+}
+/** one requirement token: col | col=value | agent:<kind> | a|b (any of) */
+export function reqOk(r: RecruitLike, tok: string, c: Ctx = {}): boolean {
+  return tok.split('|').some((t) => {
+    if (t.startsWith('agent:')) return !!c.agentDocs?.includes(t.slice(6))
+    if (t.includes('=')) { const [k, v] = t.split('='); return String((r as unknown as Record<string, unknown>)[k] ?? '') === v }
+    const v = (r as unknown as Record<string, unknown>)[t]; return v !== null && v !== undefined && v !== ''
+  })
+}
+export function stepDone(r: RecruitLike, key: string, c: Ctx = {}): boolean {
+  if (key === '_quota') return !!c.quotaApproved
+  if (key === '_ecr') return !!r.ecr
+  return !!r.steps?.[key]?.done
+}
+/** stage key where the recruit stands (first stage with an open required step) */
+export function stageOf(r: RecruitLike, t: Template, c: Ctx = {}): string {
+  if (r.status === 'converted') return 'converted'
+  const open = stepsOf(t, r.ecr).find((x) => isReq(x) && !stepDone(r, x.key, c))
+  return open ? open.stage : liveStages(t)[liveStages(t).length - 1]?.key || 'onboard'
+}
+export const nextStep = (r: RecruitLike, t: Template, c: Ctx = {}) => stepsOf(t, r.ecr).find((x) => isReq(x) && !stepDone(r, x.key, c))
+export function progress(r: RecruitLike, t: Template, c: Ctx = {}) {
+  const list = stepsOf(t, r.ecr).filter(isReq)
+  const done = list.filter((x) => stepDone(r, x.key, c)).length
+  return { done, total: list.length, pct: list.length ? Math.round((done / list.length) * 100) : 0 }
+}
+/** a stage that is all-optional for this passport type (India ECNR emigration) shows its skip label */
+export function stageSkipped(t: Template, stageKey: string, ecr: string | null | undefined) {
+  const s = t.stages.find((x) => x.key === stageKey)
+  if (!s || !s.skip_label || !ecr) return null
+  const real = s.steps.filter((x) => !x.retired && !x.key.startsWith('_') && isReq(x) && (!x.ecr || x.ecr === ecr))
+  return real.length ? null : s.skip_label
+}
+export const stageLabelIn = (t: Template | null | undefined, k: string) => (k === 'converted' ? 'Onboarded (worker)' : t?.stages.find((s) => s.key === k)?.label || DEFAULT_TEMPLATE.stages.find((s) => s.key === k)?.label || k)
+/** fields the user must fill to complete a step (requirements not yet met; "a|b" asks for the first) */
+export function missingFor(r: RecruitLike, s: TplStep, c: Ctx = {}) {
+  return (s.requires || []).filter((tok) => !reqOk(r, tok, c)).map((tok) => tok.split('|')[0])
+}
+/** days in the current stage (stage_at from the server, else the last step, else when added) */
+export function daysInStage(r: RecruitLike, today = new Date()) {
+  let last = r.stage_at ? new Date(r.stage_at).getTime() : NaN
+  if (Number.isNaN(last)) {
+    const ts = Object.values(r.steps || {}).filter((v) => v?.done).map((v) => v?.at || v?.date || '').filter(Boolean).map((x) => new Date(x as string).getTime())
+    last = ts.length ? Math.max(...ts) : r.created_at ? new Date(r.created_at).getTime() : today.getTime()
+  }
   return Math.max(0, Math.floor((today.getTime() - last) / 86400000))
 }
-/** where an approved slot is now: the next open step, or 'Arrived' when travel is done */
-export const slotWhere = (r: RecruitLike, templates?: Record<string, unknown>) => {
-  const n = nextStep(r, templates)
-  return n ? { stage: n.stage, step: n.label, key: n.key } : { stage: 'ready', step: 'All steps done', key: '' }
+/** stage counts for a list of recruits; template looked up per recruit */
+export function stageCounts(rs: RecruitLike[], tplOf: (r: RecruitLike) => Template, ctxOf: (r: RecruitLike) => Ctx = () => ({})) {
+  const m: Record<string, number> = {}
+  for (const r of rs) { const k = stageOf(r, tplOf(r), ctxOf(r)); m[k] = (m[k] || 0) + 1 }
+  return m
 }
+/** is the quota slot used for this recruit (the template's use step done) */
+export const slotUsed = (r: RecruitLike, t: Template) => !!r.steps?.[t.use_step]?.done

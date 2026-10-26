@@ -6,10 +6,13 @@ import { DataTable, Details } from '../../components/dataTable'
 import { Actions, IconAction } from '../../components/iconAction'
 import { useOutlets } from '../../lib/hooks'
 import { fmtDate } from '../../lib/util'
-import { inCompany, COUNTRIES, nextStep, progress, qcall, rmFmt, STAGES, stageLabel, UR_STATUS, useQuota, type Batch, type Recruit } from '../../lib/quota'
+import { inCompany, COUNTRIES, daysInStage, DEFAULT_TEMPLATE, liveStages, nextStep, progress, qcall, recruitStageOf, regAt, rmFmt, stageLabelIn, stageSkipped, stepCtx, tplOf, UR_STATUS, useQuota, type Batch, type QData, type Recruit, type Template } from '../../lib/quota'
 import { companyOpts, QForm, s, useQCtx, type V } from './shared'
 
-export const recruitStage = (r: Recruit, templates?: Record<string, unknown>) => (r.status === 'converted' ? 'converted' : nextStep(r, templates)?.stage || 'ready')
+export const recruitStage = (d: QData, r: Recruit) => recruitStageOf(d, r)
+/** flags set by the sector / eligibility rules, shown on the record */
+export const RuleFlags = ({ f }: { f?: string[] | null }) => (f && f.length ? <span className="qr-flags">{f.map((x, i) => <span key={i} className="pill warn" title="Flagged by Rules & regulations">⚠ {x}</span>)}</span> : null)
+const STALL = 14
 
 export function PipelineTab({ company }: { company: string }) {
   const ctx = useQCtx()
@@ -25,6 +28,12 @@ export function PipelineTab({ company }: { company: string }) {
   const spent = (b: Batch) => d.payments.filter((p) => p.batch_id === b.id && p.status !== 'void').reduce((a, p) => a + Number(p.amount_rm), 0)
   const setV = (v: 'board' | 'table') => { setView(v); localStorage.setItem('qr.view', v) }
   const ur = (r: Recruit) => d.requests.find((u) => u.id === r.use_request_id)
+  const bCountry = batches.find((b) => b.id === batch)?.country
+  const tpl: Template = (regAt(d.reg, 'pipeline', bCountry || 'India')?.value as Template) || DEFAULT_TEMPLATE
+  const STAGES = [...liveStages(tpl).map((x) => ({ key: x.key, label: x.label }))]
+  for (const r of recruits) { const k = recruitStage(d, r); if (k !== 'converted' && !STAGES.some((x) => x.key === k)) STAGES.splice(STAGES.length - 1, 0, { key: k, label: stageLabelIn(tplOf(d, r), k) }) }
+  const counts: Record<string, number> = {}
+  for (const r of recruits.filter((x) => x.status === 'active')) { const k = recruitStage(d, r); counts[k] = (counts[k] || 0) + 1 }
 
   return (
     <div className="qr-grid">
@@ -47,7 +56,7 @@ export function PipelineTab({ company }: { company: string }) {
           empty={<Empty title="No batches">A batch groups the recruits from one agent and country with a target and budget.</Empty>} />
       </Card>
 
-      <Card title="Recruits" actions={<Toolbar>
+      <Card title={<>Recruits <span className="qr-stage-counts">{STAGES.filter((x) => counts[x.key]).map((x) => <span key={x.key} className="pill n" title={x.label}>{x.label} <b>{counts[x.key]}</b></span>)}</span></>} actions={<Toolbar>
         <SelectFilter label="Batch" value={batch} onChange={setBatch} options={[{ value: '', label: 'All batches' }, ...batches.map((b) => ({ value: b.id, label: b.title }))]} />
         <label className="check"><input type="checkbox" checked={showDone} onChange={(e) => setShowDone(e.target.checked)} /> Converted / dropped</label>
         <div className="qr-seg" role="group" aria-label="View"><button className={view === 'board' ? 'on' : ''} onClick={() => setV('board')}>Board</button><button className={view === 'table' ? 'on' : ''} onClick={() => setV('table')}>Table</button></div>
@@ -55,13 +64,15 @@ export function PipelineTab({ company }: { company: string }) {
       </Toolbar>}>
         {view === 'board' ? (
           <div className="qr-board">{[...STAGES, ...(showDone ? [{ key: 'converted', label: 'Converted' }] : [])].map((st) => {
-            const list = recruits.filter((r) => recruitStage(r, d.rules.templates) === st.key)
+            const list = recruits.filter((r) => recruitStage(d, r) === st.key)
             return <section key={st.key} className="qr-col"><h4>{st.label} <Chip tone="gray">{list.length}</Chip></h4>
-              {list.map((r) => { const p = progress(r, d.rules.templates); const u = ur(r); return (
+              {list.map((r) => { const t = tplOf(d, r); const c = stepCtx(d, r); const p = progress(r, t, c); const u = ur(r); const age = daysInStage(r); return (
                 <Link key={r.id} to={`/quota/recruit/${r.id}`} className={`qr-card ${r.status === 'dropped' ? 'dropped' : ''}`}>
                   <b>{r.full_name}</b><small>{r.country}{r.ecr ? ` · ${r.ecr}` : ''} · {r.job || '—'}</small>
                   <div className="qr-bar"><i style={{ width: `${p.pct}%` }} /></div>
-                  <small className="muted">{nextStep(r, d.rules.templates)?.label || 'All steps done'}</small>
+                  <small className="muted">{stageSkipped(t, st.key, r.ecr) || nextStep(r, t, c)?.label || 'All steps done'}</small>
+                  {r.status === 'active' && <small className={`qr-age ${age > STALL ? 'late' : ''}`}>{age} day{age === 1 ? '' : 's'} in this stage</small>}
+                  <RuleFlags f={r.rule_flags} />
                   {u ? <Chip tone={UR_STATUS[u.status].tone}>Q-{u.ref_no} {UR_STATUS[u.status].label}</Chip> : <Chip tone="gray">No quota request</Chip>}
                 </Link>) })}
               {!list.length && <small className="muted">—</small>}
@@ -69,11 +80,11 @@ export function PipelineTab({ company }: { company: string }) {
           })}</div>
         ) : (
           <DataTable label="Recruits" rows={recruits} rowKey={(r) => r.id} search={(r) => `${r.full_name} ${r.passport_no} ${r.job} ${r.country}`}
-            filters={[{ key: 'c', label: 'Country', options: COUNTRIES, match: (r, v) => r.country === v }, { key: 'st', label: 'Stage', options: STAGES.map((x) => ({ value: x.key, label: x.label })), match: (r, v) => recruitStage(r, d.rules.templates) === v }]}
+            filters={[{ key: 'c', label: 'Country', options: COUNTRIES, match: (r, v) => r.country === v }, { key: 'st', label: 'Stage', options: STAGES.map((x) => ({ value: x.key, label: x.label })), match: (r, v) => recruitStage(d, r) === v }]}
             columns={[
-              { key: 'n', label: 'Recruit', main: true, render: (r) => <><b>{r.full_name}</b>{r.status !== 'active' && <> <Chip tone={r.status === 'converted' ? 'green' : 'gray'}>{r.status}</Chip></>}<br /><small className="muted">{r.country}{r.ecr ? ` · ${r.ecr}` : ''} · {r.passport_no || 'no passport yet'}</small></>, sort: (r) => r.full_name },
-              { key: 'st', label: 'Stage', render: (r) => stageLabel(recruitStage(r, d.rules.templates)), sort: (r) => STAGES.findIndex((x) => x.key === recruitStage(r, d.rules.templates)) },
-              { key: 'p', label: 'Progress', hide: 'phone', align: 'right', render: (r) => `${progress(r, d.rules.templates).pct}%`, sort: (r) => progress(r, d.rules.templates).pct },
+              { key: 'n', label: 'Recruit', main: true, render: (r) => <><b>{r.full_name}</b>{r.status !== 'active' && <> <Chip tone={r.status === 'converted' ? 'green' : 'gray'}>{r.status}</Chip></>}<br /><small className="muted">{r.country}{r.ecr ? ` · ${r.ecr}` : ''} · {r.passport_no || 'no passport yet'}</small><RuleFlags f={r.rule_flags} /></>, sort: (r) => r.full_name },
+              { key: 'st', label: 'Stage', render: (r) => <>{stageLabelIn(tplOf(d, r), recruitStage(d, r))}{r.status === 'active' && <><br /><small className={`qr-age ${daysInStage(r) > STALL ? 'late' : ''}`}>{daysInStage(r)} d</small></>}</>, sort: (r) => STAGES.findIndex((x) => x.key === recruitStage(d, r)) },
+              { key: 'p', label: 'Progress', hide: 'phone', align: 'right', render: (r) => <span className="qr-num">{progress(r, tplOf(d, r), stepCtx(d, r)).pct}%</span>, sort: (r) => progress(r, tplOf(d, r), stepCtx(d, r)).pct },
               { key: 'q', label: 'Quota request', hide: 'tablet', render: (r) => { const u = ur(r); return u ? <Chip tone={UR_STATUS[u.status].tone}>Q-{u.ref_no} {UR_STATUS[u.status].label}</Chip> : '—' } },
               { key: 'f', label: 'Flight', hide: 'wide', render: (r) => r.flight_at ? `${r.flight_no || ''} ${fmtDate(r.flight_at.slice(0, 10))}` : '—', sort: (r) => r.flight_at || '9' },
             ]}

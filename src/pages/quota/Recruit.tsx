@@ -13,9 +13,16 @@ import { syncNow } from '../../lib/sync'
 import type { DocRec, Worker } from '../../lib/types'
 import type { CostRec } from '../../lib/trackers'
 import { addMonths, fmtDate, todayISO, uid } from '../../lib/util'
-import { atMyt, PAY_CATS, payLabel, progress, qcall, rmFmt, stageLabel, stepsFor, UR_STATUS, useQuota, type CStep, type Recruit } from '../../lib/quota'
-import { NoteAsk, QForm, s, useQCtx, useSheetMeta } from './shared'
-import { recruitStage, RecruitForm } from './Pipeline'
+import { atMyt, daysInStage, missingFor, PAY_CATS, payLabel, progress, qcall, regNum, rmFmt, stageLabelIn, stageSkipped, stepCtx, stepDone, stepsOf, tplOf, UR_STATUS, useQuota, type Recruit, type TplStep } from '../../lib/quota'
+import { useOutlets } from '../../lib/hooks'
+import type { FieldDef } from '../../components/ui'
+import { FileField, FileLink, NoteAsk, QForm, s, useQCtx, useSheetMeta } from './shared'
+import { recruitStage, RecruitForm, RuleFlags } from './Pipeline'
+type CStep = TplStep & { stage: string; stageLabel: string; idx: number }
+const FILE_TOK = ['medical_file', 'stamped_file', 'ticket_file', 'hr_ack_file', 'vdr_file']
+const DT_TOK = ['flight_at', 'arrival_eta', 'arrived_at']
+const TOK_LABEL: Record<string, string> = { medical_result: 'Medical result', medical_file: 'Medical report', stamped_file: 'Stamped visa page', ticket_file: 'Air ticket', hr_ack_file: 'HR brief acknowledgement (signed)',
+  vdr_file: 'VDR approval copy', flight_no: 'Flight no.', flight_at: 'Departs (MYT)', arrival_eta: 'Lands (MYT)', klia_person: 'Employer person at KLIA (name, IC)', pickup_by: 'Pickup person (name, IC, phone)', transport: 'Transport (vehicle / plate)', arrived_at: 'Arrived at HQ (MYT)', outlet_id: 'Outlet' }
 import { PaymentForm } from './Costs'
 import './quota.css'
 
@@ -25,26 +32,49 @@ export default function RecruitPage({ id }: { id: string }) {
   const nav = useNavigate()
   const r = d.recruits.find((x) => x.id === id)
   const [step, setStep] = useState<CStep | null>(null)
-  const [edit, setEdit] = useState<'details' | 'travel' | 'link' | 'pay' | 'drop' | 'letter' | 'convert' | null>(null)
+  const [edit, setEdit] = useState<'details' | 'travel' | 'link' | 'pay' | 'drop' | 'letter' | 'convert' | 'arrival' | 'fomema' | 'override' | null>(null)
+  const outlets = useOutlets()
   if (!d.loaded) return <div className="page"><p className="muted">Loading…</p></div>
   if (!r) return <div className="page"><Empty title="Recruit not found"><Link to="/quota?tab=pipeline">Back to the pipeline</Link></Empty></div>
-  const steps = stepsFor(r.country, r.ecr, d.rules.templates)
+  const tpl = tplOf(d, r)
+  const sc = stepCtx(d, r)
+  const steps = stepsOf(tpl, r.ecr) as CStep[]
   const ur = d.requests.find((u) => u.id === r.use_request_id)
   const batch = d.batches.find((b) => b.id === r.batch_id)
   const pays = d.payments.filter((p) => p.recruit_id === r.id)
   const evs = d.events.filter((e) => e.recruit_id === r.id).sort((a, b) => b.id - a.id)
-  const p = progress(r, d.rules.templates)
+  const p = progress(r, tpl, sc)
+  const curStage = recruitStage(d, r)
+  const tplRow = d.reg.find((x) => x.id === r.template_id)
   const active = r.status === 'active'
   const hostel = ctx.cfg.hostels.items.find((h) => h.id === r.hostel_id)
-  const isDone = (st: CStep) => (st.key === 'quota_use' ? ur?.status === 'approved' : !!r.steps?.[st.key]?.done)
-  const stageOf = (stepsNow: Recruit['steps']) => stepsFor(r.country, r.ecr, d.rules.templates).find((x) => !(x.key === 'quota_use' ? ur?.status === 'approved' : stepsNow?.[x.key]?.done))?.stage || 'ready'
+  const isDone = (st: CStep) => stepDone(r, st.key, sc)
+  const fomemaDays = regNum(d.reg, 'fomema_days', 30, (r.arrived_at || '').slice(0, 10) || undefined)
+  const immHours = regNum(d.reg, 'imm_clear_hours', 6, (r.arrived_at || '').slice(0, 10) || undefined)
 
   const save = (patch: Record<string, unknown>) => qcall('qr_save_recruit', { p: { id: r.id, ...patch } })
   const tick = async (st: CStep, v: { date?: string; ref?: string; note?: string; done: boolean }, extra: Record<string, unknown> = {}) => {
     const val = v.done ? { done: true, date: v.date || todayISO(), ref: v.ref || undefined, note: v.note || undefined } : { done: false }
-    const next = { ...r.steps, [st.key]: val }
-    await save({ steps: { [st.key]: val }, stage: stageOf(next), ...extra })
+    await save({ steps: { [st.key]: val }, ...extra })
   }
+  const stepFields = (st: CStep): FieldDef[] => missingFor(r, st, sc).filter((t) => !t.includes('=') && !t.startsWith('agent:') && !FILE_TOK.includes(t)).map((t) => (
+    t === 'medical_result' ? { key: t, label: TOK_LABEL[t], type: 'select', required: true, options: [{ value: 'fit', label: 'Fit' }, { value: 'unfit', label: 'Unfit (ends this recruit, releases the slot)' }] }
+      : DT_TOK.includes(t) ? { key: t, label: TOK_LABEL[t] || t, type: 'datetime-local', required: true }
+        : t === 'outlet_id' ? { key: t, label: 'Outlet', type: 'select', required: true, options: outlets.filter((o) => o.companyId === r.company_id).map((o) => ({ value: o.id, label: o.name })) }
+          : { key: t, label: TOK_LABEL[t] || t, type: t === 'flight_no' ? 'upper' : undefined, required: true }) as FieldDef)
+  const stepFiles = (st: CStep) => missingFor(r, st, sc).filter((t) => FILE_TOK.includes(t))
+  const saveStep = async (st: CStep, v: Record<string, unknown>) => {
+    const docs: Record<string, unknown> = {}
+    for (const f of stepFields(st)) if (v[f.key] !== undefined && v[f.key] !== '') docs[f.key] = DT_TOK.includes(f.key) ? `${v[f.key]}:00+08:00` : v[f.key]
+    for (const t of stepFiles(st)) { if (!v[t]) throw new Error(`Attach the ${TOK_LABEL[t] || t}.`); if (t !== 'vdr_file') docs[t] = v[t] }
+    if (docs.medical_result === 'unfit') { if (!s(v.note)) throw new Error('Unfit: give the reason in the note.'); docs.reason = v.note }
+    if (Object.keys(docs).length) await qcall('qr_recruit_docs', { p_id: r.id, p: docs })
+    if (docs.medical_result === 'unfit') return
+    if (v.vdr_file) await qcall('qr_set_vdr_copy', { p_recruit: r.id, p_file: v.vdr_file, p_approved: v.date })
+    await tick(st, { done: true, date: s(v.date), ref: s(v.ref), note: s(v.note) },
+      st.key === 'vdr_apply' ? { vdr_applied: v.date, vdr_no: v.ref } : st.key === 'vdr_ok' ? { vdr_approved: v.date } : {})
+  }
+  const stages = [...new Map(steps.map((x) => [x.stage, x])).values()]
 
   return (
     <div className="page">
@@ -52,25 +82,34 @@ export default function RecruitPage({ id }: { id: string }) {
         <IconAction kind="close" label="Back to the pipeline" onClick={() => nav('/quota?tab=pipeline')} />
         <div><h1>{r.full_name}</h1><small className="muted">{r.country}{r.ecr ? ` · ${r.ecr}` : ''} · {ctx.cName(r.company_id)}{batch && <> · <Link to="/quota?tab=pipeline">{batch.title}</Link></>}</small></div>
         <span className="spacer" />
-        <Chip tone={r.status === 'active' ? 'blue' : r.status === 'converted' ? 'green' : 'gray'}>{r.status === 'active' ? stageLabel(recruitStage(r, d.rules.templates)) : r.status === 'converted' ? 'Converted to worker' : 'Dropped'}</Chip>
+        <Chip tone={r.status === 'active' ? 'blue' : r.status === 'converted' ? 'green' : 'gray'}>{r.status === 'active' ? stageLabelIn(tpl, curStage) : r.status === 'converted' ? 'Converted to worker' : r.out_kind === 'medical_unfit' ? 'Medical unfit' : r.out_kind === 'vdr_rejected' ? 'VDR rejected' : 'Dropped'}</Chip>
       </header>
 
       <div className="qr-grid two">
-        <Card title={<>Checklist <Chip tone="gray">{p.done} / {p.total}</Chip></>}>
+        <Card title={<>Pipeline <Chip tone="gray">{p.done} / {p.total}</Chip></>} actions={ctx.isCeo && active && curStage !== 'quota' && curStage !== 'onboard' ? <IconAction kind="unlock" label="CEO: mark the current stage done with a note" onClick={() => setEdit('override')} /> : undefined}>
           <div className="qr-bar big"><i style={{ width: `${p.pct}%` }} /></div>
-          {r.country === 'India' && <div className="note-box">{r.ecr === 'ECR' ? 'ECR passport: emigration clearance in eMigrate is compulsory before he can fly — the attestation, eMigrate and POE steps are included.' : r.ecr === 'ECNR' ? 'ECNR passport: no emigration clearance needed; the eMigrate / POE steps are left out.' : 'Set ECR or ECNR in the details to get the right India steps.'}</div>}
-          <ol className="qr-steps">{steps.map((st) => {
-            const done = isDone(st); const v = r.steps?.[st.key]
-            const blocked = st.key === 'vdr_apply' && ur?.status !== 'approved'
-            return <li key={st.key} className={`${done ? 'done' : ''} ${st.gate ? 'gate' : ''}`}>
-              <button type="button" className="qr-tick" aria-label={done ? `Undo: ${st.label}` : `Mark done: ${st.label}`} disabled={!active || st.key === 'quota_use' || (done && st.key === 'vdr_apply') || (!done && blocked)}
-                title={st.key === 'quota_use' ? 'Done automatically when the CEO approves the Quota Use Request' : blocked ? 'Locked until the CEO approves the Quota Use Request' : undefined}
-                onClick={() => (done ? tick(st, { done: false }).catch((e) => toast(e.message, 'err')) : setStep(st))}>{done ? '✓' : ''}</button>
-              <div><span>{st.label}</span>{st.gate && <> <Chip tone={done ? 'green' : 'red'}>{st.key === 'quota_use' ? (ur ? `Q-${ur.ref_no} ${UR_STATUS[ur.status].label}` : 'No request linked') : 'Uses 1 quota slot'}</Chip></>}
-                {v?.done && <small className="muted"> · {fmtDate(v.date)}{v.ref ? ` · ${v.ref}` : ''}{v.note ? ` · ${v.note}` : ''}</small>}
-                {st.hint && !done && <small className="hint">{st.hint}</small>}</div>
-            </li>
-          })}</ol>
+          <small className="muted">Template {tplRow ? `from ${fmtDate(tplRow.effective_from)}` : 'default'} · {daysInStage(r)} day(s) in “{stageLabelIn(tpl, curStage)}”</small>
+          <RuleFlags f={r.rule_flags} />
+          {r.country === 'India' && !r.ecr && <div className="note-box">Set ECR or ECNR in the details to get the right India steps.</div>}
+          {stages.map((g) => { const skip = stageSkipped(tpl, g.stage, r.ecr); const list = steps.filter((x) => x.stage === g.stage); return <div key={g.stage} className={`qr-stage ${g.stage === curStage && active ? 'cur' : ''}`}>
+            <h4 className="qr-h4">{g.idx + 1}. {g.stageLabel} {skip && <span className="pill n">{skip}</span>}{g.stage === curStage && active && <span className="pill b">Now</span>}</h4>
+            <ol className="qr-steps">{list.filter((st) => !skip || st.key.startsWith('_')).map((st) => {
+              const done = isDone(st); const v = r.steps?.[st.key]
+              const blocked = st.key === tpl.use_step || st.key === 'vdr_apply' ? ur?.status !== 'approved' : false
+              const auto = st.key.startsWith('_')
+              const isUse = st.key === tpl.use_step
+              return <li key={st.key} className={`${done ? 'done' : ''} ${isUse || st.key === '_quota' ? 'gate' : ''}`}>
+                <button type="button" className="qr-tick" aria-label={done ? `Undo: ${st.label}` : `Mark done: ${st.label}`} disabled={!active || auto || (done && isUse) || (!done && blocked)}
+                  title={auto ? (st.key === '_quota' ? 'Done automatically when the CEO approves the Quota Use Request' : 'Set in the details') : blocked && !done ? 'Locked until the CEO approves the Quota Use Request' : undefined}
+                  onClick={() => (done ? tick(st, { done: false }).catch((e) => toast(e.message, 'err')) : setStep(st))}>{done ? '✓' : ''}</button>
+                <div><span>{st.label}</span>{st.req === false && <span className="muted"> (optional)</span>}{st.ecr && <> <span className="pill n">{st.ecr}</span></>}
+                  {st.key === '_quota' && <> <Chip tone={done ? 'green' : 'red'}>{ur ? `Q-${ur.ref_no} ${UR_STATUS[ur.status].label}` : 'No request linked'}</Chip></>}
+                  {isUse && <> <Chip tone={done ? 'blue' : 'amber'}>{done ? 'Slot used' : 'Uses the reserved slot'}</Chip></>}
+                  {v?.done && <small className="muted"> · {fmtDate(v.date || '')}{v.ref ? ` · ${v.ref}` : ''}{v.note ? ` · ${v.note}` : ''}{v.override ? ' · CEO override' : ''}</small>}
+                  {st.hint && !done && <small className="hint">{st.hint}</small>}</div>
+              </li>
+            })}</ol></div>
+          })}
         </Card>
 
         <div className="qr-grid">
@@ -86,7 +125,12 @@ export default function RecruitPage({ id }: { id: string }) {
             <KV items={[['VDR no.', r.vdr_no || '—'], ['VDR applied', fmtDate(r.vdr_applied || '') || '—'], ['VDR approved', fmtDate(r.vdr_approved || '') || '—'], ['VDR valid until', fmtDate(r.vdr_expiry || '') || '—'],
               ['Flight', r.flight_at ? `${r.flight_no || ''} · ${atMyt(r.flight_at)}` : '—'], ['Airport', r.airport || '—'], ['Pickup by', r.pickup_by || '—'], ['Transport', r.transport || '—'],
               ['Hostel', hostel ? `${hostel.name}${hostel.capacity ? ` (capacity ${hostel.capacity})` : ''}` : '—'], ['Arrived', r.arrived_at ? atMyt(r.arrived_at) : '—'],
-              ['FOMEMA due', r.arrived_at ? fmtDate(addDays30(r.arrived_at)) : '—']]} />
+              ['FOMEMA due', r.arrived_at ? fmtDate(addDaysIso(r.arrived_at, fomemaDays)) : '—']]} />
+          </Card>
+          <Card title="Arrival, Immigration & FOMEMA" actions={active || r.status === 'converted' ? <><IconAction kind="edit" label="Accommodation address and Immigration clearance" onClick={() => setEdit('arrival')} />{r.arrived_at && <IconAction kind="upload" label="Record the FOMEMA result" onClick={() => setEdit('fomema')} />}</> : undefined}>
+            <KV items={[['Accommodation', r.accom_address ? <>{r.accom_address} <small className="muted">confirmed {fmtDate(r.accom_confirmed_on || '')}</small></> : <span className="pill warn">Confirm before FOMEMA</span>],
+              ['Immigration clearance', r.imm_cleared_at ? atMyt(r.imm_cleared_at) : r.arrived_at ? <span className="pill warn">Within {immHours} hours of landing</span> : '—'],
+              ['FOMEMA', r.fomema_result ? <><Chip tone={r.fomema_result === 'fit' ? 'green' : 'red'}>{r.fomema_result === 'fit' ? 'Fit' : 'Unfit'}</Chip> {fmtDate(r.fomema_on || '')} <FileLink f={d.files.find((f) => f.id === r.fomema_file)} label="report" /></> : r.arrived_at ? `Due by ${fmtDate(addDaysIso(r.arrived_at, fomemaDays))}` : '—']]} />
           </Card>
           <Card title={<>Payments <Chip tone="gray">{rmFmt(pays.filter((x) => x.status !== 'void').reduce((a, x) => a + Number(x.amount_rm), 0))}</Chip></>} actions={<IconAction kind="add" label="Record a payment for him" onClick={() => setEdit('pay')} />}>
             {pays.length ? <ul className="alist">{pays.map((x) => <li key={x.id} className={x.status === 'void' ? 'strike' : ''}>{fmtDate(x.paid_on)} · {payLabel(x.category)} · <b>{rmFmt(x.amount_rm)}</b> {x.status === 'pending_check' && <Chip tone="amber">To check</Chip>}</li>)}</ul> : <p className="muted">No payments yet.</p>}
@@ -106,10 +150,21 @@ export default function RecruitPage({ id }: { id: string }) {
       </div>
 
       {step && <QForm title={step.label} initial={{ date: todayISO() }} onClose={() => setStep(null)} saveLabel="Mark done"
-        note={step.key === 'vdr_apply' ? 'This uses 1 quota slot from the approved request and is recorded in the ledger.' : step.hint}
-        fields={[{ key: 'date', label: 'Date', type: 'date', required: true }, { key: 'ref', label: step.key === 'vdr_apply' ? 'VDR / FWCMS application no.' : 'Reference (optional)', required: step.key === 'vdr_apply' }, { key: 'note', label: 'Note', full: true }]}
-        onSave={(v) => tick(step, { done: true, date: s(v.date), ref: s(v.ref), note: s(v.note) },
-          step.key === 'vdr_apply' ? { vdr_applied: v.date, vdr_no: v.ref } : step.key === 'vdr_ok' ? { vdr_approved: v.date } : step.key === 'arrived' && !r.arrived_at ? { arrived_at: `${v.date}T12:00:00+08:00` } : {})} />}
+        note={step.key === tpl.use_step ? 'This marks the reserved quota slot as used and is recorded in the ledger.' : step.hint}
+        fields={[...stepFields(step), { key: 'date', label: 'Date', type: 'date', required: true }, { key: 'ref', label: step.key === 'vdr_apply' ? 'VDR / FWCMS application no.' : 'Reference (optional)', required: step.key === 'vdr_apply' }, { key: 'note', label: 'Note', full: true }]}
+        onSave={(v) => saveStep(step, v)}>
+        {(v, set) => <>{stepFiles(step).map((t) => <FileField key={t} company={r.company_id} kind={t.replace('_file', '')} label={TOK_LABEL[t] || t} required value={s(v[t]) || null} onChange={(id) => set({ [t]: id })} />)}</>}
+      </QForm>}
+      {edit === 'override' && <NoteAsk title={`CEO: mark “${stageLabelIn(tpl, curStage)}” done`} label="Reason (kept in the history)" confirm="Mark done" onClose={() => setEdit(null)} onOk={(n) => qcall('qr_stage_override', { p_id: r.id, p_stage: curStage, p_note: n })} />}
+      {edit === 'arrival' && <QForm title="Arrival details" onClose={() => setEdit(null)} note={`FOMEMA needs the accommodation address. Immigration clearance is due within ${immHours} hours of landing.`}
+        initial={{ accom_address: r.accom_address || ctx.cfg.hostels.items.find((h) => h.id === r.hostel_id)?.address || '', imm_cleared_at: toLocalDT(r.imm_cleared_at) }}
+        fields={[{ key: 'accom_address', label: 'Accommodation address', type: 'textarea', full: true, required: true }, { key: 'imm_cleared_at', label: 'Cleared by Immigration at (MYT)', type: 'datetime-local' }]}
+        onSave={(v) => qcall('qr_recruit_arrival', { p_id: r.id, p: { accom_address: v.accom_address, ...(v.imm_cleared_at ? { imm_cleared_at: `${v.imm_cleared_at}:00+08:00` } : {}) } })} />}
+      {edit === 'fomema' && <QForm title="FOMEMA result" onClose={() => setEdit(null)} initial={{ on: todayISO() }} note="An unfit result tells HR, the GM and the CEO; apply to Immigration for a replacement from the Replacement tab."
+        fields={[{ key: 'on', label: 'Examined on', type: 'date', required: true }, { key: 'result', label: 'Result', type: 'select', required: true, options: [{ value: 'fit', label: 'Fit' }, { value: 'unfit', label: 'Unfit' }] }, { key: 'note', label: 'Note', full: true }]}
+        onSave={(v) => qcall('qr_recruit_fomema', { p_id: r.id, p_on: v.on, p_result: v.result, p_file: v.file || null, p_note: s(v.note) || null })}>
+        {(v, set) => <FileField company={r.company_id} kind="fomema" label="FOMEMA report" value={s(v.file) || null} onChange={(id) => set({ file: id })} />}
+      </QForm>}
       {edit === 'details' && <RecruitForm v={{ ...r } as unknown as Record<string, unknown>} onClose={() => setEdit(null)} />}
       {edit === 'travel' && <TravelForm r={r} onClose={() => setEdit(null)} />}
       {edit === 'link' && <LinkForm r={r} onClose={() => setEdit(null)} />}
@@ -121,7 +176,7 @@ export default function RecruitPage({ id }: { id: string }) {
   )
 }
 
-const addDays30 = (iso: string) => { const d = new Date(iso); d.setDate(d.getDate() + 30); return d.toISOString().slice(0, 10) }
+const addDaysIso = (iso: string, n: number) => { const d = new Date(iso); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10) }
 const toLocalDT = (iso?: string | null) => (iso ? new Date(new Date(iso).getTime() + 8 * 3600e3).toISOString().slice(0, 16) : '')
 
 function TravelForm({ r, onClose }: { r: Recruit; onClose: () => void }) {
