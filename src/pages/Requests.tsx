@@ -10,6 +10,7 @@ import { outletName } from '../lib/calc'
 import { useOutlets, useSettings, useWorkers } from '../lib/hooks'
 import { slipPdf } from '../lib/passport'
 import { actRequest, applyRequest, assignRequest, createRequest, listAssignees, type Assignee, type RequestEvent, emergencyMisuse, noteRequest, proofDue, proofState, refNo, useRequest, useRequests, type ApplyChoice } from '../lib/requests'
+import { aiPrefill, aiDecideDraft } from '../lib/ai'
 import { uploadDoc, useDocs, type DocRow } from '../lib/vault'
 import {
   ACTION_LABEL, EMERGENCY_PROOF_CATEGORY, IMMEDIATE_FAMILY, OPEN_STATUSES, REQUEST_TYPE, REQUEST_TYPES, ROLE_LABEL, STATUS_LABEL, STATUS_TONE,
@@ -176,7 +177,7 @@ export function NewRequest() {
   const outlets = useOutlets()
   const [type, setType] = useState(sp.get('type') || '')
   const [workerId, setWorkerId] = useState(sp.get('worker') || '')
-  const [v, setV] = useState<Record<string, unknown>>({})
+  const [v, setV] = useState<Record<string, unknown>>(() => aiPrefill(sp.get('ai')))
   const [priority, setPriority] = useState('normal')
   const [ticket, setTicket] = useState<File | null>(null)
   const [files, setFiles] = useState<File[]>([])
@@ -235,6 +236,7 @@ export function NewRequest() {
       const data = { ...v, ...(reason ? { reasonLabel: reason.label, proofDays: reason.proofDays, proofExpected: reason.proof } : {}) }
       const title = `${t.label} — ${w.fullName}`
       const r = await createRequest(type, workerId, title, data, amount, type === 'emergency_leave' ? 'urgent' : priority)
+      if (sp.get('ai')) await aiDecideDraft(sp.get('ai')!, 'confirmed', refNo(r)).catch(() => {})
       const { compressImage } = await import('../lib/vault')
       const prep = async (f: File) => (f.type.startsWith('image/') ? { blob: await compressImage(f), name: f.name.replace(/\.\w+$/, '') + '.jpg', pages: 1 } : { blob: f as Blob, name: f.name, pages: 1 })
       if (ticket) { setBusy('Uploading ticket…'); await uploadDoc({ workerId, category: 'Flight ticket', title: `Flight ticket ${refNo(r)}`, requestId: r.id, source: 'request' }, await prep(ticket)) }

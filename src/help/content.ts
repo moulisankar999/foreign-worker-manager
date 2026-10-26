@@ -295,6 +295,14 @@ export const GUIDES: Guide[] = [
   { id: 'control', group: 'Settings & system', title: 'Control Center (health, errors, system map)', roles: ['ceo'],
     steps: ['Open Software Control (left menu or More).', 'Control Center shows the health checks (sync, backups, storage, renewals). Red needs action.', 'Errors lists app errors from all devices with how often they happened.', 'Know-how / System Map explains how the parts fit together.'],
     shots: ['control'] },
+  /* ---------------- AI Assistant ---------------- */
+  { id: 'assistant', group: 'Getting started', title: 'Ask the AI Assistant', roles: ALL,
+    intro: 'Assistant (left menu, or More on a phone) answers questions about your workers, expiries, requests, quota and the rules — using only what your role can already see.',
+    steps: ['Open Assistant and tap a suggestion, or type a question in plain words (e.g. "Whose permits expire in the next 60 days?").', 'Answers come with tables you can expand and links that open the worker, request or recruit in the app.', 'Pick your reply language at the top. The counter shows how many questions you have left today.', 'For work, the Assistant only prepares a draft (request, remark or reminder). Nothing happens until you tap Confirm, which runs the normal app step — or Open form to check it first.', 'New chat clears the conversation on this device.'],
+    tip: 'Passport numbers are shown to the Assistant as the last 4 digits only, and salaries only if your role can see them.',
+    important: 'The Assistant never approves, rejects, deletes or overrides anything. Check important figures in the app before acting.' },
+  { id: 'assistant-switch', group: 'Settings & system', title: 'Switch on the AI Assistant and set the daily limit', roles: ['ceo'],
+    steps: ['The Assistant stays off until an AI key is added as a Supabase secret: AI_API_KEY (required), AI_PROVIDER (gemini, openai or anthropic; default gemini) and AI_MODEL (optional).', 'The key lives only on the server — never in the app or the code. After adding it, open Assistant and tap Check again.', 'Limit (in the Assistant header) sets how many questions each user can ask per day. Every chat and confirmed draft is in the audit log.'] },
   /* ---------------- Approval & Recruitment ---------------- */
   { id: 'quota-letter', group: 'Approval & Recruitment', title: 'Record a quota approval letter', roles: ['ceo', 'gm'],
     intro: 'Approval & Recruitment (menu) keeps every approval letter as a ledger with a running balance, like a bank account.',
@@ -395,6 +403,9 @@ export const FAQS: Faq[] = [
   { roles: ['ceo', 'gm', 'hra', 'hrm'], q: 'Is a runaway or a death replaceable?', a: 'No. Only a FOMEMA fail after arrival, or a VDR-approved recruit who did not arrive, can be replaced through Immigration.' },
   { roles: ['ceo'], q: 'Can a ledger entry be deleted?', a: 'No. Like a bank, a wrong entry is reversed by a GM or the CEO with a note, and both lines stay on the record.' },
   { roles: ['gm', 'hra', 'hrm'], q: 'Can a ledger entry be deleted?', a: 'No. Like a bank, a wrong entry is reversed by another approver with a note, and both lines stay on the record.' },
+  { roles: ALL, q: 'Can the AI Assistant see everything?', a: 'No. It looks things up with your own sign-in, so it sees exactly what you can see — and nothing about people above you. Passport numbers are masked to the last 4 digits.' },
+  { roles: ALL, q: 'Can the Assistant approve or delete things?', a: 'No. It only prepares drafts. You tap Confirm, and the normal app step runs under your name.' },
+  { roles: ['ceo'], q: 'Why does the Assistant say it is not switched on?', a: 'No AI key has been added yet. Add AI_API_KEY as a Supabase secret (see "Switch on the AI Assistant"); no app update is needed.' },
 ]
 
 export const guidesFor = (r: HelpRole) => GUIDES.filter((g) => g.roles.includes(r))

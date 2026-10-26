@@ -40,9 +40,12 @@ import ControlPage, { useControlBadge } from './pages/Control'
 import HelpPage from './pages/Help'
 import QuotaPage from './pages/quota/QuotaPage'
 import { qRank } from './lib/quota'
+import Assistant from './pages/Assistant'
+import { useAiStatus } from './lib/ai'
 
 const NAV = [
   { to: '/', label: 'Home', icon: 'home', end: true },
+  { to: '/assistant', label: 'Assistant', icon: 'spark', desk: true, ai: true },
   { to: '/workers', label: 'Workers', icon: 'users' },
   { to: '/requests', label: 'Requests', icon: 'check' },
   { to: '/documents', label: 'Documents', icon: 'doc', desk: true },
@@ -73,6 +76,8 @@ function MainApp() {
   const { canWrite, role, session, myCompanies, myOutlets, can, route, isSuper, isOM } = useAuth()
   const ceoBadge = useCeoBadge()
   const ctlBadge = useControlBadge()
+  const [aiSt] = useAiStatus(session?.user.id)
+  const aiOn = aiSt?.enabled
   const allOutlets = useOutlets()
   useConfig() // re-render when a company logo changes
   const myLogo = headerLogo(role, myCompanies, myOutlets, allOutlets)
@@ -107,7 +112,7 @@ function MainApp() {
           </div>
         </div>
         <nav aria-label="Main">
-          {NAV.filter((n) => !n.mobile && (!n.ceo || isSuper) && (!n.hr || (canWrite && !isOM)) && (!n.quota || qRank(role) > 0)).map((n) => (
+          {NAV.filter((n) => !n.mobile && (!n.ceo || isSuper) && (!n.hr || (canWrite && !isOM)) && (!n.quota || qRank(role) > 0) && (!n.ai || isSuper || !!aiOn)).map((n) => (
             <NavLink key={n.to} to={n.to} end={n.end} className={({ isActive }) => (isActive || (n.to === '/' && loc.pathname.startsWith('/dashboard')) ? 'on' : '')}>
               <Icon name={n.icon} />
               <span>{n.label === 'Home' ? 'Dashboard' : n.label}</span>
@@ -161,6 +166,7 @@ function MainApp() {
             {isSuper && <Route path="/control/:tab" element={<ControlPage />} />}
             <Route path="/documents" element={<DocumentLibrary />} />
             <Route path="/inbox" element={<Inbox />} />
+            <Route path="/assistant" element={<Assistant />} />
             <Route path="/more" element={<More />} />
             <Route path="*" element={<Dashboard />} />
           </Routes>
