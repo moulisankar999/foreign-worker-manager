@@ -60,6 +60,10 @@ function useFitHeight(ref: RefObject<HTMLDivElement | null>) {
       const barTop = bar && getComputedStyle(bar).display !== 'none' ? bar.getBoundingClientRect().top : window.innerHeight
       const top = el.getBoundingClientRect().top
       el.style.height = `${Math.max(360, Math.floor(barTop - top - 12))}px`
+      // the shell may add padding below the page: trim whatever still makes the window scroll
+      const se = document.scrollingElement as HTMLElement | null
+      const over = se ? se.scrollHeight - se.clientHeight : 0
+      if (over > 0) el.style.height = `${Math.max(360, el.getBoundingClientRect().height - over)}px`
     }
     fit(); const t = setTimeout(fit, 300)
     window.addEventListener('resize', fit); window.visualViewport?.addEventListener('resize', fit)
@@ -181,7 +185,7 @@ export default function Assistant() {
   if (!st.enabled) {
     if (!isSuper) return <div className="page narrow"><Empty icon="spark" title="The assistant is coming soon">Your administrator has not switched it on yet.</Empty></div>
     return (
-      <div className="page narrow ai-page">
+      <div className="page narrow ai-off-page">
         <h1 className="row gap-s"><Icon name="spark" /> Assistant</h1>
         <Card className="ai-off" title="Assistant not switched on yet">
           <p>Everything is installed and ready. It switches on as soon as an AI provider key is added — no app update needed. Until then it stays hidden from other users.</p>
