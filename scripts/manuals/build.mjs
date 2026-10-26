@@ -113,7 +113,10 @@ function staffBody(role) {
       html += `<div class="guide">${h2(gd.title)}`
       if (gd.intro) html += `<p>${md(gd.intro)}</p>`
       html += `<ol class="steps">${gd.steps.map((x) => `<li>${md(x)}</li>`).join('')}</ol>`
-      for (const sh of gd.shots || []) { const pick = role !== 'ceo' && sh === 'dashboard' && img('dashboard-' + role) ? 'dashboard-' + role : sh; html += fig(pick, `${gd.title}${(gd.shots || []).length > 1 ? '' : ''} — the red numbers match the steps above.`, ++f) }
+      for (const sh of gd.shots || []) {
+        // Users & access shots are taken as the CEO; lower roles get their own view (users@gm.png …) or none, so no superior appears in their manual.
+        if (role !== 'ceo' && sh.startsWith('users')) { if (!img(sh + '@' + role)) continue; html += fig(sh + '@' + role, `${gd.title} — what you see (people at your level and below).`, ++f); continue }
+        const pick = role !== 'ceo' && sh === 'dashboard' && img('dashboard-' + role) ? 'dashboard-' + role : sh; html += fig(pick, `${gd.title}${(gd.shots || []).length > 1 ? '' : ''} — the red numbers match the steps above.`, ++f) }
       if (gd.tip) html += `<div class="call tip"><b class="t">Tip</b>${md(gd.tip)}</div>`
       if (gd.important) html += `<div class="call imp"><b class="t">Important</b>${md(gd.important)}</div>`
       html += `</div>`

@@ -63,7 +63,7 @@ export const ROLE_INFO: Record<HelpRole, RoleInfo> = {
     sees: ['All companies, outlets and workers', 'All requests and their history', 'Salary details and the audit log, as set in General Manager powers', 'Reports, alerts and compliance for every outlet'],
     can: ['Make the final decision (approve or reject) on requests escalated by HR Admin', 'Assign a request to anyone at your level or below, or send it on to the next approval step', 'Return a request for more information', 'Add, edit and manage workers and their documents', 'Manage users and settings through your General Manager powers', 'Review printed submissions after HR Admin has verified them'],
     cannot: [],
-    reportsTo: 'CEO.',
+    reportsTo: 'Your admin.',
     approvals: 'Requests come to you after HR Admin escalates them. Your decision is final.',
     daily: ['Requests → "Needs my action": approve, reject or return', 'Assign stuck requests to the right person', 'Check the Dashboard and Alerts', 'Review printed submissions waiting for you'],
   },
