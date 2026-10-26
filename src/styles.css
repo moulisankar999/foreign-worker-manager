@@ -880,3 +880,32 @@ img, video, canvas, svg { max-width: 100%; }
 }
 .ai-page .dt-t th { position: static; }
 [data-theme=dark] .ai-msg.is-err .ai-bubble { background: #3f1d1d; border-color: #7f1d1d; }
+
+/* AI Assistant one-screen layout (v1.5.0): the page fits the window; only the conversation scrolls */
+.ai-page.ai-fit { min-height: 0; overflow: hidden; }
+.ai-fit .ai-head { position: static; flex: none; padding-bottom: 8px; }
+.ai-fit .ai-head h1 { margin: 0; font-size: 1.35rem; }
+.ai-fit .ai-thread { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 14px 4px 10px; scrollbar-gutter: stable; }
+.ai-fit .ai-compose { position: static; flex: none; }
+.ai-fit .ai-foot { flex: none; margin: 4px 0 0; }
+.ai-fit .ai-hello { padding: 2vh 8px 8px; margin: auto 0; }
+.ai-fit .ai-orb { width: 52px; height: 52px; border-radius: 16px; }
+.ai-fit .ai-hello h2 { font-size: 1.3rem; margin: 10px 0 4px; }
+.ai-fit .ai-chips { margin-top: 14px; }
+.ai-ib { width: 34px; height: 34px; border-radius: 10px; border: 1px solid var(--line); background: var(--card); color: var(--text); display: inline-grid; place-items: center; cursor: pointer; }
+.ai-ib:hover:not(:disabled) { border-color: var(--pri); color: var(--pri); }
+.ai-ib:disabled { opacity: .4; cursor: default; }
+.ai-ib:focus-visible, .ai-table-h:focus-visible { outline: 2px solid var(--pri); outline-offset: 2px; }
+button.ai-table-h { all: unset; box-sizing: border-box; display: flex; align-items: center; gap: 6px; width: 100%; cursor: pointer; margin: 0; padding: 2px 0; }
+.ai-table.is-open .ai-table-h { margin-bottom: 6px; }
+.ai-fold-c { margin-left: auto; color: var(--muted); display: inline-grid; transition: transform .15s; }
+.ai-table.is-open .ai-fold-c { transform: rotate(180deg); }
+@media (max-width: 760px) {
+  .ai-fit .ai-head { flex-wrap: nowrap; }
+  .ai-fit .ai-head h1 { font-size: 1.15rem; }
+  .ai-fit .ai-head select.ai-lang { max-width: 108px; width: 108px; }
+  .ai-fit .ai-foot { display: none; }
+  .ai-count-t { display: none; }
+  .ai-fit .ai-chip { padding: 7px 12px; font-size: .85rem; }
+  .ai-fit .ai-thread { padding-bottom: 8px; }
+}

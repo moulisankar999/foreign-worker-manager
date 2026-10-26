@@ -1,7 +1,7 @@
 /* AI Assistant (v1.5.0): ask about workers, expiries, quota, the pipeline, follow-ups, rules and how to use the app.
  * Answers come from the ai-assistant edge function, which looks things up AS the signed-in user (same scope and
  * hide-superiors rules as the rest of the app). Actions are only drafts: nothing happens until Confirm here. */
-import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Btn, Card, Chip, Empty } from '../components/ui'
 import { Icon } from '../components/Icon'
@@ -50,19 +50,41 @@ export function Md({ text }: { text: string }) {
   return <>{blocks}</>
 }
 
-function AiTableView({ t }: { t: AiTable }) {
+/* One screen, no page scroll: the page fills the space between its top and the bottom bar (phone) or window edge;
+ * only the conversation scrolls inside it. */
+function useFitHeight(ref: RefObject<HTMLDivElement | null>) {
+  useEffect(() => {
+    const fit = () => {
+      const el = ref.current; if (!el) return
+      const bar = document.querySelector('.bottom') as HTMLElement | null
+      const barTop = bar && getComputedStyle(bar).display !== 'none' ? bar.getBoundingClientRect().top : window.innerHeight
+      const top = el.getBoundingClientRect().top
+      el.style.height = `${Math.max(360, Math.floor(barTop - top - 12))}px`
+    }
+    fit(); const t = setTimeout(fit, 300)
+    window.addEventListener('resize', fit); window.visualViewport?.addEventListener('resize', fit)
+    return () => { clearTimeout(t); window.removeEventListener('resize', fit); window.visualViewport?.removeEventListener('resize', fit) }
+  }, [ref])
+}
+
+function AiTableView({ t, open: open0 }: { t: AiTable; open: boolean }) {
+  const [open, setOpen] = useState(open0)
+  useEffect(() => { if (!open0) setOpen(false) }, [open0]) // older answers fold so the screen stays short
   const [main, ...rest] = t.columns
   const show = (v: unknown) => (v == null || v === '' ? '—' : typeof v === 'boolean' ? (v ? 'Yes' : 'No') : String(v))
   return (
-    <div className="ai-table">
-      <div className="ai-table-h"><Icon name="doc" size={16} /> <strong>{t.title}</strong> <span className="muted small">{t.rows.length}{t.more ? ` of ${t.rows.length + t.more}` : ''}</span></div>
-      <DataTable label={t.title} rows={t.rows} rowKey={(r) => String(r.id ?? r.ref ?? JSON.stringify(r))} dense searchFrom={12} pageSize={15}
+    <div className={`ai-table ${open ? 'is-open' : ''}`}>
+      <button type="button" className="ai-table-h" aria-expanded={open} title={open ? 'Fold the table' : 'Show the table'} onClick={() => setOpen(!open)}>
+        <Icon name="doc" size={16} /> <strong>{t.title}</strong> <span className="muted small">{t.rows.length}{t.more ? ` of ${t.rows.length + t.more}` : ''}</span>
+        <span className="ai-fold-c"><Icon name="chev" size={16} /></span>
+      </button>
+      {open && <DataTable label={t.title} rows={t.rows} rowKey={(r) => String(r.id ?? r.ref ?? JSON.stringify(r))} dense searchFrom={12} pageSize={8}
         columns={[
           { key: main.key, label: main.label, main: true, sort: (r) => show(r[main.key]), render: (r) => (r.link ? <Link to={String(r.link)} onClick={(e) => e.stopPropagation()}>{show(r[main.key])}</Link> : show(r[main.key])) },
           ...rest.map((c, i) => ({ key: c.key, label: c.label, hide: (i >= 3 ? 'tablet' : i >= 1 ? 'phone' : undefined) as 'phone' | 'tablet' | undefined, sort: (r: Record<string, unknown>) => (typeof r[c.key] === 'number' ? (r[c.key] as number) : show(r[c.key])), render: (r: Record<string, unknown>) => show(r[c.key]) })),
         ]}
         expand={(r) => <Details items={Object.entries(r).filter(([k]) => !['id', 'link'].includes(k) && r[k] != null && r[k] !== '').map(([k, v]) => [k.replace(/_/g, ' '), show(v)] as [string, string])} />}
-        actions={(r) => (r.link ? <Actions><IconAction kind="view" label="Open in the app" href={`#${String(r.link)}`} /></Actions> : null)} />
+        actions={(r) => (r.link ? <Actions><IconAction kind="view" label="Open in the app" href={`#${String(r.link)}`} /></Actions> : null)} />}
     </div>
   )
 }
@@ -130,9 +152,11 @@ export default function Assistant() {
   const [busy, setBusy] = useState(false)
   const [usage, setUsage] = useState<{ used: number; limit: number } | null>(null)
   const end = useRef<HTMLDivElement>(null)
+  const page = useRef<HTMLDivElement>(null)
+  useFitHeight(page)
   const sugg = useMemo(() => SUGGEST[groupOf(role)], [role])
   useEffect(() => { if (me) saveChat(me, msgs) }, [me, msgs])
-  useEffect(() => { end.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }) }, [msgs.length, busy])
+  useEffect(() => { const t = end.current?.parentElement; if (t) t.scrollTo({ top: t.scrollHeight, behavior: 'smooth' }) }, [msgs.length, busy])
   useEffect(() => { if (st?.limit != null) setUsage({ used: st.used || 0, limit: st.limit }) }, [st])
   const first = (profile?.full_name || '').split(' ')[0]
 
@@ -149,6 +173,7 @@ export default function Assistant() {
       setMsgs([...next, { role: 'assistant', text: (e as Error).message, error: true, at: new Date().toISOString() }])
     } finally { setBusy(false) }
   }
+  const lastA = msgs.reduce((a, m, i) => (m.role === 'assistant' ? i : a), -1)
   const setDraft = (mi: number, id: string, state: 'confirmed' | 'discarded', ref?: string) =>
     setMsgs((all) => all.map((m, i) => (i !== mi ? m : { ...m, drafts: m.drafts?.map((d) => (d.id === id ? { ...d, state, ref } : d)) })))
 
@@ -172,21 +197,21 @@ export default function Assistant() {
     )
   }
   return (
-    <div className="ai-page">
+    <div className="ai-page ai-fit" ref={page}>
       <div className="ai-head">
         <h1 className="row gap-s"><span className="ai-mark"><Icon name="spark" size={18} /></span> Assistant</h1>
         <div className="spacer" />
-        {usage && <span className="muted small" title="Questions asked today / daily limit">{usage.used}/{usage.limit} today</span>}
+        {usage && <span className="muted small ai-count" title="Questions asked today / daily limit">{usage.used}/{usage.limit}<span className="ai-count-t"> today</span></span>}
         <select aria-label="Reply language" className="ai-lang" value={lang} onChange={(e) => { setLang(e.target.value); localStorage.setItem('fwm-ai-lang', e.target.value) }}>{AI_LANGS.map((l) => <option key={l.code} value={l.code}>{l.label}</option>)}</select>
-        {isSuper && <Btn small icon="gear" title="Daily question limit per user" onClick={async () => { const v = prompt('Questions per user per day (0 switches the assistant off for everyone):', String(usage?.limit ?? 40)); if (v == null) return; try { await aiSetLimit(Number(v)); await refresh(); toast('Daily limit saved') } catch (e) { toast((e as Error).message, 'err') } }}>Limit</Btn>}
-        <Btn small icon="plus" disabled={!msgs.length} onClick={() => { clearChat(me); setMsgs([]) }}>New chat</Btn>
+        {isSuper && <button type="button" className="ai-ib" title="Daily question limit per user" aria-label="Daily question limit per user" onClick={async () => { const v = prompt('Questions per user per day (0 switches the assistant off for everyone):', String(usage?.limit ?? 40)); if (v == null) return; try { await aiSetLimit(Number(v)); await refresh(); toast('Daily limit saved') } catch (e) { toast((e as Error).message, 'err') } }}><Icon name="gear" size={17} /></button>}
+        <button type="button" className="ai-ib" title="New chat (clears this conversation on this device)" aria-label="New chat" disabled={!msgs.length} onClick={() => { clearChat(me); setMsgs([]) }}><Icon name="plus" size={17} /></button>
       </div>
       <div className="ai-thread" aria-live="polite">
         {msgs.length === 0 && (
           <div className="ai-hello">
             <div className="ai-orb"><Icon name="spark" size={28} /></div>
             <h2>{first ? `Hi ${first}, how can I help?` : 'How can I help?'}</h2>
-            <p className="muted">I look things up with your own access — workers, expiries, quota, recruits, follow-ups, rules and how to use the app. I can prepare requests, notes and reminders for you to confirm.</p>
+            <p className="muted">I look things up with your own access and prepare requests, notes and reminders for you to confirm.</p>
             <div className="ai-chips">{sugg.map((s) => <button key={s} className="ai-chip" onClick={() => ask(s)}>{s}</button>)}</div>
           </div>
         )}
@@ -198,7 +223,7 @@ export default function Assistant() {
             </div>
             {(m.tables?.length || m.drafts?.length) ? (
               <div className="ai-extras">
-                {m.tables?.map((t, j) => <AiTableView key={j} t={t} />)}
+                {m.tables?.map((t, j) => <AiTableView key={j} t={t} open={i === lastA && j === 0} />)}
                 {m.drafts?.map((d) => <DraftCard key={d.id} d={d} onDone={(s, ref) => setDraft(i, d.id, s, ref)} />)}
               </div>
             ) : null}
@@ -212,7 +237,7 @@ export default function Assistant() {
           onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void ask(text) } }} />
         <button className="ai-send" type="submit" disabled={busy || !text.trim()} aria-label="Send" title="Send"><Icon name="send" size={18} /></button>
       </form>
-      <p className="ai-foot muted small">Answers can be wrong — check before you act. Passport numbers are masked; nothing is changed without your Confirm.</p>
+      <p className="ai-foot muted small">Answers can be wrong — check before you act. Nothing changes without your Confirm.</p>
     </div>
   )
 }

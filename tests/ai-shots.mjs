@@ -45,6 +45,7 @@ async function shoot(who, tag, questions = []) {
     await p.goto(UI + '#/assistant'); await p.waitForTimeout(2500)
     if (!questions.length) await p.screenshot({ path: `${OUT}${tag}-${vn}.png`, fullPage: false })
     for (const q of questions) { await p.fill('.ai-compose textarea', q); await p.keyboard.press('Enter'); await p.waitForSelector('.ai-typing, .ai-dots', { state: 'detached', timeout: 30000 }).catch(() => {}); await p.waitForTimeout(3500) }
+    const sc = await p.evaluate(() => ({ doc: document.scrollingElement.scrollHeight, win: innerHeight })); console.log(tag, vn, sc.doc <= sc.win + 2 ? 'one screen' : `PAGE SCROLLS ${sc.doc}>${sc.win}`)
     if (questions.length) {
       await p.screenshot({ path: `${OUT}${tag}-${vn}.png`, fullPage: false })
       const row = p.locator('tr.dt-click').first(); if (vn === 'desktop' && await row.count()) { await row.locator('td').nth(3).click({ force: true }); await p.waitForTimeout(600); await p.screenshot({ path: `${OUT}${tag}-${vn}-expanded.png`, fullPage: false }) }
@@ -67,7 +68,7 @@ try {
   cli('secrets set AI_PROVIDER=mock AI_ALLOW_MOCK=1'); await new Promise((r) => setTimeout(r, 15000))
   await shoot('ceo', '02-ceo-ready')
   await shoot('om', '03-om-expiries-table', ['Whose permits expire in the next 60 days?'])
-  await shoot('hrm', '04-hrm-draft-request', ['Draft annual leave for Ravi Kumar, 1–5 Dec, family visit'])
+  await shoot('hrm', '04-hrm-draft-request', ['Whose permits expire in the next 60 days?', 'Draft annual leave for Ravi Kumar, 1–5 Dec, family visit'])
   await shoot('hrm', '05-hrm-reminder', ['Remind me to check the hostel fire extinguishers on 6 Nov 10:30'])
 } catch (e) { console.log('ERROR', e.message) } finally {
   await browser.close()
