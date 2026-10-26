@@ -4,7 +4,7 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { Btn, Card, Chip } from './ui'
 import { db } from '../lib/db'
 import { normRole, useAuth } from '../lib/auth'
-import { ROLES, ROLE_HELP, ROLE_LABEL } from '../lib/workflow'
+import { ROLES, ROLE_HELP, ROLE_LABEL, rolesUpTo } from '../lib/workflow'
 import { supabase, type Profile, type Role } from '../lib/supabase'
 import { discardLocalData, localOnlyData, syncNow, uploadLocalData, useSyncStatus, type LocalOnly } from '../lib/sync'
 import { currentSubscription, disablePush, enablePush, isIOS, isStandalone, pushSupported, sendTestPush } from '../lib/push'
@@ -95,7 +95,8 @@ const ROLE_TONE: Record<string, string> = { super_admin: 'purple', general_manag
 const roleName = (r?: string) => ROLE_LABEL[normRole(r) || ''] || '—'
 
 export function UsersCard() {
-  const { session, isSuper, isGm, myCompanies, myOutlets, canApproveUsers, creatableRoles } = useAuth()
+  const { session, isSuper, isGm, myCompanies, myOutlets, canApproveUsers, creatableRoles, role: myRole } = useAuth()
+  const seeRoles = rolesUpTo(myRole)
   const [adding, setAdding] = useState(false)
   const [focus, setFocus] = useState<{ key: string } | null>(null)
   const [dirtyIds, setDirtyIds] = useState<string[]>([])
@@ -104,7 +105,7 @@ export function UsersCard() {
   const [err, setErr] = useState('')
   const outlets = useLiveQuery(() => db.outlets.toArray(), [], [])
   const load = async () => {
-    const { data, error } = await supabase.from('profiles').select('*').order('created_at')
+    const { data, error } = await supabase.from('profiles_v').select('*').order('created_at')
     if (error) setErr(error.message); else { setUsers(data as Profile[]); setErr('') }
   }
   useEffect(() => {
@@ -128,7 +129,7 @@ export function UsersCard() {
     <Card title={`Users (${users.length})`} actions={<>{creatableRoles.length > 0 && <Btn small kind="primary" icon="plus" onClick={() => setAdding(true)}>Add user</Btn>}<IconAction kind="refresh" label="Refresh the list" onClick={() => void load()} /></>}>
       <p className="muted small">Staff can create their own account on the sign-in page (“Create account”) and wait for approval{creatableRoles.length > 0 ? <> — or press <strong>Add user</strong> to add someone directly (active at once, with a temporary password)</> : ''}. New sign-ups appear on the dashboard under <strong>Needs my action</strong> and here — approve them, pick their role and the companies / outlets they work for.</p>
       {adding && <AddUserDialog onClose={() => { setAdding(false); void load() }} onEditExisting={(id) => { setAdding(false); setFocus({ key: id }) }} />}
-      <ul className="small muted role-help">{ROLES.filter((r) => isSuper || r !== 'general_manager').map((r) => <li key={r}><strong>{ROLE_LABEL[r]}</strong>: {ROLE_HELP[r]}</li>)}</ul>
+      <ul className="small muted role-help">{seeRoles.map((r) => <li key={r}><strong>{ROLE_LABEL[r]}</strong>: {ROLE_HELP[r]}</li>)}</ul>
       {err && <p className="err">{err}</p>}
       <div className="row gap-s wrap small"><Chip tone="green">Active {counts.active}</Chip><Chip tone="amber">Paused {counts.paused}</Chip><Chip tone="blue">Pending {pending.length}</Chip>{deleted.length > 0 && <Chip tone="red">Deleted {deleted.length}</Chip>}</div>
       {pending.length > 0 && <>
@@ -139,7 +140,7 @@ export function UsersCard() {
         rowClass={(u) => `${dirtyIds.includes(u.id) ? 'is-dirty' : ''}${focus?.key === u.id ? ' is-focus' : ''}${u.status === 'paused' ? ' dt-warn' : ''}`}
         search={(u) => hiddenCeo(u) ? (u.full_name || u.email || '') : `${u.full_name} ${u.email} ${roleName(u.role)} ${u.status}`} searchLabel="Search users"
         filters={[
-          { key: 'role', label: 'Role', options: ROLES.filter((r) => isSuper || r !== 'general_manager').map((r) => ({ value: r, label: ROLE_LABEL[r] })), match: (u, v) => normRole(u.role) === v },
+          { key: 'role', label: 'Role', options: seeRoles.map((r) => ({ value: r, label: ROLE_LABEL[r] })), match: (u, v) => normRole(u.role) === v },
           { key: 'status', label: 'Status', options: [{ value: 'active', label: 'Active' }, { value: 'paused', label: 'Paused' }, { value: 'inactive', label: 'Switched off' }], match: (u, v) => !hiddenCeo(u) && u.status === v },
         ]}
         initialSort={{ key: 'name', dir: 'asc' }}
@@ -210,7 +211,7 @@ function UserRow({ u, me, roles, allowed, companies, outlets, may, onSaved, onDi
     const { data, error } = await supabase.from('profiles').update(patch).eq('id', u.id).select('role, company_ids, outlet_ids').maybeSingle()
     setBusy(false)
     if (error || !data) {
-      const t = !error ? 'Not saved — this user is managed by the CEO or another user manager.' : /at least one active/i.test(error.message) ? 'Not saved — you need at least one active CEO.' : 'Not saved — ' + error.message.replace(/^.*?ERROR:\s*/, '')
+      const t = !error ? 'Not saved — this user is managed by another user manager.' : /at least one active/i.test(error.message) ? 'Not saved — you need at least one active CEO.' : 'Not saved — ' + error.message.replace(/^.*?ERROR:\s*/, '')
       setMsg({ ok: false, text: t }); toast(t, 'err'); return
     }
     const nowRole = ROLE_LABEL[normRole((data as Profile).role) || ''] || (data as Profile).role

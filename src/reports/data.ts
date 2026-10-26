@@ -72,10 +72,10 @@ export function useExtra(def: ReportDef | undefined, f: Filters, subs: Extra['su
       void q.then(({ data, error }) => { if (alive) set({ loading: false, audit: (data || []) as Extra['audit'], error: error?.message }) })
     } else if (need === 'users') {
       set({ loading: true })
-      void supabase.from('profiles').select('id,email,full_name,role,status,outlet_ids,company_ids,approved_by_name,approved_at,created_at').order('full_name').then(({ data, error }) => {
+      void supabase.from('profiles_v').select('id,email,full_name,role,status,outlet_ids,company_ids,approved_by_name,approved_at,created_at').order('full_name').then(({ data, error }) => {
         if (!alive) return
         if (error && /approved_by_name|approved_at|column/i.test(error.message)) {
-          void supabase.from('profiles').select('id,email,full_name,role,status,outlet_ids,company_ids,created_at').order('full_name').then((r) => { if (alive) set({ loading: false, users: (r.data || []) as Extra['users'], error: r.error?.message }) })
+          void supabase.from('profiles_v').select('id,email,full_name,role,status,outlet_ids,company_ids,created_at').order('full_name').then((r) => { if (alive) set({ loading: false, users: (r.data || []) as Extra['users'], error: r.error?.message }) })
         } else set({ loading: false, users: (data || []) as Extra['users'], error: error?.message })
       })
     } else set({ loading: false })

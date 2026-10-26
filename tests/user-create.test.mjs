@@ -127,15 +127,15 @@ try {
     check('self sign-up with forged metadata stays pending viewer', fp?.status === 'pending' && fp.role === 'viewer', JSON.stringify(fp)) }
 
   // ------------------------------------------------ editing: only roles below your own, only users below you
-  let e = await S.c.from('profiles').update({ role: 'super_admin' }).eq('id', U.hra.id).select()
+  let e = await S.c.from('profiles').update({ role: 'super_admin' }).eq('id', U.hra.id).select('id, role, status, outlet_ids, company_ids, must_change_password')
   check('CEO cannot make another CEO from the app', !!e.error && /CEO role/.test(e.error.message), JSON.stringify(e.error))
-  e = await U.gm.c.from('profiles').update({ role: 'general_manager' }).eq('id', U.hra.id).select()
+  e = await U.gm.c.from('profiles').update({ role: 'general_manager' }).eq('id', U.hra.id).select('id, role, status, outlet_ids, company_ids, must_change_password')
   check('GM cannot make a GM', !!e.error || !e.data?.length)
-  e = await U.hra.c.from('profiles').update({ role: 'hr_admin' }).eq('id', U.hrm.id).select()
+  e = await U.hra.c.from('profiles').update({ role: 'hr_admin' }).eq('id', U.hrm.id).select('id, role, status, outlet_ids, company_ids, must_change_password')
   check('HR Admin cannot make an HR Admin', !!e.error || !e.data?.length)
-  e = await U.hrm.c.from('profiles').update({ role: 'viewer' }).eq('id', U.om.id).select()
+  e = await U.hrm.c.from('profiles').update({ role: 'viewer' }).eq('id', U.om.id).select('id, role, status, outlet_ids, company_ids, must_change_password')
   check('HR Manager cannot edit roles', !!e.error || !e.data?.length)
-  e = await S.c.from('profiles').update({ role: 'hr_manager', company_ids: ['main'] }).eq('id', U.v.id).select()
+  e = await S.c.from('profiles').update({ role: 'hr_manager', company_ids: ['main'] }).eq('id', U.v.id).select('id, role, status, outlet_ids, company_ids, must_change_password')
   check('CEO can still change roles below CEO', !e.error && e.data?.[0]?.role === 'hr_manager', JSON.stringify(e.error))
   const cr = await U.hrm.c.rpc('creatable_roles', { p_actor: U.hrm.id })
   check('creatable_roles for HR Manager = Outlet Manager', JSON.stringify(cr.data) === '["outlet_manager"]', JSON.stringify(cr))

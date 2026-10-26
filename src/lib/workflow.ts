@@ -16,6 +16,11 @@ export const ROLE_HELP: Record<string, string> = {
 }
 /** approval authority: higher number can approve more */
 export const RANK: Record<string, number> = { hr_manager: 1, hr_admin: 2, general_manager: 3, super_admin: 3 }
+/** who may see whom: same order as role_rank() in the database. Nobody sees a level above their own. */
+export const HIER_RANK: Record<string, number> = { super_admin: 5, admin: 5, general_manager: 4, hr_admin: 3, hr_manager: 2, manager: 2, outlet_manager: 1, viewer: 0 }
+export const hierRank = (r?: string | null) => HIER_RANK[r || ''] ?? 0
+/** the roles at my own level or below (role filters, role help) */
+export const rolesUpTo = (my?: string | null) => ROLES.filter((r) => hierRank(r) <= hierRank(my))
 
 export type Level = 'hr_manager' | 'hr_admin' | 'super_admin'
 export type Effect = 'passport' | 'leave' | 'increment' | 'advance' | 'loan' | 'deduction' | 'penalty' | 'memo' | 'transfer' | 'exit' | 'absconded' | 'details' | 'letter' | 'note'
@@ -114,13 +119,16 @@ export interface RequestRow {
   /** set when the CEO / GM assigned or escalated the request to a specific person (cleared once the request moves on) */
   assigned_to?: string | null; assigned_to_name?: string | null; assigned_role?: string | null
   assigned_by?: string | null; assigned_by_name?: string | null; assigned_by_role?: string | null; assigned_at?: string | null
+  /** from requests_v: assigned at a higher level to someone else — only that person (or above) can move it on */
+  assign_held?: boolean
 }
 /** assigned to someone else at this stage: only that person (or the CEO) decides — same rule as request_act on the server */
 export const assignedToOther = (r: Pick<RequestRow, 'assigned_to'>, userId: string, role: string) => !!r.assigned_to && r.assigned_to !== userId && role !== 'super_admin'
 /** may this user use the Assign button (server: request_assign) */
-export const canAssign = (r: Pick<RequestRow, 'status' | 'ceo_locked' | 'assigned_to' | 'assigned_by_role'>, role: string, userId: string) =>
+export const canAssign = (r: Pick<RequestRow, 'status' | 'ceo_locked' | 'assigned_to' | 'assigned_by_role' | 'assign_held'>, role: string, userId: string) =>
   ['manager_review', 'submitted', 'returned', 'recommended', 'escalated'].includes(r.status) &&
-  (role === 'super_admin' || (role === 'general_manager' && !r.ceo_locked && !(r.assigned_to && r.assigned_to !== userId && (r.assigned_by_role === 'super_admin' || r.assigned_by_role === 'admin'))))
+  (role === 'super_admin' || (role === 'general_manager' && !r.ceo_locked && !r.assign_held
+    && !(r.assigned_to && r.assigned_to !== userId && (r.assigned_by_role === 'super_admin' || r.assigned_by_role === 'admin'))))
 
 /** Who takes the final ("top") decision: the General Manager if one is active with the matching power, otherwise the CEO. */
 export interface ApprovalRoute { gmFinal?: boolean; gmLoans?: boolean; gmIncrements?: boolean }

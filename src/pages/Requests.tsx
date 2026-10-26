@@ -37,12 +37,15 @@ const when = (iso: string) => {
   return `${d.getDate()} ${d.toLocaleString('en-GB', { month: 'short' })} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 const who = (e: Pick<RequestEvent, 'by_role' | 'by_name'>) => `${shortRole(e.by_role)}${e.by_name ? ` (${e.by_name})` : ''}`
+/** " by GM (name)" — empty when the person is above the viewer (the server leaves the name out) */
+const byWho = (e: Pick<RequestEvent, 'by_role' | 'by_name'>) => (e.by_role || e.by_name ? ` by ${who(e)}` : '')
+const toWho = (e: Pick<RequestEvent, 'to_role' | 'to_name'>) => (e.to_role || e.to_name ? ` → ${shortRole(e.to_role)}${e.to_name ? `: ${e.to_name}` : ''}` : ' → next approval step')
 /** one readable timeline line for assign / escalate / skipped / CEO steps; null = use the default line */
 function eventLine(e: RequestEvent): string | null {
   const meta = (e.meta || {}) as { kind?: string }
   if (e.action === 'assign' || e.action === 'escalate')
-    return `${e.action === 'assign' ? 'Assigned' : 'Escalated'} by ${who(e)} → ${shortRole(e.to_role)}${e.to_name ? `: ${e.to_name}` : ''}, ${when(e.at)}`
-  if (e.action === 'skipped') return `${shortRole(e.to_role)} step skipped by ${who(e)}, ${when(e.at)}`
+    return `${e.action === 'assign' ? 'Assigned' : 'Escalated'}${byWho(e)}${toWho(e)}, ${when(e.at)}`
+  if (e.action === 'skipped') return `${e.to_role ? `${shortRole(e.to_role)} step` : 'A step'} skipped${byWho(e)}, ${when(e.at)}`
   if (e.action === 'ceo_reviewed') return `Reviewed by ${who(e)}, ${when(e.at)}`
   if (e.action === 'ceo_recall') return `Recalled by ${who(e)} → CEO${e.to_name ? `: ${e.to_name}` : ''}, ${when(e.at)}`
   if (e.action === 'ceo_overrule' && meta.kind === 'amend') return `Amended by ${who(e)}, ${when(e.at)}`
@@ -155,8 +158,8 @@ export function HrTasksCard({ tasks, title = 'HR follow-up tasks' }: { tasks: Hr
               {t.status === 'open' && <IconAction kind="approve" label="Mark done" disabled={busy === t.id} onClick={() => done(t)} />}
             </Actions>
           )}
-          expand={(t) => <Details items={[['Details', t.details], ['Created by', `${t.created_by_name} · ${new Date(t.created_at).toLocaleString()}`],
-            ['Done', t.status === 'done' ? `${t.done_by_name} · ${t.done_at ? new Date(t.done_at).toLocaleString() : ''}${t.done_note ? ` — ${t.done_note}` : ''}` : ''],
+          expand={(t) => <Details items={[['Details', t.details], ['Created', `${t.created_by_name ? t.created_by_name + ' · ' : ''}${new Date(t.created_at).toLocaleString()}`],
+            ['Done', t.status === 'done' ? `${t.done_by_name ? t.done_by_name + ' · ' : ''}${t.done_at ? new Date(t.done_at).toLocaleString() : ''}${t.done_note ? ` — ${t.done_note}` : ''}` : ''],
             ['Request', t.request_id ? <Link to={`/requests/${t.request_id}`}>Open request</Link> : '']]} />} />
       )}
     </Card>
@@ -353,7 +356,7 @@ export function RequestDetail() {
       <div className="page-h"><div className="row gap-s"><Btn kind="ghost" icon="back" onClick={() => nav(-1)} title="Back" /><h1>{t?.icon} {t?.label || r.type}</h1></div></div>
       <Card>
         {r.assigned_to && (
-          <p className="callout small mb-s"><strong>Assigned to: {r.assigned_to_name || '—'} ({shortRole(r.assigned_role)})</strong>
+          <p className="callout small mb-s"><strong>Assigned to: {r.assigned_to_name ? `${r.assigned_to_name} (${shortRole(r.assigned_role)})` : 'the next approval step'}</strong>
             {r.assigned_by_name && <span className="muted"> · by {shortRole(r.assigned_by_role)} ({r.assigned_by_name}){r.assigned_at ? `, ${when(r.assigned_at)}` : ''}</span>}</p>
         )}
         <div className="row gap-s wrap">
@@ -374,11 +377,11 @@ export function RequestDetail() {
           ...(r.type === 'emergency_leave' ? [['Emergency', String(r.data.reasonLabel || r.data.reasonKey)] as [string, string], ...(r.data.relationship ? [['Family member', String(r.data.relationship)] as [string, string]] : []), ...(r.data.reasonDetail ? [['Details', String(r.data.reasonDetail)] as [string, string]] : [])] : []),
           ...fields.map((f) => [f.label, show(f)] as [string, string]),
           ...(r.manager_decided_by_name ? [['Outlet manager', `${r.manager_decided_by_name}${r.manager_decided_at ? ' · ' + new Date(r.manager_decided_at).toLocaleString() : ''}`] as [string, string]] : []),
-          ...(r.decided_by_name ? [['Decision', decidedLine(r)] as [string, string]] : []),
-          ...(r.applied_by_name ? [['Applied by', `${r.applied_by_name}${r.result?.summary ? ' — ' + r.result.summary : ''}`] as [string, string]] : []),
+          ...(r.decided_by_name || r.decided_at ? [['Decision', decidedLine(r)] as [string, string]] : []),
+          ...(r.applied_by_name || r.applied_at ? [['Applied', `${r.applied_by_name || 'Done'}${r.result?.summary ? ' — ' + r.result.summary : ''}`] as [string, string]] : []),
           ...(r.result?.ticketDecision ? [['Ticket decision', String(r.result.ticketDecision).replace('_', ' ')] as [string, string]] : []),
         ]} />
-        {r.ceo_locked && !isSuper && <p className="callout small mt-s">🔒 Updated by CEO{r.ceo_updated_at ? ` · ${new Date(r.ceo_updated_at).toLocaleString()}` : ''}. This is the CEO's final decision.</p>}
+        {r.ceo_locked && !isSuper && <p className="callout small mt-s">🔒 A final decision has been made on this request. It is locked.</p>}
         {r.ceo_locked && isSuper && <p className="callout small mt-s">🔒 Your decision is final and locks this request for everyone else.</p>}
       </Card>
 
@@ -425,7 +428,7 @@ export function RequestDetail() {
 
       {(actions.length > 0 || assignable) && (
         <Card title="Actions">
-          {r.assigned_to && r.assigned_to !== uidMe && !isSuper && <p className="muted small">Assigned to {r.assigned_to_name} ({shortRole(r.assigned_role)}) — they make the decision at this step.</p>}
+          {r.assigned_to && r.assigned_to !== uidMe && !isSuper && <p className="muted small">{r.assigned_to_name ? `Assigned to ${r.assigned_to_name} (${shortRole(r.assigned_role)}) — they make the decision at this step.` : 'This step is with the next approver.'}</p>}
           <div className="row gap-s wrap">
             {assignable && <Btn kind="secondary" icon="users" onClick={() => setAssignOpen(true)}>Assign…</Btn>}
             {actions.filter((a) => a !== 'comment').map((a) => (
@@ -453,7 +456,7 @@ export function RequestDetail() {
               <div>
                 {eventLine(e) ? <strong>{eventLine(e)}</strong> : <><strong>{e.action === 'ceo_overrule' || e.action === 'ceo_recall' ? `${ACTION_LABEL[e.action]} ${e.by_name}: ${STATUS_LABEL[e.from_status as keyof typeof STATUS_LABEL] || e.from_status} → ${STATUS_LABEL[e.to_status as keyof typeof STATUS_LABEL] || e.to_status}` : ACTION_LABEL[e.action] || (e.action === 'submit' ? 'Submitted' : e.action === 'update' ? 'Updated' : e.action)}</strong>
                 {e.to_status && e.action !== 'submit' && !e.action.startsWith('ceo_') && <> → <Chip tone={STATUS_TONE[e.to_status as keyof typeof STATUS_TONE] || 'gray'}>{STATUS_LABEL[e.to_status as keyof typeof STATUS_LABEL] || e.to_status}</Chip></>}
-                <small className="muted"> · {e.by_name} ({ROLE_LABEL[e.by_role || ''] || e.by_role}) · {new Date(e.at).toLocaleString()}</small></>}
+                <small className="muted">{e.by_name || e.by_role ? ` · ${e.by_name || ''} (${ROLE_LABEL[e.by_role || ''] || e.by_role || ''})` : ''} · {new Date(e.at).toLocaleString()}</small></>}
                 {e.comment && e.action !== 'skipped' && <p className="tl-c">{e.comment}</p>}
                 <AmendDiff e={e} />
               </div>
@@ -488,7 +491,8 @@ function AssignModal({ r, onClose }: { r: RequestRow; onClose: () => void }) {
     try {
       const x = await assignRequest(r.id, userSel, note)
       const p = people.find((a) => a.id === userSel)
-      toast(`${refNo(r)} ${x.status === 'escalated' && (roleSel === 'super_admin' || roleSel === 'general_manager') ? 'escalated' : 'assigned'} to ${p?.name || ''} (${shortRole(roleSel)})`)
+      toast(roleSel === 'next_step' ? `${refNo(r)} escalated to the next approval step`
+        : `${refNo(r)} ${x.status === 'escalated' && (roleSel === 'super_admin' || roleSel === 'general_manager') ? 'escalated' : 'assigned'} to ${p?.name || ''} (${shortRole(roleSel)})`)
       onClose()
     } catch (e) { err(e) } finally { setBusy(false) }
   }

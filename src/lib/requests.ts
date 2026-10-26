@@ -45,7 +45,7 @@ export function useRequests(opts: { workerId?: string } = {}) {
   useEffect(() => {
     let alive = true
     ;(async () => {
-      let q = supabase.from('requests').select('*').order('updated_at', { ascending: false }).limit(1000)
+      let q = supabase.from('requests_v').select('*').order('updated_at', { ascending: false }).limit(1000)
       if (opts.workerId) q = q.eq('worker_id', opts.workerId)
       const { data, error } = await q
       if (!alive) return
@@ -69,8 +69,8 @@ export function useRequest(id?: string) {
     let alive = true
     ;(async () => {
       const [{ data: r, error }, { data: ev }] = await Promise.all([
-        supabase.from('requests').select('*').eq('id', id).maybeSingle(),
-        supabase.from('request_events').select('*').eq('request_id', id).order('at'),
+        supabase.from('requests_v').select('*').eq('id', id).maybeSingle(),
+        supabase.from('request_events_v').select('*').eq('request_id', id).order('at'),
       ])
       if (!alive) return
       setState({ req: r as RequestRow | null, events: (ev || []) as RequestEvent[], loading: false, error: error ? error.message : '' })

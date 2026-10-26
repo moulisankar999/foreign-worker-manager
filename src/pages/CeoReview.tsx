@@ -21,10 +21,12 @@ export function useCeoBadge() {
 
 const when = (iso?: string | null) => (iso ? new Date(iso).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '')
 export function decidedLine(r: Pick<RequestRow, 'status' | 'decided_by_name' | 'decided_by_role' | 'decided_at'>) {
-  if (!r.decided_by_name) return ''
+  if (!r.decided_by_name && !r.decided_at) return ''
   const verb = r.status === 'rejected' ? 'Rejected' : r.status === 'cancelled' ? 'Cancelled' : 'Approved'
   const who = r.decided_by_role === 'super_admin' ? 'CEO' : r.decided_by_role ? ROLE_LABEL[r.decided_by_role] || r.decided_by_role : ''
-  return `${verb} by ${who ? who + ' ' : ''}${r.decided_by_name}${r.decided_at ? ' · ' + when(r.decided_at) : ''}`
+  // the decider's name / role is left out by the server when they are above the viewer: show the outcome only
+  const by = r.decided_by_name ? ` by ${who ? who + ' ' : ''}${r.decided_by_name}` : ''
+  return `${verb}${by}${r.decided_at ? ' · ' + when(r.decided_at) : ''}`
 }
 
 type View = 'todo' | 'done' | 'any'

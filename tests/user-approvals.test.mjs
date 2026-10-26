@@ -119,7 +119,7 @@ try {
   check('HR admin cannot give outlets of another company', !!x.error)
   x = await HRA.c.rpc('approve_user', { p_id: U.p1.id, p_role: 'outlet_manager', p_company_ids: [], p_outlet_ids: [] })
   check('HR admin must choose a company/outlet', !!x.error)
-  x = await HRA.c.from('profiles').update({ role: 'hr_admin', status: 'active' }).eq('id', U.p5.id).select()
+  x = await HRA.c.from('profiles').update({ role: 'hr_admin', status: 'active' }).eq('id', U.p5.id).select('id, role, status, outlet_ids, company_ids, must_change_password')
   check('direct table update cannot bypass the rules', !!x.error || !x.data?.length)
   x = await HRA.c.rpc('approve_user', { p_id: U.p1.id, p_role: 'outlet_manager', p_company_ids: [], p_outlet_ids: ['O1'] })
   check('HR admin approves sign-up as outlet manager of O1', x.data?.status === 'active' && x.data?.approved_by === HRA.id, JSON.stringify(x.error))
@@ -144,8 +144,8 @@ try {
   x = await S.c.rpc('approve_user', { p_id: U.p3.id, p_role: 'hr_manager', p_company_ids: ['c2'] })
   check('super admin approves unassigned sign-up into company c2', x.data?.status === 'active' && x.data?.approved_by_role === 'super_admin', JSON.stringify(x.error))
   check('no "approved by HR" notification for super admin approvals', (await inApp(S.id, 'userapproved:' + U.p3.id)).length === 0)
-  x = await S.c.from('profiles').update({ approved_by_name: 'Forged' }).eq('id', U.p2.id).select().single()
-  check('approval stamps cannot be forged', !x.data?.approved_by_name)
+  x = await S.c.from('profiles').update({ approved_by_name: 'Forged' }).eq('id', U.p2.id).select('id').single()
+  check('approval stamps cannot be forged', !(await prof('p2')).approved_by_name)
 
   // company data scoping
   const pull = async (k) => { const r = await U[k].c.rpc('pull_records', { p_since: '1970-01-01', p_limit: 1000 }); if (r.error) throw r.error; return r.data.filter((r) => r.entity === 'workers' && !r.deleted).map((r) => r.id).sort().join() }
@@ -165,7 +165,7 @@ try {
   // user management scope
   const seen = ((await HRA.c.from('profiles').select('id')).data || []).map((r) => r.id)
   check('HR admin user list: his company users, not other companies', seen.includes(U.p1.id) && !seen.includes(U.p3.id) && !seen.includes(U.p2.id), JSON.stringify(seen.length))
-  x = await HRA.c.from('profiles').update({ role: 'viewer' }).eq('id', U.p3.id).select()
+  x = await HRA.c.from('profiles').update({ role: 'viewer' }).eq('id', U.p3.id).select('id, role, status, outlet_ids, company_ids, must_change_password')
   check('HR admin cannot change users of other companies', !!x.error || !x.data?.length)
 
   // requests + notifications follow the scope

@@ -35,7 +35,7 @@ export function useHrTasks(enabled: boolean, requestId?: string) {
   useEffect(() => {
     if (!enabled) return
     let alive = true
-    let q = supabase.from('hr_tasks').select('*').order('created_at', { ascending: false }).limit(300)
+    let q = supabase.from('hr_tasks_v').select('*').order('created_at', { ascending: false }).limit(300)
     if (requestId) q = q.eq('request_id', requestId)
     void q.then(({ data }) => { if (alive && data) setRows(data as HrTask[]) })
     return () => { alive = false }

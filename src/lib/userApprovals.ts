@@ -16,8 +16,8 @@ export async function refreshPendingUsers() {
   try {
     const since = new Date(Date.now() - 30 * 86400000).toISOString()
     const [p, r] = await Promise.all([
-      supabase.from('profiles').select('*').eq('status', 'pending').order('created_at'),
-      supabase.from('profiles').select('*').or(`approved_at.gte.${since},rejected_at.gte.${since}`).limit(50),
+      supabase.from('profiles_v').select('*').eq('status', 'pending').order('created_at'),
+      supabase.from('profiles_v').select('*').or(`approved_at.gte.${since},rejected_at.gte.${since}`).limit(50),
     ])
     if (p.error) state = { ...state, loaded: true, error: p.error.message }
     else {

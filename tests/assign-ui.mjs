@@ -21,6 +21,8 @@ for (const [k, role, name] of [['ceo', 'super_admin', 'UI CEO'], ['gm', 'general
   users[k] = { id: data.user.id, email, name }
 }
 const ids = Object.values(users).map((u) => u.id)
+// the newest worker fixture left by worker-ui (falls back to the old fixed id)
+const WID = (await admin.from('worker_access').select('worker_id').like('worker_id', 'wu-w-%').order('worker_id', { ascending: false }).limit(1)).data?.[0]?.worker_id || 'wu-w-mvlwluod'
 let reqId = null
 const browser = await chromium.launch()
 const login = async (u) => {
@@ -34,7 +36,7 @@ try {
   // the HR Manager raises a request (normal chain starts at the HR Manager step)
   const c = createClient(URL_, env.TEST_ANON_KEY, { auth: { persistSession: false } })
   await c.auth.signInWithPassword({ email: users.hrm.email, password: pw })
-  const { data: r, error } = await c.rpc('request_create', { p_type: 'annual_leave', p_worker_id: 'wu-w-mvlwluod', p_title: 'UI assign test', p_data: { from: '2026-12-01', to: '2026-12-03', reason: 'UI assign test' }, p_amount: null, p_priority: 'normal' })
+  const { data: r, error } = await c.rpc('request_create', { p_type: 'annual_leave', p_worker_id: WID, p_title: 'UI assign test', p_data: { from: '2026-12-01', to: '2026-12-03', reason: 'UI assign test' }, p_amount: null, p_priority: 'normal' })
   if (error) throw error
   reqId = r.id
   check('setup: request created at the HR Manager step', r.status === 'submitted', r.status)

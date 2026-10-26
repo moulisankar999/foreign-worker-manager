@@ -69,7 +69,7 @@ export function UserApprovalRulesCard() {
   const [admins, setAdmins] = useState<Profile[]>([])
   const [msg, setMsg] = useState('')
   useEffect(() => {
-    void supabase.from('profiles').select('*').eq('status', 'active').in('role', ['hr_admin']).order('full_name').then(({ data }) => setAdmins((data || []) as Profile[]))
+    void supabase.from('profiles_v').select('*').eq('status', 'active').in('role', ['hr_admin']).order('full_name').then(({ data }) => setAdmins((data || []) as Profile[]))
   }, [])
   const set = async (uid: string, patch: Partial<HrApprovalRule>) => {
     const cur = ruleFor(cfg.user_approvals, uid)
@@ -82,7 +82,7 @@ export function UserApprovalRulesCard() {
   const isGmView = useAuth().isGm
   return (
     <Card title="New-user approvals">
-      <p className="small">The CEO{isGmView ? ' and you (General Manager, with the approve power)' : ' (you)'} always see and can approve <strong>every</strong> new sign-up — they appear on your dashboard under “Needs my action”. You can also let an HR Admin approve sign-ups for some companies. Sign-ups that chose no company (“unassigned”) are for you only.</p>
+      <p className="small">{isGmView ? 'You (General Manager, with the approve power)' : 'You (the CEO)'} always see and can approve <strong>every</strong> new sign-up — they appear on your dashboard under “Needs my action”. You can also let an HR Admin approve sign-ups for some companies. Sign-ups that chose no company (“unassigned”) are for you only.</p>
       {admins.length === 0 && <p className="muted small">No active HR Admins yet. Give someone the HR Admin role in Users first.</p>}
       <DataTable label="HR Admins who may approve new users" rows={admins.filter((a) => normRole(a.role) === 'hr_admin')} rowKey={(a) => a.id}
         columns={[

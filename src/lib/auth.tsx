@@ -61,7 +61,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const loadProfile = useCallback(async (s: Session | null) => {
     if (!s) { setProfile(null); localStorage.removeItem(PROFILE_CACHE); return }
-    const { data, error } = await supabase.from('profiles').select('*').eq('id', s.user.id).maybeSingle()
+    const { data, error } = await supabase.from('profiles_v').select('*').eq('id', s.user.id).maybeSingle()
     if (error) {
       // offline: keep the cached profile for this same user so the app still opens
       setProfile((p) => (p?.id === s.user.id ? p : null))

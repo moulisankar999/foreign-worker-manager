@@ -41,6 +41,12 @@ export interface RoleInfo {
 }
 
 export const CHAIN = ['Worker (FW Worker app)', 'Outlet Manager', 'HR Manager', 'HR Admin', 'General Manager', 'CEO']
+/** the approval chain as one role sees it: up to their own step and the next step they send to (nothing higher) */
+export const chainFor = (r: HelpRole): string[] => {
+  if (r === 'ceo') return CHAIN
+  const me = CHAIN.findIndex((c) => c.startsWith(ROLE_TITLE[r]))
+  return me < 0 ? [] : CHAIN.slice(0, Math.min(me + 2, CHAIN.length - 1))
+}
 
 export const ROLE_INFO: Record<HelpRole, RoleInfo> = {
   ceo: {
@@ -55,7 +61,7 @@ export const ROLE_INFO: Record<HelpRole, RoleInfo> = {
   gm: {
     purpose: 'The General Manager runs day-to-day administration and makes the final decision on requests after HR Admin. You lead the HR team, keep requests moving and own the admin areas set out in "General Manager powers".',
     sees: ['All companies, outlets and workers', 'All requests and their history', 'Salary details and the audit log, as set in General Manager powers', 'Reports, alerts and compliance for every outlet'],
-    can: ['Make the final decision (approve or reject) on requests escalated by HR Admin', 'Assign or escalate a request to any person at any level', 'Return a request for more information', 'Add, edit and manage workers and their documents', 'Manage users and settings through your General Manager powers', 'Review printed submissions after HR Admin has verified them'],
+    can: ['Make the final decision (approve or reject) on requests escalated by HR Admin', 'Assign a request to anyone at your level or below, or send it on to the next approval step', 'Return a request for more information', 'Add, edit and manage workers and their documents', 'Manage users and settings through your General Manager powers', 'Review printed submissions after HR Admin has verified them'],
     cannot: [],
     reportsTo: 'CEO.',
     approvals: 'Requests come to you after HR Admin escalates them. Your decision is final.',
@@ -93,7 +99,7 @@ export const ROLE_INFO: Record<HelpRole, RoleInfo> = {
     sees: ['Workers, documents, alerts and reports (no salary details)'],
     can: ['Search and open workers', 'Read alerts and print reports'],
     cannot: ['Viewer is a read-only role: changes and requests are made by the other roles'],
-    reportsTo: 'CEO.',
+    reportsTo: 'Your admin.',
     approvals: 'None — viewers do not approve.',
     daily: ['Look up workers and print reports when needed'],
   },
@@ -119,9 +125,9 @@ export const GUIDES: Guide[] = [
   { id: 'install', group: 'Getting started', title: 'Install FW Manager (Android, iPhone, web)', roles: ALL,
     intro: 'FW Manager works in a web browser and as an app on Android phones and iPhones/iPads. Your data is the same everywhere.',
     steps: ['Android: open Settings → About in FW Manager on the web (HR can also send you the link) and tap "Download Android app". Open the downloaded file and allow "Install unknown apps" for your browser when asked.',
-      'iPhone / iPad: install FW Manager from the App Store (or the TestFlight invitation sent by the CEO). Open it once and allow notifications.',
+      'iPhone / iPad: install FW Manager from the App Store (or the TestFlight invitation you received). Open it once and allow notifications.',
       'Web: open the FW Manager address in Chrome, Edge or Safari. On a phone use "Add to Home screen" to get an app icon.',
-      'Sign in with the email and password the CEO or HR Admin gave you.'],
+      'Sign in with the email and password your admin gave you.'],
     shots: ['about'],
     tip: 'After an update, Android shows a small "New version" note on the About tab. Install it the same way — your data stays.' },
   { id: 'signin', group: 'Getting started', title: 'Sign in', roles: ALL,
@@ -135,7 +141,7 @@ export const GUIDES: Guide[] = [
   { id: 'password', group: 'Getting started', title: 'Change your password', roles: ALL,
     steps: ['Tap your initials at the top right.', 'Tap "Change password".', 'Type your current password and the new one twice, then tap Save.'],
     shots: ['usermenu-password', 'changepw'],
-    tip: 'Forgot your password? The CEO or HR Admin resets it for you in Settings → Users & access.' },
+    tip: 'Forgot your password? Your admin resets it for you in Settings → Users & access.' },
   { id: 'dashboard', group: 'Getting started', title: 'Read the Dashboard', roles: ALL,
     steps: ['The cards at the top show headcount and what needs attention. Red means overdue or expired, amber means soon.', 'Tap any card or bar to open the matching list.', 'Use the menu (left on a computer, bottom bar on a phone) to move between Workers, Requests, Alerts and More.'],
     shots: ['dashboard'] },
@@ -158,7 +164,7 @@ export const GUIDES: Guide[] = [
     tip: 'Every change is kept in the worker\'s Timeline tab with who changed it and when.' },
   { id: 'remove-worker', group: 'Workers', title: 'Remove a worker (exit or delete)', roles: STAFF_WRITE,
     intro: 'When a worker leaves, set their status — do not delete. Exited workers keep their history for audits.',
-    steps: ['Open the worker → "Check status" tab (or Contract & exit).', 'Choose the new status (Exited, Absconded, Transferred…) and the effective date, add a remark and save.', 'Workers are never deleted from the app, so their history stays for audits. For a record added by mistake, set the status to Exited, add the remark "added by mistake" and tell the CEO.'],
+    steps: ['Open the worker → "Check status" tab (or Contract & exit).', 'Choose the new status (Exited, Absconded, Transferred…) and the effective date, add a remark and save.', 'Workers are never deleted from the app, so their history stays for audits. For a record added by mistake, set the status to Exited, add the remark "added by mistake" and tell your admin.'],
     shots: ['worker-status'],
     important: 'Setting a worker to Exited also stops his FW Worker app access.' },
   { id: 'remarks', group: 'Workers', title: 'Add a remark about a worker', roles: ['ceo', 'gm', 'hra', 'hrm', 'om'],
@@ -196,9 +202,9 @@ export const GUIDES: Guide[] = [
   { id: 'apply', group: 'Requests', title: 'Apply an approved request to the worker record', roles: ['hrm', 'hra', 'gm', 'ceo'],
     steps: ['Requests → "Needs my action" shows requests marked "Approved – to apply".', 'Open the request and tap "Apply to worker record & close".', 'Check the changes the app will make (leave balance, pay, outlet…) and tap "Apply & close".'],
     shots: ['request-apply'] },
-  { id: 'assign', group: 'Requests', title: 'Assign or escalate a request (CEO / General Manager)', roles: ['ceo', 'gm'],
+  { id: 'assign', group: 'Requests', title: 'Assign or escalate a request', roles: ['ceo', 'gm'],
     intro: 'Use Assign to move a request to a specific person at any level — for example when someone is on leave or the request needs a different decision-maker.',
-    steps: ['Open the request.', 'Under Actions, tap "Assign…".', 'Choose the Role, then the Person (the list shows the people who can see this request), and add a note if you like — staff only, the worker never sees it.', 'Tap "Assign". The person is notified and the request moves to their queue; the request shows "Assigned to: <name>" at the top, and while assigned, that person makes the decision.'],
+    steps: ['Open the request.', 'Under Actions, tap "Assign…".', 'Choose the Role, then the Person (the list shows the people who can see this request; anyone above your level shows as “Next approval step”), and add a note if you like — staff only, the worker never sees it.', 'Tap "Assign". The person is notified and the request moves to their queue; the request shows "Assigned to: <name>" at the top, and while assigned, that person makes the decision.'],
     shots: ['request-assign', 'request-assign-modal'],
     tip: 'Skipped steps are recorded in the timeline.' },
   { id: 'ceo-review', group: 'Requests', title: 'CEO review: overrule, amend, recall, mark reviewed', roles: ['ceo'],
@@ -297,7 +303,7 @@ export const GUIDES: Guide[] = [
 export interface Faq { q: string; a: string; roles: HelpRole[] }
 
 export const FAQS: Faq[] = [
-  { roles: ALL, q: 'I forgot my password. What do I do?', a: 'The CEO or HR Admin resets it in Settings → Users & access. You get a temporary password; change it after you sign in (your initials → Change password).' },
+  { roles: ALL, q: 'I forgot my password. What do I do?', a: 'Your admin resets it in Settings → Users & access. You get a temporary password; change it after you sign in (your initials → Change password).' },
   { roles: ALL, q: 'Does the app work without internet?', a: 'Yes. Your workers are copied to the device so you can look things up offline. Changes are saved and uploaded automatically when you are back online. Do not sign out while changes are waiting to upload.' },
   { roles: ALL, q: 'Why does a colleague have a button I do not?', a: 'Each role has the buttons for its own work — for example, HR roles have "App access". Help → My role lists yours.' },
   { roles: ALL, q: 'How do I switch between light and dark mode?', a: 'Tap your initials at the top right and choose Light, Dark or Auto.' },
@@ -318,7 +324,7 @@ export const FAQS: Faq[] = [
   { roles: ['hrm'], q: 'A request is approved. Is the worker record updated automatically?', a: 'No. Open it from Requests → "Needs my action" (status "Approved – to apply") and tap "Apply to worker record & close" so leave balances, pay or outlet are updated.' },
   { roles: ['hrm', 'hra'], q: 'How do I give a worker the FW Worker app?', a: 'Worker → "📱 App access" → Generate PIN. The worker signs in with his passport number and that PIN. The PIN is shown only once.' },
   { roles: ['hrm', 'hra'], q: 'The worker\'s app says "locked".', a: 'After too many wrong PINs the account locks. Speak to the worker, then App access → Unlock (or Reset PIN if he forgot it).' },
-  { roles: ['hrm', 'hra', 'gm', 'ceo'], q: 'I added the same worker twice.', a: 'The app blocks a duplicate worker ID and warns about a repeated passport. If it still happened, set the extra record to Exited with the remark "duplicate" and tell the CEO.' },
+  { roles: ['hrm', 'hra', 'gm', 'ceo'], q: 'I added the same worker twice.', a: 'The app blocks a duplicate worker ID and warns about a repeated passport. If it still happened, set the extra record to Exited with the remark "duplicate" and tell your admin.' },
   { roles: ['hrm', 'hra', 'gm', 'ceo'], q: 'A worker left. Should I delete him?', a: 'No — set the status to Exited with the date (Check status tab). His history stays for audits and the app access is stopped.' },
   { roles: ['hrm', 'hra', 'gm', 'ceo'], q: 'How do I scan a passport or document with the camera?', a: 'Open the worker → Vault → "Add / scan", choose Passport and scan the pages with the camera. Hold the page flat in good light.' },
   { roles: ['hrm'], q: 'What do I do with a required printed submission?', a: 'Reports → Required submissions → open the task, check and prepare the report, then sign off your step. HR Admin is notified to verify it.' },

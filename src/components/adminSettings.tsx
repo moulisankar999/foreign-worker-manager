@@ -8,7 +8,7 @@ import { saveConfig, useConfig, allVaultCategories, type PassportConfig } from '
 import { supabase } from '../lib/supabase'
 import { compressImage } from '../lib/vault'
 import { REQUEST_TYPES, ROLE_LABEL, VAULT_CATEGORIES, type ApprovalRules, type EmergencyReason, type HrAdminFlags, type Level } from '../lib/workflow'
-import { CHANNELS, CHANNEL_LABEL, checkSms, type Channel, type NotifyConfig } from '../lib/notifyEvents'
+import { CEO_ONLY_EVENTS, CHANNELS, CHANNEL_LABEL, checkSms, type Channel, type NotifyConfig } from '../lib/notifyEvents'
 import { fmtDate } from '../lib/util'
 import { DataTable, Details } from './dataTable'
 import { Actions, IconAction } from './iconAction'
@@ -196,7 +196,7 @@ const GUIDE: Record<'whatsapp' | 'sms' | 'email', { title: string; cost: string;
 interface Delivery { id: number; created_at: string; event: string; channel: Channel; recipient: string | null; address: string | null; title: string | null; status: string; attempts: number; last_error: string | null; cost: number | null }
 
 export function NotificationsCard() {
-  const { top } = useAuth()
+  const { top, isSuper: isCeo } = useAuth()
   const isSuper = top('notifications.settings') // CEO, or a General Manager with this power
   const n = useConfig().notifications
   const [guide, setGuide] = useState<keyof typeof GUIDE | null>(null)
@@ -276,7 +276,7 @@ export function NotificationsCard() {
         <table className="tbl"><tbody>{GUIDE[guide].secrets.map(([k, d]) => <tr key={k}><td><code>{k}</code></td><td>{d}</td></tr>)}</tbody></table>
       </Modal>}
 
-      {matrix && <EventMatrix n={n} onClose={() => setMatrix(false)} onSave={async (x) => { await saveConfig('notifications', x); setMatrix(false) }} />}
+      {matrix && <EventMatrix ceo={isCeo} n={n} onClose={() => setMatrix(false)} onSave={async (x) => { await saveConfig('notifications', x); setMatrix(false) }} />}
       {general && <FormModal title="Notification settings" fields={gen} onClose={() => setGeneral(false)}
         initial={{ appUrl: n.appUrl, smsSender: n.smsSender, fromName: n.email.fromName, fromEmail: n.email.fromEmail, qh: n.quietHours.enabled, qs: n.quietHours.start, qe: n.quietHours.end, dg: n.digest.enabled, dt: n.digest.time, fb: n.fallback.enabled, optin: n.whatsapp.requireOptIn }}
         onSave={async (x: V) => {
@@ -288,10 +288,10 @@ export function NotificationsCard() {
   )
 }
 
-function EventMatrix({ n, onClose, onSave }: { n: NotifyConfig; onClose: () => void; onSave: (n: NotifyConfig) => Promise<void> }) {
+function EventMatrix({ ceo, n, onClose, onSave }: { ceo: boolean; n: NotifyConfig; onClose: () => void; onSave: (n: NotifyConfig) => Promise<void> }) {
   const [ev, setEv] = useState(structuredClone(n.events))
   const [busy, setBusy] = useState(false)
-  const keys = Object.keys(ev)
+  const keys = Object.keys(ev).filter((k) => ceo || !CEO_ONLY_EVENTS.includes(k)) // the CEO's own alerts are his
   const bad = keys.filter((k) => ev[k].channels.sms && ev[k].sms && !checkSms(ev[k].sms, n.smsSender).ok)
   return (
     <Modal wide title="Who gets what" onClose={onClose} footer={<><Btn onClick={onClose}>Cancel</Btn><Btn kind="primary" disabled={busy} onClick={async () => { setBusy(true); try { await onSave({ ...n, events: ev }) } catch (e) { err(e) } setBusy(false) }}>Save</Btn></>}>
@@ -309,14 +309,14 @@ function EventMatrix({ n, onClose, onSave }: { n: NotifyConfig; onClose: () => v
 
 /* ---------------- My alerts (everyone) ---------------- */
 export function MyAlertsCard() {
-  const { profile, refreshProfile } = useAuth()
+  const { profile, refreshProfile, isSuper } = useAuth()
   const n = useConfig().notifications
   const [phone, setPhone] = useState(profile?.phone || '')
   const [out, setOut] = useState<string[]>(profile?.notify_optout || [])
   const [msg, setMsg] = useState('')
   useEffect(() => { setPhone(profile?.phone || ''); setOut(profile?.notify_optout || []) }, [profile])
   if (!profile) return null
-  const optional = Object.entries(n.events).filter(([, e]) => e.enabled && !e.critical && e.recipients.length)
+  const optional = Object.entries(n.events).filter(([k, e]) => e.enabled && !e.critical && e.recipients.length && (isSuper || !CEO_ONLY_EVENTS.includes(k)))
   const toggle = (k: string) => setOut(out.includes(k) ? out.filter((x) => x !== k) : [...out, k])
   return (
     <Card title="My alerts">

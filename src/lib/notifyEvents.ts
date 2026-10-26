@@ -7,6 +7,8 @@ export const CHANNEL_LABEL: Record<Channel, string> = { in_app: 'In-app', push: 
 export const CHANNEL_ENABLED: Record<Channel, boolean> = { in_app: true, push: true, email: true, sms: true, whatsapp: true }
 /** recipient tokens: roles (scoped by the worker's outlet for outlet_manager), the requester, the next approver, user admins */
 export type Recipient = 'super_admin' | 'hr_admin' | 'hr_manager' | 'outlet_manager' | 'requester' | 'approver' | 'user_admins' | 'participants'
+/** events only the CEO receives: never listed for anyone else (settings, My alerts) */
+export const CEO_ONLY_EVENTS = ['ceo_review', 'gm_assigned', 'user_approved_by_hr']
 export const RECIPIENT_LABEL: Record<Recipient, string> = {
   super_admin: 'CEO', hr_admin: 'HR Admins', hr_manager: 'HR Managers', outlet_manager: "Worker's outlet manager",
   requester: 'Requester', approver: 'Next approver', user_admins: 'User admins', participants: 'Everyone on the request',
@@ -66,13 +68,13 @@ export const DEFAULT_NOTIFY: NotifyConfig = {
     request_submitted: R('Request submitted', 'Requests', ['hr_manager'], iae, '{{ref}} {{type}} for {{worker}}', 'New {{type}} request {{ref}} for worker {{workerNo}}. Please open FW Manager app.', { wa: 'fwm_request_submitted' }),
     request_returned: R('Returned for more info', 'Requests', ['requester'], iae, '{{ref}} returned: more info needed', 'Request {{ref}} returned for more info. Please open FW Manager app.', { wa: 'fwm_request_needs_info' }),
     request_recommended: R('Recommended (waiting HR Admin)', 'Requests', ['hr_admin'], iae, '{{ref}} {{type}} waiting for your approval', 'Request {{ref}} ({{type}}) waiting for your approval. Please open FW Manager app.', { wa: 'fwm_approval_pending' }),
-    request_escalated: R('Escalated to final approver (GM / CEO)', 'Requests', ['approver'], iae, '{{ref}} {{type}} escalated to you', 'Request {{ref}} ({{type}}) escalated for your approval. Please open FW Manager app.', { wa: 'fwm_approval_pending' }),
+    request_escalated: R('Escalated to the final approver', 'Requests', ['approver'], iae, '{{ref}} {{type}} escalated to you', 'Request {{ref}} ({{type}}) escalated for your approval. Please open FW Manager app.', { wa: 'fwm_approval_pending' }),
     request_approved: R('Approved', 'Requests', ['requester', 'hr_manager'], iae, '{{ref}} {{type}} approved', 'Request {{ref}} ({{type}}) approved. Please open FW Manager app.', { wa: 'fwm_request_approved' }),
     request_rejected: R('Rejected', 'Requests', ['requester', 'hr_manager'], iae, '{{ref}} {{type}} rejected', 'Request {{ref}} ({{type}}) rejected. Please open FW Manager app.', { wa: 'fwm_request_rejected' }),
     request_completed: R('Applied / closed', 'Requests', ['requester'], iae, '{{ref}} {{type}} completed', 'Request {{ref}} ({{type}}) completed. Please open FW Manager app.', { wa: 'fwm_request_completed' }),
     request_cancelled: R('Cancelled by requester', 'Requests', ['hr_manager'], ia, '{{ref}} {{type}} cancelled', 'Request {{ref}} cancelled.'),
     comment_added: R('Comment on a request', 'Requests', ['participants'], iaw, 'New comment on {{ref}}', 'New comment on request {{ref}}. Please open FW Manager app.', { wa: 'fwm_new_comment' }),
-    request_assigned: R('Request assigned to you (CEO / GM)', 'Requests', [], ia, '{{ref}} {{type}} {{action}} to you by {{byRole}} {{by}}', '', { email: '{{ref}} {{type}} for {{worker}} ({{outlet}}) was {{action}} to you by {{byRole}} {{by}}. {{note}} {{link}}' }),
+    request_assigned: R('Request assigned to you', 'Requests', [], ia, '{{ref}} {{type}} {{action}} to you by {{byRole}} {{by}}', '', { email: '{{ref}} {{type}} for {{worker}} ({{outlet}}) was {{action}} to you by {{byRole}} {{by}}. {{note}} {{link}}' }),
     gm_assigned: R('General Manager assigned a request (CEO)', 'Requests', ['super_admin'], ia, 'GM {{by}} {{action}} {{ref}} {{type}} to {{toRole}} {{toName}}', '', { email: 'General Manager {{by}} {{action}} {{ref}} {{type}} for {{worker}} to {{toRole}} {{toName}}. {{note}} {{link}}' }),
     approval_overdue: R('Approval waiting > 24 h', 'Requests', ['approver'], all, '⏰ {{ref}} {{type}} waiting over 24 h', 'Request {{ref}} ({{type}}) waiting over 24h for your approval. Please open FW Manager app.', { critical: true , wa: 'fwm_approval_pending' }),
     emergency_submitted: R('Emergency leave submitted', 'Emergency leave', ['hr_manager', 'hr_admin'], all, '🚨 Emergency leave {{ref}}: {{worker}}', 'URGENT emergency leave {{ref}} for worker {{workerNo}}. Please review in FW Manager app.', { critical: true , wa: 'fwm_emergency_leave' }),
@@ -91,8 +93,8 @@ export const DEFAULT_NOTIFY: NotifyConfig = {
     user_awaiting_approval: R('New user awaiting approval', 'Users', ['user_admins'], iae, '{{title}} is waiting for access', 'A new user is waiting for access. Please open FW Manager app.', { wa: 'fwm_user_waiting' }),
     user_approved_by_hr: R('New user approved by an HR Admin', 'Users', ['super_admin'], ia, '{{title}}', ''),
     ceo_review: R('Decision to review (CEO)', 'Requests', ['super_admin'], ia, '{{byRole}} {{by}} {{decision}} {{ref}} {{type}} — {{worker}}', '', { body: '{{comment}} Tap to review or overrule.', email: '{{byRole}} {{by}} {{decision}} {{ref}} {{type}} for {{worker}} ({{outlet}}). {{comment}} Review: {{link}}' }),
-    ceo_overruled: R('Updated by the CEO (final)', 'Requests', ['participants', 'hr_admin'], ia, '{{ref}} {{type}} updated by the CEO — now {{status}}', '', { body: '{{worker}}: the CEO made the final decision. {{comment}}' }),
-    hr_task_created: R('HR follow-up after a CEO decision', 'Requests', ['hr_manager', 'hr_admin'], ia, 'HR follow-up needed: {{ref}} {{type}} — {{worker}}', '', { body: '{{count}} follow-up task(s) after the CEO\'s decision. Open Requests → Follow-ups.' }),
+    ceo_overruled: R('Final decision made (request locked)', 'Requests', ['participants', 'hr_admin'], ia, '{{ref}} {{type}} — final decision: {{status}}', '', { body: '{{worker}}: a final decision has been made — the request is locked.', email: '{{ref}} {{type}} for {{worker}}: a final decision has been made and it is now {{status}}. {{link}}' }),
+    hr_task_created: R('HR follow-up after a final decision', 'Requests', ['hr_manager', 'hr_admin'], ia, 'HR follow-up needed: {{ref}} {{type}} — {{worker}}', '', { body: '{{count}} follow-up task(s) after the final decision. Open Requests → Follow-ups.' }),
     daily_digest: R('Daily digest', 'Digest', [], { email: true }, '{{company}} daily summary', '', { wa: 'fwm_daily_digest' }),
   },
 }

@@ -24,9 +24,9 @@ export function StatusChip({ u }: { u: Profile }) {
 /** who paused / resumed / reset — one short line */
 export function statusLine(u: Profile) {
   const parts: string[] = []
-  if (u.status === 'paused' && u.paused_at) parts.push(`Paused by ${u.paused_by_name || '—'} · ${at(u.paused_at)}${u.pause_reason ? ` — ${u.pause_reason}` : ''}`)
-  if (u.status === 'active' && u.resumed_at) parts.push(`Resumed by ${u.resumed_by_name || '—'} · ${at(u.resumed_at)}`)
-  if (u.pw_reset_at) parts.push(`Password reset by ${u.pw_reset_by_name || '—'} · ${at(u.pw_reset_at)}${u.must_change_password ? ' (must choose a new one at next sign-in)' : ''}`)
+  if (u.status === 'paused' && u.paused_at) parts.push(`Paused${u.paused_by_name ? ` by ${u.paused_by_name}` : ''} · ${at(u.paused_at)}${u.pause_reason ? ` — ${u.pause_reason}` : ''}`)
+  if (u.status === 'active' && u.resumed_at) parts.push(`Resumed${u.resumed_by_name ? ` by ${u.resumed_by_name}` : ''} · ${at(u.resumed_at)}`)
+  if (u.pw_reset_at) parts.push(`Password reset${u.pw_reset_by_name ? ` by ${u.pw_reset_by_name}` : ''} · ${at(u.pw_reset_at)}${u.must_change_password ? ' (must choose a new one at next sign-in)' : ''}`)
   return parts.join(' · ')
 }
 

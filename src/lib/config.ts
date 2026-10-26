@@ -58,6 +58,9 @@ function merge(raw: Partial<Record<keyof AppConfig, unknown>>): AppConfig {
   }
   const n = out.notifications as NotifyConfig
   out.notifications = { ...DEFAULT_NOTIFY, ...n, enabled: { ...DEFAULT_NOTIFY.enabled, ...(n.enabled || {}) }, events: { ...DEFAULT_NOTIFY.events, ...(n.events || {}) } }
+  // names come from the app (they are not editable), so renamed events read the same everywhere
+  const evs = (out.notifications as NotifyConfig).events
+  for (const [k, e] of Object.entries(evs)) { const d = DEFAULT_NOTIFY.events[k]; if (d) evs[k] = { ...e, label: d.label, group: d.group } }
   const c = out.companies as CompaniesConfig
   if (!Array.isArray(c.items) || !c.items.length) out.companies = DEFAULT_COMPANIES
   const ct = out.consent_translations as ConsentTranslationsConfig
@@ -121,7 +124,7 @@ export function stopConfig() {
 /** CEO only (the database refuses everyone else). */
 export async function saveConfig<K extends keyof AppConfig>(key: K, value: AppConfig[K]) {
   const { error } = await supabase.from('app_config').upsert({ key, value })
-  if (error) throw new Error(error.message.includes('row-level') ? 'This setting is managed by the CEO and the General Manager (with this power)' : error.message)
+  if (error) throw new Error(error.message.includes('row-level') ? 'This setting is managed by your admin' : error.message)
   set({ ...raw, [key]: value })
 }
 export const getConfig = () => cfg

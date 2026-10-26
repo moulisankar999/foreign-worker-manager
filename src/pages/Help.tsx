@@ -6,7 +6,7 @@ import { Btn, Card, Tabs } from '../components/ui'
 import { Icon } from '../components/Icon'
 import { APP_VERSION } from '../lib/platform'
 import { openManual } from '../lib/manuals'
-import { CHAIN, GROUPS, MANUAL_FILE, ROLE_INFO, ROLE_TITLE, WORKER_MANUAL_FILE, faqsFor, guidesFor, helpRoleOf, type HelpRole } from '../help/content'
+import { GROUPS, chainFor, MANUAL_FILE, ROLE_INFO, ROLE_TITLE, WORKER_MANUAL_FILE, faqsFor, guidesFor, helpRoleOf, type HelpRole } from '../help/content'
 
 type HelpTab = 'role' | 'faq' | 'manual'
 const TABS: { id: HelpTab; label: string }[] = [{ id: 'role', label: 'My role' }, { id: 'faq', label: 'FAQ' }, { id: 'manual', label: 'User manual' }]
@@ -19,9 +19,9 @@ function RoleTab({ r }: { r: HelpRole }) {
     <div className="help-grid">
       <Card title={`Your role: ${ROLE_TITLE[r]}`}>
         <p>{i.purpose}</p>
-        <div className="help-chain" aria-label="Approval chain">
-          {CHAIN.map((c, n) => <span key={c} className={'help-step' + (c.startsWith(ROLE_TITLE[r]) || (r === 'ceo' && c.startsWith('CEO')) ? ' me' : '')}>{n > 0 && <b aria-hidden="true">→</b>}{c}</span>)}
-        </div>
+        {chainFor(r).length > 0 && <div className="help-chain" aria-label="Approval chain">
+          {chainFor(r).map((c, n) => <span key={c} className={'help-step' + (c.startsWith(ROLE_TITLE[r]) || (r === 'ceo' && c.startsWith('CEO')) ? ' me' : '')}>{n > 0 && <b aria-hidden="true">→</b>}{c}</span>)}
+        </div>}
         <p className="muted"><strong>Reports to:</strong> {i.reportsTo}</p>
         <p className="muted"><strong>Approvals:</strong> {i.approvals}</p>
       </Card>

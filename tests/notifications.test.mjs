@@ -84,7 +84,7 @@ try {
   const hp = (await admin.from('profiles').select('wa_optin,wa_optin_at').eq('id', users.hra.id).single()).data
   check('WhatsApp opt-in recorded with date', !r.error && hp.wa_optin === true && !!hp.wa_optin_at, JSON.stringify(r.error || hp))
   await users.om2.c.rpc('update_my_contact', { p_phone: '+60 11-2222 0000', p_optout: [], p_wa_optin: true }) // mock: "not on WhatsApp"
-  const sneaky = await users.om1.c.from('profiles').update({ role: 'super_admin' }).eq('id', users.om1.id).select()
+  const sneaky = await users.om1.c.from('profiles').update({ role: 'super_admin' }).eq('id', users.om1.id).select('id, role, status, outlet_ids, company_ids, must_change_password')
   check('user still cannot change his own role', !!sneaky.error || !sneaky.data?.length)
 
   const now = () => new Date().toISOString()

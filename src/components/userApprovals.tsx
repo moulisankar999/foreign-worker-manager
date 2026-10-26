@@ -18,11 +18,13 @@ import type { Profile, Role } from '../lib/supabase'
 import type { Outlet } from '../lib/types'
 
 const when = (s?: string | null) => (s ? `${fmtDate(s.slice(0, 10))} ${new Date(s).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : '')
+const roleOf = (r?: string | null) => ROLE_LABEL[r || ''] || r || ''
+// the server leaves out who did it when that person is above the viewer: then only the action and the date show
 export const byLine = (u: Profile) =>
-  u.added_at && !u.rejected_at ? `Added by ${ROLE_LABEL[u.added_by_role || ''] || u.added_by_role || '—'} ${u.added_by_name || '—'} · ${when(u.added_at)}`
+  u.added_at && !u.rejected_at ? `Added${u.added_by_name ? ` by ${roleOf(u.added_by_role)} ${u.added_by_name}` : ''} · ${when(u.added_at)}`
   : u.approved_at && u.status !== 'pending' && !u.rejected_at
-    ? `Approved by ${u.approved_by_name || '—'} (${ROLE_LABEL[u.approved_by_role || ''] || u.approved_by_role || '—'}) · ${when(u.approved_at)}`
-    : u.rejected_at ? `Rejected by ${u.rejected_by_name || '—'} (${ROLE_LABEL[u.rejected_by_role || ''] || u.rejected_by_role || '—'}) · ${when(u.rejected_at)}${u.reject_reason ? ` — ${u.reject_reason}` : ''}` : ''
+    ? `Approved${u.approved_by_name ? ` by ${u.approved_by_name} (${roleOf(u.approved_by_role) || '—'})` : ''} · ${when(u.approved_at)}`
+    : u.rejected_at ? `Rejected${u.rejected_by_name ? ` by ${u.rejected_by_name} (${roleOf(u.rejected_by_role) || '—'})` : ''} · ${when(u.rejected_at)}${u.reject_reason ? ` — ${u.reject_reason}` : ''}` : ''
 
 /** company + outlet checkboxes, limited to the companies the current person may hand out */
 export function ScopePicker({ companies, outlets, value, onChange, allowed, outletsOnly }: {

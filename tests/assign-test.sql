@@ -9,6 +9,9 @@ declare
   wuser uuid; sid uuid := gen_random_uuid(); r1 uuid; r2 uuid; r3 uuid; q public.requests;
   u uuid; nm text; rl text;
 begin
+  -- the newest worker fixture left by worker-ui (falls back to the old fixed id)
+  select coalesce((select wa.worker_id from public.worker_access wa where wa.worker_id like 'wu-w-%' order by wa.worker_id desc limit 1), W) into W;
+  O := 'wu-o-' || substr(W, 6);
   -- test people (rolled back at the end)
   foreach u in array array[ceo, gm, hra, hra2, hrm, om, om2] loop
     insert into auth.users (id, email, aud, role, instance_id) values (u, 'fwm-asg-' || left(u::text, 8) || '@example.test', 'authenticated', 'authenticated', '00000000-0000-0000-0000-000000000000');
@@ -96,7 +99,7 @@ begin
   res := res || jsonb_build_object('t', '7 CEO assigns down to HR Manager: submitted', 'ok', q.status = 'submitted' and q.assigned_to = hrm and
      exists (select 1 from public.request_events where request_id = r1 and action = 'assign' and to_user = hrm), 'v', q.status);
   perform set_config('request.jwt.claims', json_build_object('sub', gm, 'role', 'authenticated')::text, true);
-  begin perform public.request_assign(r1, hra, null); ok := false; m := 'allowed'; exception when others then ok := sqlerrm like 'The CEO assigned this request%'; m := sqlerrm; end;
+  begin perform public.request_assign(r1, hra, null); ok := false; m := 'allowed'; exception when others then ok := sqlerrm like 'This request is held at a higher level%'; m := sqlerrm; end;
   res := res || jsonb_build_object('t', '7b GM cannot override the CEO''s assignment', 'ok', ok, 'v', m);
   -- the HRM assignee forwards: the assignment ends, the request moves on normally
   perform set_config('request.jwt.claims', json_build_object('sub', hrm, 'role', 'authenticated')::text, true);
