@@ -14,7 +14,7 @@ export function useNextSteps(c: StepCounts): Step[] {
   const q = qRank(role) > 0
   const docs: Step = { id: 'docs', icon: 'alert', title: 'Renew documents', n: c.expiring, to: '/alerts', tip: c.expiring ? 'Permits or passports have expired or are due within 30 days.' : 'Nothing expiring in the next 30 days.' }
   const reqs: Step = { id: 'req', icon: 'check', title: 'Decide requests', n: c.mine, to: '/requests?tab=mine_action', tip: c.mine ? 'Someone is waiting for your answer — approve, return or reject.' : 'No requests are waiting for you.' }
-  const users: Step = { id: 'users', icon: 'users', title: 'Welcome new users', n: c.users, to: '/settings/users', tip: c.users ? 'Give each new person a role and the outlets they work at.' : 'Nobody is waiting to be let in.' }
+  const users: Step = { id: 'users', icon: 'users', title: 'Welcome new users', n: c.users, to: '/settings/users', tip: c.users ? `${c.users} new user${c.users === 1 ? '' : 's'} waiting for approval — give each a role and outlets.` : 'Nobody is waiting to be let in.' }
   const quota: Step = { id: 'quota', icon: 'plane', title: 'Approval & Recruitment', n: null, to: '/quota?tab=overview', tip: 'Quota balance, recruits on the way and arrivals.' }
   const reports: Step = { id: 'rep', icon: 'chart', title: 'Share reports', n: null, to: '/reports', tip: 'Expiry list, flight tickets and passport register.' }
   if (isSuper) return [{ id: 'ceo', icon: 'lock', title: 'Review decisions', n: c.ceo, to: '/ceo-review', tip: c.ceo ? 'Keep, overrule or recall decisions made for you.' : 'You are up to date.' }, reqs, users, docs, ...(q ? [quota] : [reports])]
