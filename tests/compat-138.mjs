@@ -38,6 +38,10 @@ try {
     const dash = await p.locator('body').innerText()
     check(`v1.3.8 ${k}: signs in and sees the dashboard (not locked out)`, !(await p.locator('#em').isVisible().catch(() => false)) && /Good (morning|afternoon|evening)/.test(dash), dash.slice(0, 300))
     for (const path of ['#/requests', '#/workers', '#/settings/users']) { await p.goto(UI + path); await p.waitForTimeout(3000) }
+    if (k === 'gm' || k === 'hra') {
+      const t = await p.locator('body').innerText()
+      check(`v1.3.8 ${k}: Users list has no superior rows (rows hidden by 034 even on the old app)`, !t.includes('CX Chief') && (k === 'gm' || !t.includes('CX GM')), t.slice(0, 300))
+    }
     await p.goto(UI + '#/'); await p.waitForTimeout(2000)
     if (k === 'om') await p.screenshot({ path: OUT + 'v138-om-dashboard.png' })
     check(`v1.3.8 ${k}: no REST errors (403 etc.) on dashboard / requests / workers / users`, bad.length === 0, bad.join(', '))
