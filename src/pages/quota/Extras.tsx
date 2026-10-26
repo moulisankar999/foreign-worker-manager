@@ -76,7 +76,7 @@ export function FollowUps({ company }: { company: string }) {
   const [nudge, setNudge] = useState<{ kind: string; ref: string; title: string } | null>(null)
   const [re, setRe] = useState<{ kind: string; ref: string; title: string; company_id: string | null } | null>(null)
   const [hr, setHr] = useState<{ id: string; name: string; role: string; company_ids: string[] | null }[]>([])
-  useEffect(() => { if (!re) return; void supabase.from('profiles').select('id, full_name, email, role, company_ids').in('role', ['hr_admin', 'hr_manager']).eq('status', 'active')
+  useEffect(() => { if (!re) return; void supabase.from('profiles_v').select('id, full_name, email, role, company_ids').in('role', ['hr_admin', 'hr_manager']).eq('status', 'active')
     .then(({ data }) => setHr((data || []).map((p) => ({ id: p.id, name: p.full_name || p.email, role: p.role, company_ids: p.company_ids })))) }, [re])
   const rows = d.followups.filter((f) => !f.company_id || inCompany(company, f.company_id))
   return (

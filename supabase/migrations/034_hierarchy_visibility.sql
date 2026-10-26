@@ -160,7 +160,7 @@ revoke all on public.profiles_v, public.requests_v, public.request_events_v, pub
 grant select on public.profiles_v, public.requests_v, public.request_events_v, public.hr_tasks_v to authenticated;
 
 -- Backward compatible with v1.3.8 clients: the base tables keep their full column grants (old apps select '*').
--- Superior ROWS are hidden by the restrictive policies above; v1.3.9+ reads the masked *_v views for names.
+-- Superior ROWS are hidden by the restrictive policies above; v1.4.1+ reads the masked *_v views for names.
 -- The column lock that also hides superior NAMES on the base tables is held back in
 -- supabase/pending/hierarchy_column_lock.sql — apply it only once no v1.3.8-or-older client is in use.
 grant select on public.profiles, public.requests, public.request_events, public.hr_tasks to authenticated;

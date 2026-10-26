@@ -1,7 +1,7 @@
--- HOLD — do NOT apply until every installed client is v1.3.9 or newer (old v1.3.8 apps select '*' on these
+-- HOLD — do NOT apply until every installed client is v1.4.1 or newer (old v1.3.8 and v1.4.0 apps select '*' on these
 -- tables and would be locked out with a 403 "Could not load your account").
 -- Check first: select app_version, count(*) from app_errors where last_seen > now() - interval '14 days' group by 1;
--- and confirm the iOS / Android stores carry v1.3.9+. Apply on TEST, run all suites, back up live, then apply.
+-- and confirm the iOS / Android stores carry v1.4.1+. Apply on TEST, run all suites, back up live, then apply.
 -- Effect: signed-in users read only the columns that do not name anyone; names come from the masked *_v views.
 -- signed-in users read only the columns that do not name anyone (realtime only sends the readable columns too)
 revoke select on public.profiles from anon, authenticated;

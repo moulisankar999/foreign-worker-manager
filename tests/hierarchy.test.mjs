@@ -1,4 +1,4 @@
-// v1.3.9 hierarchy visibility on TEST: nobody sees a superior — their user row, role, activity, assignments,
+// v1.4.1 hierarchy visibility on TEST: nobody sees a superior — their user row, role, activity, assignments,
 // reviews or audit lines — except the minimal approval trail of a request they are part of.
 // Per role (GM, HR Admin, HR Manager, Outlet Manager, Viewer) every read path is checked for rows above the caller's rank:
 // profiles / profiles_v, requests / requests_v, request_events(_v), hr_tasks(_v), audit_log, notification_events/deliveries.
