@@ -246,7 +246,7 @@ export const UR_STATUS: Record<UseReq['status'], { label: string; tone: string }
 /** status label as the viewer may read it: HR sees neutral steps, the GM never sees CEO powers, the CEO sees all */
 export const urLabel = (s: UseReq['status'], rank: number) =>
   rank >= 4 ? ({ pending: 'Waiting for GM / CEO', gm_approved: 'GM approved — waiting for CEO' } as Record<string, string>)[s] || UR_STATUS[s].label
-    : rank === 3 ? ({ pending: 'Waiting for approval', gm_approved: 'Approved by GM — waiting for final approval' } as Record<string, string>)[s] || UR_STATUS[s].label
+    : rank === 3 ? ({ pending: 'Waiting for approval', gm_approved: 'Approved by GM — in progress' } as Record<string, string>)[s] || UR_STATUS[s].label
       : UR_STATUS[s].label
 export const ENTRY_LABEL: Record<string, string> = {
   approved: 'Approved (letter)', reserve: 'Reserved (use request)', release: 'Released', use: 'Used (calling visa)', use_existing: 'Used (existing worker)', return: 'Returned to balance',

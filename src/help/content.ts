@@ -370,7 +370,7 @@ export const FAQS: Faq[] = [
   { roles: ['gm'], q: 'What happens after I approve?', a: 'The request moves on to be applied to the worker record.' },
   { roles: ['gm', 'ceo'], q: 'When should I use Assign…?', a: 'When a request is stuck (someone is on leave) or needs a particular person. Under Actions tap \"Assign…\", choose the Role and Person and add a note; they are notified and make the decision at that step. Steps in between are marked as skipped in the timeline.' },
   { roles: ['gm'], q: 'Which settings do I manage?', a: 'The ones in your General Manager powers (Settings → Users & access shows them).' },
-  { roles: ['gm'], q: 'Do I approve printed submissions?', a: 'You review them after HR Admin has verified them; they then move on for final approval.' },
+  { roles: ['gm'], q: 'Do I approve printed submissions?', a: 'You review them after HR Admin has verified them.' },
   { roles: ['gm', 'hra'], q: 'Where is the audit log?', a: 'Settings → Users & access → Audit log, when audit access is part of your role settings.' },
 
   { roles: ['ceo'], q: 'What is CEO review?', a: 'A list of every General Manager decision and every rejection. Mark each reviewed, or overrule, amend or recall it. The badge shows how many are waiting.' },

@@ -150,7 +150,7 @@ function PipelineView({ t }: { t: Template }) {
   </li>)}</ol>
 }
 const OWNER: Record<string, string> = { hr: 'HR', gm_ceo: 'GM / CEO', agent: 'Agent', outlet_manager: 'Outlet manager' }
-const ownerLabel = (o: string, rank: number) => o === 'gm_ceo' && rank < 4 ? (rank === 3 ? 'GM / final approval' : 'Approvers') : OWNER[o] || o
+const ownerLabel = (o: string, rank: number) => o === 'gm_ceo' && rank < 4 ? 'Approvers' : OWNER[o] || o
 
 /* ---------------- side-panel editor ---------------- */
 function RuleEditor({ cat, scope: scope0, base, newScope, onClose }: { cat: RegCat; scope: string; base?: RegRule; newScope?: boolean; onClose: () => void }) {
