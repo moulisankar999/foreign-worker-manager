@@ -1,63 +1,54 @@
-/* CEO: the list of companies, and which HR Admins may approve new sign-ups (companies + roles). */
+/* Companies (v1.4.2: add via the side panel, open details, delete CEO / GM only — server-enforced) and and which HR Admins may approve new sign-ups (companies + roles). */
 import { useEffect, useState } from 'react'
 import { Btn, Card, Chip } from './ui'
 import { saveConfig, useConfig } from '../lib/config'
 import { useOutlets } from '../lib/hooks'
-import { DEFAULT_HR_RULE, newCompanyId, outletCompany, ruleFor, type HrApprovalRule } from '../lib/companies'
+import { DEFAULT_HR_RULE, outletCompany, ruleFor, type HrApprovalRule } from '../lib/companies'
 import { ROLE_LABEL } from '../lib/workflow'
 import { supabase, type Profile, type Role } from '../lib/supabase'
 import { normRole, useAuth } from '../lib/auth'
 import { LogoEdit, LogoImg } from './logos'
 import { DataTable, Details } from './dataTable'
 import { Actions, IconAction } from './iconAction'
+import { CompanyPanel } from './companyPanel'
+import { toast } from './toast'
+import { deleteCompany } from '../lib/companyRecords'
+import { useNavigate } from 'react-router-dom'
 
 export function CompaniesCard() {
   const cfg = useConfig()
   const outlets = useOutlets()
-  const { top, myCompanies, myOutlets } = useAuth()
-  const isSuper = top('org.companies') // CEO, or a General Manager with this power
+  const nav = useNavigate()
+  const { top, myCompanies, myOutlets, canCreateCompany, canDeleteCompany, canSeeCompanyDetails, isSuper: isCeo, isGm } = useAuth()
+  const isSuper = top('org.companies') || isCeo || isGm // CEO / General Manager see every company
   const all = cfg.companies.items
   const items = isSuper || (!myCompanies.length && !myOutlets.length) ? all
     : all.filter((c) => myCompanies.includes(c.id) || outlets.some((o) => myOutlets.includes(o.id) && outletCompany(o) === c.id))
-  const [msg, setMsg] = useState('')
-  const save = async (next: typeof items) => {
-    try { await saveConfig('companies', { items: next.map((c) => ({ ...c, logo: all.find((x) => x.id === c.id)?.logo })) }); setMsg('Saved.') } catch (e) { setMsg('⚠️ ' + (e as Error).message) }
-  }
-  const add = () => {
-    const name = prompt('Company name:')?.trim()
-    if (!name) return
-    if (all.some((c) => c.name.toLowerCase() === name.toLowerCase())) { alert('That company already exists.'); return }
-    void save([...all, { id: newCompanyId(name, all.map((c) => c.id)), name }])
-  }
-  const rename = (id: string) => {
-    const c = all.find((x) => x.id === id)!
-    const name = prompt('New name:', c.name)?.trim()
-    if (name && name !== c.name) void save(all.map((x) => (x.id === id ? { ...x, name } : x)))
-  }
-  const remove = (id: string) => {
-    if (outlets.some((o) => outletCompany(o) === id)) { alert('Move its outlets to another company first (Settings → Companies & Outlets → edit).'); return }
-    if (all.length <= 1) { alert('Keep at least one company.'); return }
-    if (confirm('Delete this company?')) void save(all.filter((x) => x.id !== id))
-  }
+  const [adding, setAdding] = useState(false)
+  const nOut = (id: string) => outlets.filter((o) => outletCompany(o) === id).length
+  const remove = (id: string) => deleteCompany(id).then(() => toast('Company deleted'), (e) => toast((e as Error).message, 'err'))
   return (
-    <Card title={`Companies (${items.length})`} actions={isSuper && <Btn kind="primary" small icon="plus" onClick={add}>Add company</Btn>}>
-      {!isSuper && <p className="muted small">Your companies. You can upload or change their logos (shown in the app and on forms, memos and slips).</p>}
-      {isSuper && <p className="muted small">Each outlet belongs to one company. HR Admins / HR Managers / Viewers can be limited to some companies or outlets in Settings → Users (nobody limited = sees all). New staff can pick their company/outlet when they create an account. Logos (PNG/JPEG/SVG, resized to 512 px) appear in the app header, lists, worker profiles and on generated PDFs; only signed-in users of that company see them.</p>}
+    <Card title={`Companies (${items.length})`} actions={canCreateCompany && <Btn kind="primary" small icon="plus" onClick={() => setAdding(true)}>Add company</Btn>}>
+      <p className="muted small">{isSuper ? 'Each outlet belongs to one company. Staff can be limited to some companies or outlets in Settings → Users (nobody limited = sees all). Open a company for its SSM details, documents and directors. Logos appear in the app header, lists, worker profiles and on generated PDFs.'
+        : 'Your companies. Open one for its details; you can upload or change logos (shown in the app and on forms, memos and slips).'}</p>
       <DataTable label="Companies" rows={items} rowKey={(c) => c.id} rowTestId={(c) => `company-${c.id}`}
-        search={(c) => `${c.name} ${outlets.filter((o) => outletCompany(o) === c.id).map((o) => o.name).join(' ')}`} searchLabel="Search companies"
+        search={(c) => `${c.name} ${c.sector || ''} ${outlets.filter((o) => outletCompany(o) === c.id).map((o) => o.name).join(' ')}`} searchLabel="Search companies"
         columns={[
-          { key: 'name', label: 'Company', main: true, sort: (c) => c.name.toLowerCase(), render: (c) => <span className="dt-person"><LogoImg path={c.logo} size={30} title={c.name} /><span>{c.name}</span></span> },
-          { key: 'n', label: 'Outlets', align: 'right', sort: (c) => outlets.filter((o) => outletCompany(o) === c.id).length, render: (c) => outlets.filter((o) => outletCompany(o) === c.id).length },
+          { key: 'name', label: 'Company', main: true, sort: (c) => c.name.toLowerCase(), render: (c) => <span className="dt-person"><LogoImg path={c.logo} size={30} title={c.name} /><span>{c.name}{c.sector && <small>{c.sector}</small>}</span></span> },
+          { key: 'n', label: 'Outlets', align: 'right', sort: (c) => nOut(c.id), render: (c) => nOut(c.id) },
           { key: 'list', label: 'Outlet names', hide: 'tablet', render: (c) => <span className="small dt-clip">{outlets.filter((o) => outletCompany(o) === c.id).map((o) => o.name).join(', ') || '—'}</span> },
         ]}
-        actions={(c) => isSuper ? <Actions><IconAction kind="edit" label="Rename company" onClick={() => rename(c.id)} /><IconAction kind="delete" label="Delete company" onClick={() => remove(c.id)} /></Actions> : null}
+        actions={(c) => <Actions>
+          {canSeeCompanyDetails && <IconAction kind="view" label="Open company details (SSM, directors)" onClick={() => nav(`/companies/${encodeURIComponent(c.id)}`)} testId={`open-company-${c.id}`} />}
+          {canDeleteCompany && <IconAction kind="delete" label="Delete company (only when it has no outlets, workers or quota letters)" confirm={`Delete ${c.name} with its details, SSM copies and directors?`} onClick={() => remove(c.id)} />}
+        </Actions>}
         expand={(c) => (
           <>
-            <Details items={[['Outlets', outlets.filter((o) => outletCompany(o) === c.id).map((o) => o.name).join(', ') || 'No outlets yet']]} />
+            <Details items={[['Sector', c.sector || '—'], ['Outlets', outlets.filter((o) => outletCompany(o) === c.id).map((o) => o.name).join(', ') || 'No outlets yet']]} />
             <div className="mt-s"><span className="small muted">Logo: </span><LogoEdit kind="company" id={c.id} path={c.logo} name={c.name} /></div>
           </>
         )} />
-      {msg && <p className="small" role="status">{msg}</p>}
+      {adding && <CompanyPanel onClose={() => setAdding(false)} onCreated={(id) => nav(`/companies/${encodeURIComponent(id)}`)} />}
     </Card>
   )
 }

@@ -1,5 +1,5 @@
 /* Approval letters + the ledger (bank-statement style: every movement a line, a running balance per letter × country). */
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Btn, Card, Chip, Empty, KV, SelectFilter, Toolbar } from '../../components/ui'
 import { DataTable, Details } from '../../components/dataTable'
@@ -9,9 +9,15 @@ import type { Block } from '../../reports/types'
 import { addMonths, fmtDate, todayISO } from '../../lib/util'
 import { inCompany, atMyt, COUNTRIES, ENTRY_LABEL, qcall, useQuota, type Entry, type Quota } from '../../lib/quota'
 import { QuotaAppChecklist } from './Extras'
+import { CompanyPanel } from '../../components/companyPanel'
+import { refreshConfig } from '../../lib/config'
 import { companyOpts, FileField, FileLink, NoteAsk, QForm, s, useQCtx, useSheetMeta, type V } from './shared'
 
-const KIND_LABEL: Record<string, string> = { new: 'New quota', replacement: 'Replacement (CMO / gantian)', transfer: 'Transfer', additional: 'Additional (government window)' }
+const ADD_CO = '__add_company__'
+/** runs `run` once each time `when` turns true (opens the add-company panel when "+ Add company…" is picked) */
+function OnTrue({ when, run }: { when: boolean; run: () => void }) { useEffect(() => { if (when) run() }, [when]); return null } // eslint-disable-line react-hooks/exhaustive-deps
+
+const KIND_LABEL: Record<string, string> = { new: 'New quota', replacement: 'Replacement (COM / gantian)', transfer: 'Transfer', additional: 'Additional (government window)' }
 const ST_TONE = { pending: 'amber', active: 'green', rejected: 'red', closed: 'gray' } as const
 const MANUAL = ['approved', 'expire', 'adjust_up', 'adjust_down', 'return', 'use_existing', 'transfer_out', 'transfer_in']
 
@@ -57,7 +63,7 @@ export function LettersTab({ company }: { company: string }) {
         <DataTable label="Approval letters" rows={quotas} rowKey={(q) => q.id}
           initialSort={{ key: 'appr', dir: 'desc' }}
           columns={[
-            { key: 'ref', label: 'Letter', main: true, render: (q) => <><b>{q.ref_no}</b> <Chip tone={ST_TONE[q.status]}>{q.status === 'pending' ? 'Waiting for GM / CEO' : q.status}</Chip><br /><small className="muted">{ctx.cName(q.company_id)} · {KIND_LABEL[q.kind]}</small></>, sort: (q) => q.ref_no },
+            { key: 'ref', label: 'Letter', main: true, render: (q) => <><b>{q.ref_no}</b> <Chip tone={ST_TONE[q.status]}>{q.status === 'pending' ? (ctx.isCeo ? 'Waiting for GM / CEO' : 'Waiting to be opened') : q.status}</Chip><br /><small className="muted">{ctx.cName(q.company_id)} · {KIND_LABEL[q.kind]}</small></>, sort: (q) => q.ref_no },
             { key: 'bd', label: 'Approved', render: (q) => Object.entries(q.breakdown || {}).map(([c, v]) => `${c} ${v}`).join(', ') },
             { key: 'bal', label: 'Available', align: 'right', render: (q) => tallyOf(q).reduce((a, t) => a + t.available, 0), sort: (q) => tallyOf(q).reduce((a, t) => a + t.available, 0) },
             { key: 'appr', label: 'Approved on', hide: 'tablet', render: (q) => fmtDate(q.approval_date), sort: (q) => q.approval_date },
@@ -67,7 +73,7 @@ export function LettersTab({ company }: { company: string }) {
             {q.status !== 'rejected' && <QuotaAppChecklist q={q} />}
             <Details items={[['Sector', [q.sector, q.subsector].filter(Boolean).join(' / ') || '—'], ['Job title', q.job_title || '—'], ['Section 60K', [q.section60k_ref, q.section60k_expiry && `exp ${fmtDate(q.section60k_expiry)}`].filter(Boolean).join(' · ') || '—'],
               ['Conditions', q.conditions || '—'], ['Levy', q.levy_note || '—'], ['Letter copy', <FileLink key="f" f={d.files.find((f) => f.id === q.letter_file)} />],
-              ['Recorded by', `${ctx.who(q.created_by_name, null)} · ${atMyt(q.created_at)}`], ['Opened by', q.opened_at ? `${q.opened_by_name} · ${atMyt(q.opened_at)}` : '—'],
+              ['Recorded by', `${ctx.who(q.created_by_name, null)} · ${atMyt(q.created_at)}`], ['Opened by', q.opened_at ? `${ctx.isGmUp ? q.opened_by_name : 'Approver'} · ${atMyt(q.opened_at)}` : '—'],
               ['Extensions', q.extensions?.length ? q.extensions.map((x) => `${fmtDate(x.from)} → ${fmtDate(x.to)} (${x.ref})`).join('; ') : '—'], ['Notes', q.notes || '—']]} />
             {tallyOf(q).length > 0 && <KV items={tallyOf(q).map((t) => [t.country, `approved ${t.approved} · available ${t.available} · reserved ${t.reserved} · used ${t.used} · lapsed ${t.lapsed}`])} />}
           </>}
@@ -80,7 +86,7 @@ export function LettersTab({ company }: { company: string }) {
             {q.status !== 'rejected' && <IconAction kind="edit" label="Edit details" onClick={() => setForm({ ...q, breakdown: q.breakdown })} />}
             {q.status === 'active' && ctx.isGmUp && <IconAction kind="more" label="Movement: expire, adjust, transfer, extend, existing workers" onClick={() => setMove(q)} />}
           </Actions>}
-          empty={<Empty title="No letters yet">Record each quota approval letter (KDN / FWCMS) with its scanned copy. A GM or the CEO opens it.</Empty>} />
+          empty={<Empty title="No letters yet">Record each quota approval letter (KDN / FWCMS) with its scanned copy. It is opened after a check against the original.</Empty>} />
       </Card>
 
       <Card title={<>Ledger {selQ && <Chip tone="blue">{selQ.ref_no}</Chip>}</>} actions={<Toolbar>
@@ -113,7 +119,7 @@ export function LettersTab({ company }: { company: string }) {
   )
 }
 
-const bucketText = (e: Entry) => ([['available', e.d_avail], ['reserved', e.d_resv], ['used', e.d_used], ['replaceable', e.d_elig], ['in claim', e.d_claim], ['replaced', e.d_repl], ['lapsed', e.d_lapsed], ['CMO exits', e.d_cmo], ['other exits', e.d_other], ['runaways', e.d_run]] as [string, number][])
+const bucketText = (e: Entry) => ([['available', e.d_avail], ['reserved', e.d_resv], ['used', e.d_used], ['replaceable', e.d_elig], ['in claim', e.d_claim], ['replaced', e.d_repl], ['lapsed', e.d_lapsed], ['COM exits', e.d_cmo], ['other exits', e.d_other], ['runaways', e.d_run]] as [string, number][])
   .filter(([, v]) => v).map(([k, v]) => `${k} ${v > 0 ? '+' : ''}${v}`).join(' · ') || '—'
 
 function LetterForm({ v, onClose }: { v: V; onClose: () => void }) {
@@ -122,11 +128,13 @@ function LetterForm({ v, onClose }: { v: V; onClose: () => void }) {
   const locked = !isNew && v.status !== 'pending'
   const [bd, setBd] = useState<Record<string, number>>((v.breakdown as Record<string, number>) || {})
   const [extra, setExtra] = useState('')
+  const [addCo, setAddCo] = useState(false)
+  useEffect(() => { if (isNew) void refreshConfig() }, [isNew]) // a stale saved company list is refreshed when the form opens
   return (
     <QForm wide title={isNew ? 'Record a quota approval letter' : `Edit ${s(v.ref_no)}`} initial={v} onClose={onClose}
-      note={isNew ? 'The numbers come from the approval letter. A GM or the CEO (not you) checks it against the original and opens it — only then do the slots appear in the balance.' : locked ? 'Numbers and dates of an open letter change only through a ledger movement or an extension.' : undefined}
+      note={isNew ? 'The numbers come from the approval letter. An approver (not you) checks it against the original and opens it — only then do the slots appear in the balance.' : locked ? 'Numbers and dates of an open letter change only through a ledger movement or an extension.' : undefined}
       fields={[
-        { key: 'company_id', label: 'Company', type: 'select', options: companyOpts(ctx.companies), required: true, show: () => isNew },
+        { key: 'company_id', label: 'Company', type: 'select', options: [...companyOpts(ctx.companies), ...(ctx.canCreateCompany ? [{ value: ADD_CO, label: '+ Add company…' }] : [])], required: true, show: () => isNew },
         { key: 'ref_no', label: 'Letter reference no.', required: true, show: () => !locked },
         { key: 'kind', label: 'Type', type: 'select', options: Object.entries(KIND_LABEL).filter(([k]) => k !== 'additional').map(([value, label]) => ({ value, label })), show: () => isNew },
         { key: 'approval_date', label: 'Approval date', type: 'date', required: true, show: () => !locked },
@@ -141,9 +149,15 @@ function LetterForm({ v, onClose }: { v: V; onClose: () => void }) {
         if (!locked && !Object.values(bd).some((n) => n > 0)) throw new Error('Enter the approved number for at least one country.')
         for (const k of ['expiry_date', 'section60k_expiry', 'letter_file']) if (p[k] === '') p[k] = null
         delete p.extensions; delete p.created_at
+        if (p.company_id === ADD_CO) throw new Error('Choose the company (or finish adding the new one).')
         await qcall('qr_save_quota', { p })
       }}>
       {(val, set) => <>
+        <OnTrue when={isNew && val.company_id === ADD_CO && !addCo} run={() => setAddCo(true)} />
+        {isNew && ctx.canCreateCompany && <div className="field full picker-add" data-testid="letter-add-company"><small className="muted">Company not in the list?</small>
+          <IconAction kind="add" text label="Add company" onClick={() => setAddCo(true)} testId="add-company-btn" /></div>}
+        {addCo && <CompanyPanel onClose={() => { setAddCo(false); if (val.company_id === ADD_CO) set({ company_id: ctx.companies[0]?.id || '' }) }}
+          onCreated={(id) => { set({ company_id: id }); setAddCo(false) }} />}
         {!locked && <div className="field full"><label>Approved per country *</label>
           <div className="qr-bd">{[...new Set([...COUNTRIES, ...Object.keys(bd)])].map((c) => (
             <label key={c} className="qr-bd-i"><span>{c}</span><input type="number" min={0} value={bd[c] ?? ''} onChange={(e) => setBd({ ...bd, [c]: Math.max(0, Number(e.target.value) || 0) })} /></label>))}
@@ -161,7 +175,7 @@ function MoveForm({ q, onClose }: { q: Quota; onClose: () => void }) {
   const others = d.quotas.filter((x) => x.company_id === q.company_id && x.id !== q.id && x.status === 'active')
   return (
     <QForm title={`Movement on ${q.ref_no}`} onClose={onClose} saveLabel="Post movement"
-      note="GM / CEO only. Every movement is a ledger line with your name; a wrong one is reversed by another GM or the CEO, never deleted."
+      note="Every movement is a ledger line with your name; a wrong one is reversed, never deleted."
       initial={{ kind: 'expire', country: countries[0], qty: 1 }}
       fields={[
         { key: 'kind', label: 'Movement', type: 'select', required: true, options: [

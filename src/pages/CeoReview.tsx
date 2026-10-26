@@ -62,7 +62,7 @@ export default function CeoReviewPage() {
     <div className="page">
       <div className="page-h">
         <div><h1>CEO review <Chip tone="purple">CEO only</Chip></h1>
-          <p className="muted">Decisions by the General Manager and rejections, for your review. Your decision is final and locks the request. Nobody else sees this page.</p></div>
+          <p className="muted">Decisions by the General Manager and rejections, for your review. Nobody else sees this page.</p></div>
       </div>
       <Tabs tabs={[{ id: 'todo' as View, label: 'To review', badge: todo.length }, { id: 'done' as View, label: 'Reviewed' }, { id: 'any' as View, label: 'Any request (recall)' }]} value={view} onChange={setView} />
       <Toolbar>

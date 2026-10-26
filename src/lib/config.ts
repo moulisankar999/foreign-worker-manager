@@ -96,6 +96,11 @@ function set(next: Record<string, unknown>) {
   subs.forEach((f) => f())
 }
 
+let loaded = false
+/** true once the server copy has been read in this session (the cached copy may be stale or empty until then) */
+export function useConfigLoaded(): boolean {
+  return useSyncExternalStore((cb) => { subs.add(cb); return () => subs.delete(cb) }, () => loaded)
+}
 export async function refreshConfig() {
   const { data, error } = await supabase.from('app_config').select('key,value')
   if (error || !data) return
@@ -106,6 +111,7 @@ export async function refreshConfig() {
     const { data: mine } = await supabase.rpc('my_company_list')
     if (mine && typeof mine === 'object') next.companies = mine
   }
+  loaded = true
   set(next)
 }
 export function startConfig() {

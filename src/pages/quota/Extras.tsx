@@ -1,5 +1,5 @@
 /* Quota extras: master table (company → letters → sector → grand total), HR follow-ups (GM / CEO), replacement applications,
- * government windows, the quota application checklist + levy, and the CMO follow-up (departure letter, bond refund). */
+ * government windows, the quota application checklist + levy, and the COM follow-up (departure letter, bond refund). */
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Btn, Card, Empty, Toolbar } from '../../components/ui'
@@ -63,7 +63,7 @@ export function MasterTable({ company }: { company: string }) {
           <tr className="qr-grp"><td colSpan={4 + NUMS.length}>Per sector</td></tr>
           {sectors.map((sc) => line(tot(letters.filter((m) => (m.sector || 'Unspecified') === sc), sc), sc, 'qr-sub', 'sec' + sc))}
           {line(grand, <b>Grand total</b>, 'qr-total qr-grand', 'grand')}
-        </tbody></table></div> : <Empty title="No approval letters yet">Record a letter in Letters & ledger; it appears here once the GM or CEO opens it.</Empty>}
+        </tbody></table></div> : <Empty title="No approval letters yet">Record a letter in Letters & ledger; it appears here once it is checked against the original and opened.</Empty>}
       {print && <Preview blocks={blocks} meta={meta} file={`quota-master-${todayISO()}.pdf`} onClose={() => setPrint(false)} />}
     </Card>
   )
@@ -226,10 +226,10 @@ export function QuotaAppChecklist({ q }: { q: Quota }) {
   </div>
 }
 
-/* ---------------- CMO follow-up: Immigration departure letter + bond refund ---------------- */
+/* ---------------- COM follow-up: Immigration departure letter + bond refund ---------------- */
 export function ExitFollowUp({ x, onClose }: { x: Exit; onClose: () => void }) {
   const d = useQuota()
-  return <QForm title={`Departure & bond — ${x.worker_name}`} onClose={onClose} note="Immigration's departure confirmation closes the CMO; the security bond is refunded after it."
+  return <QForm title={`Departure & bond — ${x.worker_name}`} onClose={onClose} note="Immigration's departure confirmation closes the COM; the security bond is refunded after it."
     initial={{ bond_refund_status: x.bond_refund_status || 'pending', bond_refund_rm: x.bond_refund_rm ?? '', bond_refund_on: x.bond_refund_on || '', depart_letter_file: x.depart_letter_file || '' }}
     fields={[{ key: 'bond_refund_status', label: 'Bond refund', type: 'select', options: [{ value: 'pending', label: 'Pending' }, { value: 'applied', label: 'Applied' }, { value: 'refunded', label: 'Refunded' }, { value: 'not_applicable', label: 'Not applicable' }] },
       { key: 'bond_refund_rm', label: 'Amount (RM)', type: 'number' }, { key: 'bond_refund_on', label: 'Refunded on', type: 'date', show: (v) => v.bond_refund_status === 'refunded' }]}

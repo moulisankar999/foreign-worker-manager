@@ -116,8 +116,8 @@ function FlowCard({ w }: { w: Worker }) {
         })}</ul>
         {f.kind === 'abscond' && <p className="muted small">The days for the police and Immigration reports are company targets (Settings in Compliance → Rules), not legal deadlines. Report in FWCMS (eRUNAWAY) or in person; Immigration keeps the security bond — {CHECK}.</p>}
         {f.kind === 'exit' && <p className="muted small">Apply for the Check Out Memo (COM) before the worker flies home; it is also needed to claim back the security bond — {CHECK}.</p>}
-        {qr && f.kind === 'exit' && <p className="small"><Link to="/quota?tab=exits">Record the CMO in the Quota register</Link> — it counts against the quota and is kept for replacement claims.</p>}
-        {qr && f.kind === 'abscond' && <p className="small"><Link to={`/quota?tab=exits&newrun=${w.id}`}>Open the runaway case (no CMO)</Link> — police / Immigration reports, permit, bond and follow-ups.</p>}
+        {qr && f.kind === 'exit' && <p className="small"><Link to="/quota?tab=exits">Record the COM in the Quota register</Link> — it counts against the quota and is kept for replacement claims.</p>}
+        {qr && f.kind === 'abscond' && <p className="small"><Link to={`/quota?tab=exits&newrun=${w.id}`}>Open the runaway case (no COM)</Link> — police / Immigration reports, permit, bond and follow-ups.</p>}
       </>}
       {start && <FormModal title={start === 'abscond' ? 'Worker absconded' : 'Start exit checklist'}
         fields={start === 'abscond' ? [{ key: 'lastSeen', label: 'Last day seen at work', type: 'date', required: true }, { key: 'status', label: 'Also set the worker status to “Absconded”', type: 'checkbox', full: true }] : [{ key: 'started', label: 'Start date', type: 'date', required: true }]}

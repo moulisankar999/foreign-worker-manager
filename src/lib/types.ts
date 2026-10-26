@@ -122,7 +122,7 @@ export interface Worker {
   permitSector?: string
   /** hostel from the hostel register (Act 446) */
   hostelId?: string
-  /** v1.4 Quota & Recruitment: approval letter this worker uses, and the recruit record he came from */
+  /** v1.4 Approval & Recruitment: approval letter this worker uses, and the recruit record he came from */
   quotaId?: string
   recruitId?: string
   /** exit or absconding checklist */

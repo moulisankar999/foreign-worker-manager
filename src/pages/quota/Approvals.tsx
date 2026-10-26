@@ -1,5 +1,5 @@
 /* Quota Use Requests: every use of the quota is approved before the calling visa (VDR) is applied.
- * Order: GM, then CEO. The CEO alone is final (GM step skipped); the GM alone is never enough. Nobody decides his own request. */
+ * The approval order and checks are enforced in the database (qr_decide_use); the screen shows neutral status text only. */
 import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Btn, Card, Chip, Empty } from '../../components/ui'
@@ -14,7 +14,7 @@ export const canDecide = (r: UseReq, rank: number, me?: string) =>
 export function Timeline({ items, who }: { items: { at: string; by: string; role: string; action: string; note?: string | null }[]; who: (n: string, r: string) => string }) {
   return (
     <ol className="qr-tl">{items.map((t, i) => (
-      <li key={i} className={/Rejected|Returned/.test(t.action) ? 'bad' : /Approved by CEO/.test(t.action) ? 'good' : ''}>
+      <li key={i} className={/Rejected|Returned/.test(t.action) ? 'bad' : /^Approved(?! by GM| —)/.test(t.action) ? 'good' : ''}>
         <b>{t.action}</b> <small className="muted">{atMyt(t.at)} · {who(t.by, t.role)}</small>{t.note && <div className="qr-tl-n">{t.note}</div>}
       </li>))}</ol>
   )
@@ -42,7 +42,7 @@ export function ApprovalsTab({ company }: { company: string }) {
   return (
     <div className="qr-grid">
       <div className="note-box">
-        <b>Rule:</b> every quota slot is used only after a Quota Use Request is approved. The GM approves first, then the CEO; <b>the CEO's approval alone is final</b> (the timeline shows "GM step skipped"). A GM approval alone never releases the calling visa. Nobody approves a request he raised. The database blocks the VDR step until the CEO has approved.
+        Every quota slot is used only after its Quota Use Request is approved. The calling visa step opens once the request is approved; the timeline shows each step.
       </div>
       {ctx.isGmUp && waiting.length > 0 && <Card title={<>Waiting for your approval <Chip tone="red">{waiting.length}</Chip></>}>
         <ul className="alist">{waiting.map((r) => <li key={r.id}><Chip tone={UR_STATUS[r.status].tone}>Q-{r.ref_no}</Chip><span className="qr-li"><span>{r.slots} × {r.country} on {qRef(r.quota_id)} — {r.purpose}</span></span>
@@ -51,10 +51,10 @@ export function ApprovalsTab({ company }: { company: string }) {
       <Card title="Quota Use Requests" actions={ctx.rank < 4 ? <Btn kind="primary" icon="plus" small onClick={() => setForm({ slots: 1 })}>New request</Btn> : <small className="muted">Requests are raised by HR or the GM.</small>}>
         <DataTable label="Quota Use Requests" rows={rows} rowKey={(r) => r.id} open={sp.get('open') ? { key: sp.get('open')! } : null}
           initialSort={{ key: 'at', dir: 'desc' }} search={(r) => `Q-${r.ref_no} ${r.purpose} ${r.country} ${qRef(r.quota_id)}`}
-          filters={[{ key: 'st', label: 'Status', options: Object.entries(UR_STATUS).map(([value, x]) => ({ value, label: x.label })), match: (r, v) => r.status === v }]}
+          filters={[{ key: 'st', label: 'Status', options: Object.keys(UR_STATUS).map((value) => ({ value, label: ctx.urLabel(value as UseReq["status"]) })), match: (r, v) => r.status === v }]}
           columns={[
             { key: 'ref', label: 'Request', main: true, render: (r) => <><b>Q-{r.ref_no}</b> · {r.slots} × {r.country}<br /><small className="muted">{qRef(r.quota_id)} · {ctx.cName(r.company_id)}</small></>, sort: (r) => r.ref_no },
-            { key: 'st', label: 'Status', render: (r) => <><Chip tone={UR_STATUS[r.status].tone}>{UR_STATUS[r.status].label}</Chip>{r.gm_skipped && r.status === 'approved' && <> <Chip tone="gray">GM step skipped</Chip></>}</>, sort: (r) => r.status },
+            { key: 'st', label: 'Status', render: (r) => <><Chip tone={UR_STATUS[r.status].tone}>{ctx.urLabel(r.status)}</Chip>{ctx.isCeo && r.gm_skipped && r.status === 'approved' && <> <Chip tone="gray">GM step skipped</Chip></>}</>, sort: (r) => r.status },
             { key: 'purpose', label: 'Purpose', hide: 'tablet', render: (r) => r.purpose },
             { key: 'by', label: 'Raised by', hide: 'phone', render: (r) => ctx.who(r.requested_by_name, r.requested_by_role) },
             { key: 'at', label: 'Raised', hide: 'tablet', render: (r) => atMyt(r.requested_at), sort: (r) => r.requested_at },
@@ -68,7 +68,7 @@ export function ApprovalsTab({ company }: { company: string }) {
           </>}
           actions={(r) => <Actions>
             {canDecide(r, ctx.rank, me) && <>
-              <IconAction kind="approve" label={ctx.rank >= 4 ? 'Approve (final)' : 'Approve as GM — goes to the CEO'} onClick={() => setAsk({ r, action: 'approve' })} />
+              <IconAction kind="approve" label="Approve" onClick={() => setAsk({ r, action: 'approve' })} />
               <IconAction kind="recall" label="Return for changes" onClick={() => setAsk({ r, action: 'return' })} />
               <IconAction kind="reject" label="Reject (slots released)" onClick={() => setAsk({ r, action: 'reject' })} />
             </>}
@@ -84,7 +84,7 @@ export function ApprovalsTab({ company }: { company: string }) {
         fields={[{ key: 'qty', label: 'Slots to release', type: 'number', required: true }, { key: 'note', label: 'Reason', type: 'textarea', required: true, full: true }]}
         onSave={(v) => { const q = Number(v.qty) || 0; if (q < 1 || q > resvLeft(ask.r)) throw new Error(`Between 1 and ${resvLeft(ask.r)}.`); return qcall('qr_release_unused', { p_id: ask.r.id, p_qty: q, p_note: v.note }) }} />}
       {ask && ask.action !== 'release' && <NoteAsk title={`${ACT[ask.action].t}: Q-${ask.r.ref_no}`} label={ACT[ask.action].label} required={ACT[ask.action].req} danger={ACT[ask.action].danger}
-        confirm={ask.action === 'approve' ? (ctx.rank >= 4 ? 'Approve' : 'Approve — send to CEO') : ACT[ask.action].t.split(' —')[0]} onClose={() => setAsk(null)}
+        confirm={ask.action === 'approve' ? 'Approve' : ACT[ask.action].t.split(' —')[0]} onClose={() => setAsk(null)}
         onOk={(note) => qcall('qr_decide_use', { p_id: ask.r.id, p_action: ask.action, p_note: note || null })} />}
     </div>
   )
@@ -99,7 +99,7 @@ function RequestForm({ v, onClose }: { v: V; onClose: () => void }) {
   const avail = (qid: unknown, c: unknown) => d.tally.find((t) => t.quota_id === qid && t.country === c)?.available ?? 0
   return (
     <QForm wide title="New Quota Use Request" initial={v} onClose={onClose} saveLabel="Send for approval"
-      note={ctx.isGm ? 'You are the GM: this request goes straight to the CEO.' : 'It goes to the GM and the CEO. The slots are reserved now and released if it is rejected or cancelled.'}
+      note="It is sent for approval. The slots are reserved now and released if it is rejected or cancelled."
       fields={[
         { key: 'quota_id', label: 'Approval letter', type: 'select', required: true, options: open.map((q) => ({ value: q.id, label: `${q.ref_no} — ${ctx.cName(q.company_id)}` })) },
         { key: 'country', label: 'Country', type: 'select', required: true, options: (v2Countries(open, v)) },

@@ -80,9 +80,11 @@ export const REQUEST_TYPES: RequestType[] = [
 export const REQUEST_TYPE = Object.fromEntries(REQUEST_TYPES.map((t) => [t.key, t])) as Record<string, RequestType>
 
 export interface TypeRule { enabled: boolean; level: Level; limit: number | null }
-export interface HrAdminFlags { manageUsers: boolean; deleteWorkers: boolean; viewSalary: boolean; viewAudit: boolean; resetPasswords: boolean }
+export interface HrAdminFlags { manageUsers: boolean; deleteWorkers: boolean; viewSalary: boolean; viewAudit: boolean; resetPasswords: boolean
+  /** v1.4.2: HR Admin may add companies (default on) */ createCompanies: boolean
+  /** v1.4.2: HR Manager may add companies (default on) */ hrmCreateCompanies: boolean }
 export interface ApprovalRules { types: Record<string, TypeRule> }
-export const DEFAULT_HR_FLAGS: HrAdminFlags = { manageUsers: true, deleteWorkers: false, viewSalary: true, viewAudit: true, resetPasswords: false }
+export const DEFAULT_HR_FLAGS: HrAdminFlags = { manageUsers: true, deleteWorkers: false, viewSalary: true, viewAudit: true, resetPasswords: false, createCompanies: true, hrmCreateCompanies: true }
 export function defaultRules(): ApprovalRules {
   return { types: Object.fromEntries(REQUEST_TYPES.map((t) => [t.key, { enabled: true, level: t.level, limit: t.limit ?? null }])) }
 }

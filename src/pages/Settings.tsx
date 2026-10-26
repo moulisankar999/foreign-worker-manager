@@ -29,6 +29,8 @@ import { buildICS } from '../lib/ics'
 import { notifySupported, requestNotify } from '../lib/notify'
 import { loadSampleData } from '../lib/sample'
 import { RemoveDemoCard, isDemoName } from '../components/demoCleanup'
+import { RemoveSampleCard } from '../components/sampleCleanup'
+import { isSampleCompany } from '../lib/companies'
 import { BUSINESS_TYPES, SKILL_LEVELS, type BusinessType, type Settings } from '../lib/types'
 import { download, todayISO, uid } from '../lib/util'
 import { ANDROID_APK_URL, APP_VERSION, isNative, platformLabel } from '../lib/platform'
@@ -54,7 +56,7 @@ const TABS: { id: SettingsTab; label: string; icon: string; sub: string }[] = [
   { id: 'about', label: 'About', icon: 'more', sub: 'Version, install the app' },
 ]
 /** searchable settings: [tab, section id, words] */
-const TITLES: Record<string, string> = {"s-demo": "Remove sample (DEMO) data", "s-account": "Account & cloud sync", "s-password": "Change password", "s-signout": "Sign out", "s-pending": "New users waiting for approval", "s-users": "Users", "s-approvers": "Who may approve new users", "s-hrflags": "HR Admin permissions", "s-audit": "Audit log", "s-gmpowers": "General Manager powers", "s-agencies": "Agencies & Integrations", "s-adduser": "Add user", "s-companies": "Companies", "s-outlets": "Outlets", "s-policy": "Company & policy", "s-jobs": "Job categories", "s-vault": "Document vault", "s-payrules": "Pay & Leave rules", "s-passport": "Passport safekeeping", "s-reasons": "Emergency release reasons", "s-consent": "Consent form translations", "s-rules": "Approval rules", "s-phone": "Phone alerts", "s-myalerts": "My alerts", "s-notify": "WhatsApp / SMS / email notifications", "s-backup": "Backup & data", "s-calendar": "Calendar & in-app notifications", "s-about": "About"}
+const TITLES: Record<string, string> = {"s-sample": "Remove sample data (Approval & Recruitment)", "s-demo": "Remove sample (DEMO) data", "s-account": "Account & cloud sync", "s-password": "Change password", "s-signout": "Sign out", "s-pending": "New users waiting for approval", "s-users": "Users", "s-approvers": "Who may approve new users", "s-hrflags": "HR Admin & HR Manager permissions", "s-audit": "Audit log", "s-gmpowers": "General Manager powers", "s-agencies": "Agencies & Integrations", "s-adduser": "Add user", "s-companies": "Companies", "s-outlets": "Outlets", "s-policy": "Company & policy", "s-jobs": "Job categories", "s-vault": "Document vault", "s-payrules": "Pay & Leave rules", "s-passport": "Passport safekeeping", "s-reasons": "Emergency release reasons", "s-consent": "Consent form translations", "s-rules": "Approval rules", "s-phone": "Phone alerts", "s-myalerts": "My alerts", "s-notify": "WhatsApp / SMS / email notifications", "s-backup": "Backup & data", "s-calendar": "Calendar & in-app notifications", "s-about": "About"}
 const INDEX: [SettingsTab, string, string][] = [
   ['account', 's-account', 'Account & cloud sync signed in role access sync now'],
   ['account', 's-password', 'Change password'],
@@ -80,6 +82,7 @@ const INDEX: [SettingsTab, string, string][] = [
   ['notifications', 's-phone', 'Phone alerts push notifications test alert'],
   ['notifications', 's-myalerts', 'My alerts mobile WhatsApp SMS opt out'],
   ['notifications', 's-notify', 'Notifications WhatsApp SMS email providers quiet hours events'],
+  ['data', 's-sample', 'Remove sample data Approval & Recruitment quota sample companies letters recruits documents delete clean up'],
   ['data', 's-backup', 'Backup restore import export JSON sample data re-download from cloud'],
   ['data', 's-demo', 'Remove sample DEMO data delete demo workers outlets clean up'],
   ['data', 's-calendar', 'Calendar export expiries ics install notifications'],
@@ -99,6 +102,9 @@ export default function SettingsPage() {
   const hasDemoNow = workers.some((w) => isDemoName(w.fullName)) || outlets.some((o) => isDemoName(o.name))
   const [hasDemo, setHasDemo] = useState(false) // sticky: keep the card (and its result) after the removal syncs
   useEffect(() => { if (hasDemoNow) setHasDemo(true) }, [hasDemoNow])
+  const hasSampleNow = useConfig().companies.items.some((c) => isSampleCompany(c.id))
+  const [hasSample, setHasSample] = useState(false)
+  useEffect(() => { if (hasSampleNow) setHasSample(true) }, [hasSampleNow])
   const { canWrite, isAdmin, isHr, isSuper, myCompanies, canApproveUsers, canSeeAudit, creatableRoles, isHrAdmin, isGm, can, top } = useAuth()
   const canAgencies = isSuper || isHrAdmin || (isGm && can('agencies.edit'))
   const { pending: newUsers } = usePendingUsers()
@@ -284,6 +290,7 @@ export default function SettingsPage() {
       </>}
 
       {tab === 'data' && <>
+      {top('data.demo') && hasSample && <Sec id="s-sample"><RemoveSampleCard /></Sec>}
       <div ref={backupRef} id="s-backup" className="set-sec">
         <Card title="Backup & data">
           <p className="small">Your data is stored in the cloud and shared with your team. A JSON backup is still a good extra safety copy (it contains personal data — keep it safe). Restoring a backup sends its records to the cloud for everyone.</p>

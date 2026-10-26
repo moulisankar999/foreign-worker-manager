@@ -73,7 +73,7 @@ export function PipelineTab({ company }: { company: string }) {
                   <small className="muted">{stageSkipped(t, st.key, r.ecr) || nextStep(r, t, c)?.label || 'All steps done'}</small>
                   {r.status === 'active' && <small className={`qr-age ${age > STALL ? 'late' : ''}`}>{age} day{age === 1 ? '' : 's'} in this stage</small>}
                   <RuleFlags f={r.rule_flags} />
-                  {u ? <Chip tone={UR_STATUS[u.status].tone}>Q-{u.ref_no} {UR_STATUS[u.status].label}</Chip> : <Chip tone="gray">No quota request</Chip>}
+                  {u ? <Chip tone={UR_STATUS[u.status].tone}>Q-{u.ref_no} {ctx.urLabel(u.status)}</Chip> : <Chip tone="gray">No quota request</Chip>}
                 </Link>) })}
               {!list.length && <small className="muted">—</small>}
             </section>
@@ -85,7 +85,7 @@ export function PipelineTab({ company }: { company: string }) {
               { key: 'n', label: 'Recruit', main: true, render: (r) => <><b>{r.full_name}</b>{r.status !== 'active' && <> <Chip tone={r.status === 'converted' ? 'green' : 'gray'}>{r.status}</Chip></>}<br /><small className="muted">{r.country}{r.ecr ? ` · ${r.ecr}` : ''} · {r.passport_no || 'no passport yet'}</small><RuleFlags f={r.rule_flags} /></>, sort: (r) => r.full_name },
               { key: 'st', label: 'Stage', render: (r) => <>{stageLabelIn(tplOf(d, r), recruitStage(d, r))}{r.status === 'active' && <><br /><small className={`qr-age ${daysInStage(r) > STALL ? 'late' : ''}`}>{daysInStage(r)} d</small></>}</>, sort: (r) => STAGES.findIndex((x) => x.key === recruitStage(d, r)) },
               { key: 'p', label: 'Progress', hide: 'phone', align: 'right', render: (r) => <span className="qr-num">{progress(r, tplOf(d, r), stepCtx(d, r)).pct}%</span>, sort: (r) => progress(r, tplOf(d, r), stepCtx(d, r)).pct },
-              { key: 'q', label: 'Quota request', hide: 'tablet', render: (r) => { const u = ur(r); return u ? <Chip tone={UR_STATUS[u.status].tone}>Q-{u.ref_no} {UR_STATUS[u.status].label}</Chip> : '—' } },
+              { key: 'q', label: 'Quota request', hide: 'tablet', render: (r) => { const u = ur(r); return u ? <Chip tone={UR_STATUS[u.status].tone}>Q-{u.ref_no} {ctx.urLabel(u.status)}</Chip> : '—' } },
               { key: 'f', label: 'Flight', hide: 'wide', render: (r) => r.flight_at ? `${r.flight_no || ''} ${fmtDate(r.flight_at.slice(0, 10))}` : '—', sort: (r) => r.flight_at || '9' },
             ]}
             actions={(r) => <Actions><IconAction kind="view" label="Open recruit" onClick={() => nav(`/quota/recruit/${r.id}`)} /></Actions>}

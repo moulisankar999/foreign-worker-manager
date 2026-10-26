@@ -4,7 +4,9 @@
 import type { Outlet } from './types'
 import type { Role } from './supabase'
 
-export interface Company { id: string; name: string; logo?: string; /** demo company (e.g. for App Review): left out of totals, alerts and reports */ demo?: boolean }
+export interface Company { id: string; name: string; logo?: string; /** demo company (e.g. for App Review): left out of totals, alerts and reports */ demo?: boolean
+  /** v1.4.2 sample company (id "sample-…") for Approval & Recruitment: shown there with a SAMPLE tag, removed by Settings → Remove sample data */ sample?: boolean
+  /** v1.4.2: business sector (shown to everyone who sees the company) */ sector?: string }
 export interface CompaniesConfig { items: Company[] }
 export const DEFAULT_COMPANY_ID = 'main'
 export const DEFAULT_COMPANIES: CompaniesConfig = { items: [{ id: DEFAULT_COMPANY_ID, name: 'Main company' }] }
@@ -35,3 +37,5 @@ export const newCompanyId = (name: string, taken: string[]) => {
   while (taken.includes(id)) id = `${base}-${i++}`
   return id
 }
+/** v1.4.2: sample companies for Approval & Recruitment always have an id starting "sample-" (removed by Remove sample data) */
+export const isSampleCompany = (id?: string | null) => !!id && id.startsWith('sample-')

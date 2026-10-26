@@ -804,3 +804,22 @@ img, video, canvas, svg { max-width: 100%; }
 .dt-note { min-width: 6rem; max-width: 10rem; }
 .dt-r.is-unread td { font-weight: 600; } .dt-r.is-unread td:first-child { box-shadow: inset 3px 0 0 var(--primary, #2563eb); }
 .sub-steps { margin: 8px 0 0; padding-left: 1.2rem; font-size: .9rem; } .sub-steps li.done b { color: var(--ok, #15803d); }
+
+/* v1.4.2 folds (collapsible sections) — used by the company panel / page and the compact layouts */
+.fold { border: 1px solid var(--line, #E3E7ED); border-radius: 10px; margin: 8px 0; background: var(--surface, #fff); }
+.fold-h { all: unset; box-sizing: border-box; display: flex; gap: 8px; align-items: baseline; width: 100%; padding: 10px 12px; cursor: pointer; }
+.fold-h:focus-visible { outline: 2px solid #1F5AD6; outline-offset: -2px; border-radius: 10px; }
+.fold-t { font-weight: 600; }
+.fold-s { color: var(--muted, #5A6577); font-size: 12.5px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fold-c { margin-left: auto; color: var(--muted, #5A6577); }
+.fold-b { padding: 0 12px 12px; }
+.linkish { all: unset; cursor: pointer; text-align: left; flex: 1; min-width: 0; }
+.linkish:focus-visible { outline: 2px solid #1F5AD6; }
+.co-list { list-style: none; margin: 0 0 8px; padding: 0; }
+.co-list li { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--line, #E3E7ED); }
+.co-dir { border: 1px solid var(--line, #E3E7ED); border-radius: 8px; padding: 6px 10px; margin-bottom: 8px; }
+.co-dir-h { display: flex; align-items: center; gap: 8px; }
+.co-head { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.co-head h2 { margin: 0; font-size: 20px; }
+.picker-add { display: flex; gap: 6px; align-items: flex-end; }
+.picker-add > :first-child { flex: 1; min-width: 0; }

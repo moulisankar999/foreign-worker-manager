@@ -1,6 +1,6 @@
-/* v1.4 Quota & Recruitment — CEO, GM, HR Admin, HR Manager only.
+/* v1.4 Approval & Recruitment — CEO, GM, HR Admin, HR Manager only.
  * The quota is kept like a bank account: an approval letter opens it, every movement is an append-only ledger line,
- * every use needs a Quota Use Request approved by the CEO (GM first, or the CEO alone), and exits / runaways reconcile it. */
+ * every use needs an approved Quota Use Request, and exits / runaways reconcile it. */
 import { FollowUps, MasterTable } from './Extras'
 import { useMemo, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
@@ -11,6 +11,8 @@ import { useWorkers } from '../../lib/hooks'
 import { inCompany, OTHER_CO, setKnownCompanies, atMyt, nextStep, quotaAlerts, quotaRag, rmFmt, stageLabelIn, stepCtx, tplOf, UR_STATUS, useQuota, type Tally } from '../../lib/quota'
 import { daysUntil, fmtDate } from '../../lib/util'
 import { RagDot, useQCtx } from './shared'
+import { isSampleCompany } from '../../lib/companies'
+import { useAuth } from '../../lib/auth'
 import { LettersTab } from './Letters'
 import { ApprovalsTab, canDecide } from './Approvals'
 import { PipelineTab } from './Pipeline'
@@ -27,11 +29,12 @@ type TabId = 'overview' | 'letters' | 'approvals' | 'pipeline' | 'arrivals' | 'c
 
 export default function QuotaPage() {
   const ctx = useQCtx()
+  const { top } = useAuth()
   const d = useQuota()
   const { id } = useParams()
   const [sp, setSp] = useSearchParams()
   const [company, setCompany] = useState('')
-  if (!ctx.rank) return <div className="page"><Empty title="Not available">Quota & Recruitment is for the CEO, General Manager, HR Admin and HR Manager.</Empty></div>
+  if (!ctx.rank) return <div className="page"><Empty title="Not available">Approval & Recruitment is not part of your role.</Empty></div>
   if (id) return <RecruitPage id={id} />
   const waiting = d.requests.filter((r) => canDecide(r, ctx.rank, ctx.profile?.id)).length
   const tabs: { id: TabId; label: string; badge?: number }[] = [
@@ -41,7 +44,7 @@ export default function QuotaPage() {
     { id: 'pipeline', label: 'Pipeline' },
     { id: 'arrivals', label: 'Arrivals & hostel' },
     { id: 'costs', label: 'Payments & budget', badge: d.payments.filter((p) => p.status === 'pending_check').length || undefined },
-    { id: 'exits', label: 'CMO & runaways', badge: d.runaways.filter((r) => r.outcome === 'open' && !r.imm_ref).length || undefined },
+    { id: 'exits', label: 'COM & runaways', badge: d.runaways.filter((r) => r.outcome === 'open' && !r.imm_ref).length || undefined },
     { id: 'recon', label: 'Reconciliation', badge: d.tally.filter((t) => t.mismatch !== 0).length || undefined },
     { id: 'claims', label: 'Replacement claims' },
     { id: 'rules', label: 'Rules & regulations' },
@@ -56,11 +59,12 @@ export default function QuotaPage() {
   )
   return (
     <div className="page qr">
-      <div className="page-h"><div><h1>Quota & Recruitment</h1>
-        <p className="muted">Approval letters, the quota balance, CEO-approved quota use, recruits until they arrive, payments, CMOs, runaways and replacement claims.</p></div>
+      <div className="page-h"><div><h1>Approval & Recruitment</h1>
+        <p className="muted">Approval letters, the quota balance, approved quota use, recruits until they arrive, payments, Check Out Memos (COM), runaways and replacement claims.</p></div>
         <Toolbar>{companyPick}<IconAction kind="refresh" label="Reload from the server" onClick={() => d.reload()} /></Toolbar>
       </div>
       {d.error && <div className="note-box bad">Could not load: {d.error}</div>}
+      {ctx.companies.some((c) => isSampleCompany(c.id)) && <div className="note-box" data-testid="sample-banner"><Chip tone="amber">SAMPLE</Chip> Companies named “SAMPLE …” hold example data with watermarked sample documents.{top('data.demo') && <> Remove it any time in <Link to="/settings/data">Settings → Data → Remove sample data</Link>.</>}</div>}
       {company === OTHER_CO && <div className="note-box">These letters belong to companies that are no longer set up in Settings › Companies. Their ledger stays on record; add the company back to manage them.</div>}
       <Tabs tabs={tabs} value={tab} onChange={(t) => setSp({ tab: t }, { replace: true })} />
       {!d.loaded ? <p className="muted">Loading…</p> : <>
@@ -104,8 +108,8 @@ function Overview({ company }: { company: string }) {
         <Stat label="Reserved (requests)" value={sum(tally, 'reserved')} tone="amber" icon="lock" onClick={() => go('approvals')} />
         <Stat label="Used" value={sum(tally, 'used')} tone="blue" icon="users" onClick={() => go('recon')} />
         <Stat label="In pipeline" value={sum(tally, 'in_pipeline')} icon="plane" onClick={() => go('pipeline')} />
-        <Stat label="CMO — replaceable" value={sum(tally, 'repl_eligible')} tone="teal" icon="exit" onClick={() => go('claims')} />
-        <Stat label="Runaways (no CMO)" value={sum(tally, 'runaways')} tone="red" icon="alert" onClick={() => go('exits')} />
+        <Stat label="COM — replaceable" value={sum(tally, 'repl_eligible')} tone="teal" icon="exit" onClick={() => go('claims')} />
+        <Stat label="Runaways (no COM)" value={sum(tally, 'runaways')} tone="red" icon="alert" onClick={() => go('exits')} />
         <Stat label="Spent" value={rmFmt(spend)} icon="money" onClick={() => go('costs')} />
       </div>
 

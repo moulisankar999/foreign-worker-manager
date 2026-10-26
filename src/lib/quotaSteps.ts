@@ -1,4 +1,4 @@
-/* Quota & Recruitment: the recruitment pipeline, read from the versioned "pipeline" rule (Rules & regulations).
+/* Approval & Recruitment: the recruitment pipeline, read from the versioned "pipeline" rule (Rules & regulations).
    Pure (no imports) so it is unit-tested directly. Each recruit is pinned to the template version in force when he was
    added (template_id), so a change to the template never moves recruits already in progress. The database enforces the
    same order and documents (qr_pipeline_gate); this module only mirrors it for the screens. */

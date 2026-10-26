@@ -100,12 +100,12 @@ export default function RecruitPage({ id }: { id: string }) {
               const isUse = st.key === tpl.use_step
               return <li key={st.key} className={`${done ? 'done' : ''} ${isUse || st.key === '_quota' ? 'gate' : ''}`}>
                 <button type="button" className="qr-tick" aria-label={done ? `Undo: ${st.label}` : `Mark done: ${st.label}`} disabled={!active || auto || (done && isUse) || (!done && blocked)}
-                  title={auto ? (st.key === '_quota' ? 'Done automatically when the CEO approves the Quota Use Request' : 'Set in the details') : blocked && !done ? 'Locked until the CEO approves the Quota Use Request' : undefined}
+                  title={auto ? (st.key === '_quota' ? 'Done automatically when the Quota Use Request is approved' : 'Set in the details') : blocked && !done ? 'Locked until the Quota Use Request is approved' : undefined}
                   onClick={() => (done ? tick(st, { done: false }).catch((e) => toast(e.message, 'err')) : setStep(st))}>{done ? '✓' : ''}</button>
                 <div><span>{st.label}</span>{st.req === false && <span className="muted"> (optional)</span>}{st.ecr && <> <span className="pill n">{st.ecr}</span></>}
-                  {st.key === '_quota' && <> <Chip tone={done ? 'green' : 'red'}>{ur ? `Q-${ur.ref_no} ${UR_STATUS[ur.status].label}` : 'No request linked'}</Chip></>}
+                  {st.key === '_quota' && <> <Chip tone={done ? 'green' : 'red'}>{ur ? `Q-${ur.ref_no} ${ctx.urLabel(ur.status)}` : 'No request linked'}</Chip></>}
                   {isUse && <> <Chip tone={done ? 'blue' : 'amber'}>{done ? 'Slot used' : 'Uses the reserved slot'}</Chip></>}
-                  {v?.done && <small className="muted"> · {fmtDate(v.date || '')}{v.ref ? ` · ${v.ref}` : ''}{v.note ? ` · ${v.note}` : ''}{v.override ? ' · CEO override' : ''}</small>}
+                  {v?.done && <small className="muted"> · {fmtDate(v.date || '')}{v.ref ? ` · ${v.ref}` : ''}{v.note ? ` · ${v.note}` : ''}{v.override ? (ctx.isCeo ? ' · CEO override' : ' · marked done by an approver') : ''}</small>}
                   {st.hint && !done && <small className="hint">{st.hint}</small>}</div>
               </li>
             })}</ol></div>
@@ -114,9 +114,9 @@ export default function RecruitPage({ id }: { id: string }) {
 
         <div className="qr-grid">
           <Card title="Quota" actions={active && !r.vdr_applied ? <IconAction kind="assign" label={ur ? 'Link to another request' : 'Link to a Quota Use Request'} onClick={() => setEdit('link')} /> : undefined}>
-            {ur ? <KV items={[['Request', <Link key="l" to={`/quota?tab=approvals&open=${ur.id}`}>Q-{ur.ref_no}</Link>], ['Status', <Chip key="s" tone={UR_STATUS[ur.status].tone}>{UR_STATUS[ur.status].label}</Chip>],
+            {ur ? <KV items={[['Request', <Link key="l" to={`/quota?tab=approvals&open=${ur.id}`}>Q-{ur.ref_no}</Link>], ['Status', <Chip key="s" tone={UR_STATUS[ur.status].tone}>{ctx.urLabel(ur.status)}</Chip>],
               ['Letter', d.quotas.find((q) => q.id === ur.quota_id)?.ref_no || '—'], ['Slots', `${ur.slots} × ${ur.country}`]]} />
-              : <p className="muted">Not linked yet. Raise a Quota Use Request in <Link to="/quota?tab=approvals">Approvals</Link> and link him to it; the calling visa stays locked until the CEO approves.</p>}
+              : <p className="muted">Not linked yet. Raise a Quota Use Request in <Link to="/quota?tab=approvals">Approvals</Link> and link him to it; the calling visa stays locked until it is approved.</p>}
           </Card>
           <Card title="Details" actions={active ? <IconAction kind="edit" label="Edit details" onClick={() => setEdit('details')} /> : undefined}>
             <KV items={[['Passport', [r.passport_no, r.passport_expiry && `exp ${fmtDate(r.passport_expiry)}`].filter(Boolean).join(' · ') || '—'], ['Date of birth', fmtDate(r.dob || '') || '—'], ['Gender', r.gender || '—'], ['Job', r.job || '—'], ['Phone', r.phone || '—']]} />
@@ -160,7 +160,7 @@ export default function RecruitPage({ id }: { id: string }) {
         initial={{ accom_address: r.accom_address || ctx.cfg.hostels.items.find((h) => h.id === r.hostel_id)?.address || '', imm_cleared_at: toLocalDT(r.imm_cleared_at) }}
         fields={[{ key: 'accom_address', label: 'Accommodation address', type: 'textarea', full: true, required: true }, { key: 'imm_cleared_at', label: 'Cleared by Immigration at (MYT)', type: 'datetime-local' }]}
         onSave={(v) => qcall('qr_recruit_arrival', { p_id: r.id, p: { accom_address: v.accom_address, ...(v.imm_cleared_at ? { imm_cleared_at: `${v.imm_cleared_at}:00+08:00` } : {}) } })} />}
-      {edit === 'fomema' && <QForm title="FOMEMA result" onClose={() => setEdit(null)} initial={{ on: todayISO() }} note="An unfit result tells HR, the GM and the CEO; apply to Immigration for a replacement from the Replacement tab."
+      {edit === 'fomema' && <QForm title="FOMEMA result" onClose={() => setEdit(null)} initial={{ on: todayISO() }} note="An unfit result alerts HR and the approvers; apply to Immigration for a replacement from the Replacement tab."
         fields={[{ key: 'on', label: 'Examined on', type: 'date', required: true }, { key: 'result', label: 'Result', type: 'select', required: true, options: [{ value: 'fit', label: 'Fit' }, { value: 'unfit', label: 'Unfit' }] }, { key: 'note', label: 'Note', full: true }]}
         onSave={(v) => qcall('qr_recruit_fomema', { p_id: r.id, p_on: v.on, p_result: v.result, p_file: v.file || null, p_note: s(v.note) || null })}>
         {(v, set) => <FileField company={r.company_id} kind="fomema" label="FOMEMA report" value={s(v.file) || null} onChange={(id) => set({ file: id })} />}
@@ -206,12 +206,13 @@ function TravelForm({ r, onClose }: { r: Recruit; onClose: () => void }) {
 
 function LinkForm({ r, onClose }: { r: Recruit; onClose: () => void }) {
   const d = useQuota()
+  const ctx = useQCtx()
   const opts = d.requests.filter((u) => u.company_id === r.company_id && u.country === r.country && ['pending', 'gm_approved', 'approved'].includes(u.status) && u.id !== r.use_request_id)
     .map((u) => ({ u, linked: d.recruits.filter((x) => x.use_request_id === u.id).length })).filter((x) => x.linked < x.u.slots)
   return (
     <QForm title={`Link ${r.full_name} to a Quota Use Request`} onClose={onClose} initial={{}} saveLabel="Link"
       note={opts.length ? 'Only requests for the same company and country with a free slot are listed.' : 'No open request has a free slot for this country. Raise a new request in Approvals.'}
-      fields={[{ key: 'req', label: 'Request', type: 'select', required: true, options: opts.map(({ u, linked }) => ({ value: u.id, label: `Q-${u.ref_no} · ${UR_STATUS[u.status].label} · ${linked}/${u.slots} linked` })) }]}
+      fields={[{ key: 'req', label: 'Request', type: 'select', required: true, options: opts.map(({ u, linked }) => ({ value: u.id, label: `Q-${u.ref_no} · ${ctx.urLabel(u.status)} · ${linked}/${u.slots} linked` })) }]}
       onSave={(v) => qcall('qr_link_recruit', { p_recruit: r.id, p_request: v.req })} />
   )
 }

@@ -72,9 +72,9 @@ export function RulesTab() {
   if (!d.regCat.length) return <Empty title="Rules not available">The rules and regulations need the latest database update.</Empty>
   return (
     <div className="qr-grid qr-rr">
-      <div className="note-box">Every regulatory number used in this module is kept here as a rule with the date it takes effect and its source. Records use the version in force on their own date, so a change never rewrites history. {canEdit ? (ctx.isCeo ? 'Your changes take effect on their date.' : 'Your changes wait for the CEO’s approval.') : 'Only the CEO and HR Admin change rules.'}</div>
+      <div className="note-box">Every regulatory number used in this module is kept here as a rule with the date it takes effect and its source. Records use the version in force on their own date, so a change never rewrites history. {canEdit ? (ctx.isCeo ? 'Your changes take effect on their date.' : 'Your changes wait for approval before they take effect.') : 'Rule changes are made by the rule owners; ask HR Admin if a number looks wrong.'}</div>
 
-      {pending.length > 0 && <Card title={<>Waiting for the CEO <Chip tone="amber">{pending.length}</Chip></>}>
+      {pending.length > 0 && <Card title={<>{ctx.isCeo ? 'Waiting for your approval' : 'Waiting for approval'} <Chip tone="amber">{pending.length}</Chip></>}>
         <DataTable label="Rule changes waiting" rows={pending} rowKey={(x) => x.id} dense
           columns={[
             { key: 'r', label: 'Rule', main: true, render: (x) => <><b>{catOf(x.key)?.label || x.key}</b>{x.scope && <> <Chip tone="gray">{x.scope}</Chip></>}<br /><small className="muted">{ctx.who(x.created_by_name, x.created_role)} · {atMyt(x.created_at)}</small></> },
@@ -110,10 +110,9 @@ export function RulesTab() {
 
       <Card title="Module settings" actions={ctx.isCeo ? <IconAction kind="edit" label="Change module settings" onClick={() => setOldEdit(true)} /> : undefined}>
         <KV items={[
-          ['CMO missing alert', `${r.cmo_missing_days} days after a worker leaves with no CMO recorded`],
+          ['COM missing alert', `${r.cmo_missing_days} days after a worker leaves with no COM recorded`],
           ['Utilisation amber', `${r.util_amber_pct}% of the approved slots used`],
           ['Second check on payments', `${rmFmt(r.payment_check_rm)} and above`],
-          ['Approval of quota use', 'HR Admin or HR Manager raises; GM, then CEO. The CEO alone is final; the GM alone is never enough. Nobody approves their own request.'],
         ]} />
       </Card>
 
@@ -121,7 +120,7 @@ export function RulesTab() {
       {decide && <NoteAsk title={decide.approve ? 'Approve rule change' : 'Reject rule change'} required={!decide.approve} confirm={decide.approve ? 'Approve' : 'Reject'} danger={!decide.approve}
         label={decide.approve ? 'Note (optional)' : 'Reason'} onClose={() => setDecide(null)} onOk={(n) => qcall('qr_reg_decide', { p_id: decide.r.id, p_approve: decide.approve, p_note: n || null })} />}
       {oldEdit && <QForm title="Module settings" initial={{ ...r }} onClose={() => setOldEdit(false)}
-        fields={[{ key: 'cmo_missing_days', label: 'CMO missing alert (days)', type: 'number', required: true }, { key: 'util_amber_pct', label: 'Utilisation amber (%)', type: 'number', required: true }, { key: 'payment_check_rm', label: 'Second check from', type: 'money', required: true }]}
+        fields={[{ key: 'cmo_missing_days', label: 'COM missing alert (days)', type: 'number', required: true }, { key: 'util_amber_pct', label: 'Utilisation amber (%)', type: 'number', required: true }, { key: 'payment_check_rm', label: 'Second check from', type: 'money', required: true }]}
         onSave={(v) => qcall('qr_set_rules', { p: { cmo_missing_days: v.cmo_missing_days, runaway_report_days: r.runaway_report_days, expiry_amber_days: r.expiry_amber_days, expiry_red_days: r.expiry_red_days, util_amber_pct: v.util_amber_pct, payment_check_rm: v.payment_check_rm } })} />}
     </div>
   )
@@ -144,12 +143,14 @@ function History({ row }: { row: Row }) {
 }
 
 function PipelineView({ t }: { t: Template }) {
+  const ctx = useQCtx()
   return <ol className="qr-pipe">{t.stages.map((s, i) => <li key={s.key} className={s.retired ? 'strike' : ''}>
-    <span className="qr-pipe-n">{i + 1}</span><div><b>{s.label}</b> <span className="pill n">{OWNER[s.owner || 'hr'] || s.owner}</span>{s.skip_label && <span className="pill b">{s.skip_label}</span>}
+    <span className="qr-pipe-n">{i + 1}</span><div><b>{s.label}</b> <span className="pill n">{ownerLabel(s.owner || 'hr', ctx.rank)}</span>{s.skip_label && <span className="pill b">{s.skip_label}</span>}
       <div className="muted"><small>{s.steps.filter((x) => !x.retired).map((x) => `${x.label}${x.ecr ? ` (${x.ecr})` : ''}${x.req === false ? ' (optional)' : ''}${x.key === t.use_step ? ' — uses the slot' : ''}`).join(' · ')}</small></div></div>
   </li>)}</ol>
 }
 const OWNER: Record<string, string> = { hr: 'HR', gm_ceo: 'GM / CEO', agent: 'Agent', outlet_manager: 'Outlet manager' }
+const ownerLabel = (o: string, rank: number) => o === 'gm_ceo' && rank < 4 ? (rank === 3 ? 'GM / final approval' : 'Approvers') : OWNER[o] || o
 
 /* ---------------- side-panel editor ---------------- */
 function RuleEditor({ cat, scope: scope0, base, newScope, onClose }: { cat: RegCat; scope: string; base?: RegRule; newScope?: boolean; onClose: () => void }) {
@@ -206,7 +207,7 @@ function RuleEditor({ cat, scope: scope0, base, newScope, onClose }: { cat: RegC
           {err && <p className="err" role="alert">{err}</p>}
         </div>
         <footer>
-          <small className="muted">{ctx.isCeo ? 'Takes effect on its date.' : 'Goes to the CEO for approval.'}</small><span className="spacer" />
+          <small className="muted">{ctx.isCeo ? 'Takes effect on its date.' : 'Goes for approval before it takes effect.'}</small><span className="spacer" />
           <Btn icon="eye" onClick={preview}>Preview impact</Btn>
           <Btn kind="primary" icon="check" disabled={!impact || busy || !meta.source_ref.trim() || (cat.scope_kind !== 'none' && !scope)} title={!impact ? 'Preview the impact first' : undefined} onClick={save}>{busy ? 'Saving…' : ctx.isCeo ? 'Save version' : 'Send to CEO'}</Btn>
         </footer>

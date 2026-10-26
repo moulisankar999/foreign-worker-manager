@@ -130,7 +130,7 @@ export default function WorkerForm() {
     { key: 'joinDate', label: 'Start date', type: 'date', required: true },
     ...(editing ? [] : [{ key: 'status', label: 'Employment status', type: 'select' as const, options: [...STATUSES] }]),
     { key: 'agent', label: 'Recruitment agent', full: true },
-    ...(letters.length ? [{ key: 'quotaId', label: 'Quota approval letter', type: 'select' as const, options: letters.map((l) => ({ value: l.id, label: l.ref_no })), hint: 'Counts this worker in the letter\'s tally (Quota & Recruitment)' }] : []),
+    ...(letters.length ? [{ key: 'quotaId', label: 'Quota approval letter', type: 'select' as const, options: letters.map((l) => ({ value: l.id, label: l.ref_no })), hint: 'Counts this worker in the letter\'s tally (Approval & Recruitment)' }] : []),
   ]
   const contract: FieldDef[] = [
     { key: 'contractStart', label: 'Contract start', type: 'date' },

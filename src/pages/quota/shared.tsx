@@ -1,4 +1,4 @@
-/* Shared bits for the Quota & Recruitment pages. */
+/* Shared bits for the Approval & Recruitment pages. */
 import { useMemo, useState, type ReactNode } from 'react'
 import { Btn, Chip, FormGrid, Modal, type FieldDef } from '../../components/ui'
 import { FilePick } from '../../components/filePick'
@@ -6,7 +6,9 @@ import { toast } from '../../components/toast'
 import { useAuth } from '../../lib/auth'
 import { useConfig } from '../../lib/config'
 import { companyLogo, useLogoUrl } from '../../lib/logos'
-import { fileUrl, qRank, uploadQuotaFile, useQuota, whoLabel, type QFile } from '../../lib/quota'
+import { isSampleCompany, outletCompany } from '../../lib/companies'
+import { useOutlets } from '../../lib/hooks'
+import { fileUrl, qRank, uploadQuotaFile, urLabel, useQuota, whoLabel, type QFile, type UseReq } from '../../lib/quota'
 import { ROLE_LABEL } from '../../lib/workflow'
 import { mytStamp } from '../../reports/format'
 import type { SheetMeta } from '../../reports/Sheets'
@@ -20,11 +22,17 @@ export function useQCtx() {
   const auth = useAuth()
   const cfg = useConfig()
   const rank = qRank(auth.role)
-  const companies = cfg.companies.items.filter((c) => !c.demo || cfg.companies.items.length === 1)
-    .filter((c) => auth.isSuper || !auth.myCompanies.length || auth.myCompanies.includes(c.id))
+  const outlets = useOutlets()
+  // v1.4.2: same rule as the server (my_company_list / co_in_scope): CEO, GM and unlimited staff pick any company;
+  // limited staff pick their companies plus the companies of their outlets (an outlet-only HR Manager used to get none
+  // here and fell back to the built-in "Main company")
+  const unscoped = rank >= 3 || auth.isSuper || auth.isGm || (!auth.myCompanies.length && !auth.myOutlets.length)
+  const outletCos = new Set(outlets.filter((o) => auth.myOutlets.includes(o.id)).map((o) => outletCompany(o)))
+  const companies = cfg.companies.items.filter((c) => !c.demo || isSampleCompany(c.id) || cfg.companies.items.length === 1)
+    .filter((c) => unscoped || auth.myCompanies.includes(c.id) || outletCos.has(c.id))
   const cName = (id?: string | null) => cfg.companies.items.find((c) => c.id === id)?.name || id || ''
   const who = (name?: string | null, role?: string | null) => whoLabel(name, role, rank)
-  return { ...auth, cfg, rank, companies, cName, who, isCeo: rank >= 4, isGmUp: rank >= 3, isHraUp: rank >= 2 }
+  return { ...auth, cfg, rank, companies, cName, who, urLabel: (st: UseReq['status']) => urLabel(st, rank), isCeo: rank >= 4, isGmUp: rank >= 3, isHraUp: rank >= 2 }
 }
 export const canSeeQuota = (role?: string | null) => qRank(role) > 0
 

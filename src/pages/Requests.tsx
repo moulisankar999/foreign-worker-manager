@@ -382,7 +382,7 @@ export function RequestDetail() {
           ...(r.result?.ticketDecision ? [['Ticket decision', String(r.result.ticketDecision).replace('_', ' ')] as [string, string]] : []),
         ]} />
         {r.ceo_locked && !isSuper && <p className="callout small mt-s">🔒 A final decision has been made on this request. It is locked.</p>}
-        {r.ceo_locked && isSuper && <p className="callout small mt-s">🔒 Your decision is final and locks this request for everyone else.</p>}
+        {r.ceo_locked && isSuper && <p className="callout small mt-s">🔒 This request is locked after your decision.</p>}
       </Card>
 
       {isSuper && (

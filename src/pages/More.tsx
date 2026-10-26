@@ -18,7 +18,7 @@ export default function More() {
     ['/alerts', 'bell', 'Alerts', 'Expiries, overdue passports, proof pending'],
     ['/reports', 'chart', 'Reports', 'Headcount, leave, emergency leave, passport register'],
     ...(canWrite && !isOM ? [['/compliance', 'shield', 'Compliance', 'Outlet risk, hostels, hiring, complaints, PDPA'] as [string, string, string, string]] : []),
-    ...(qRank(role) > 0 ? [['/quota', 'plane', 'Quota & Recruitment', 'Quota balance, approvals, recruits, CMOs, runaways, claims'] as [string, string, string, string]] : []),
+    ...(qRank(role) > 0 ? [['/quota', 'plane', 'Approval & Recruitment', 'Quota balance, approvals, recruits, Check Out Memos (COM), runaways, claims'] as [string, string, string, string]] : []),
     ['/inbox', 'bell', 'Notifications', 'Request updates'],
     ['/help', 'help', 'Help', 'My role, FAQ and the user manual (PDF)'],
     ['/settings', 'gear', 'Settings', isSuper || isGm ? 'Users, approval rules, notifications…' : 'Account & app'],

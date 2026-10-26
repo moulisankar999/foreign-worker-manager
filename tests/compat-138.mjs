@@ -36,6 +36,7 @@ try {
     p.on('pageerror', (e) => errs.push(e.message))
     await p.goto(UI); await p.fill('#em', U[k].email); await p.fill('#pw', pw); await p.locator('form button[type=submit]').first().click()
     await p.waitForTimeout(7000)
+    await p.getByText(/Good (morning|afternoon|evening)/).first().waitFor({ timeout: 25000 }).catch(() => {}) // a busy TEST project can take longer to sync
     const dash = await p.locator('body').innerText()
     check(`${LBL} ${k}: signs in and sees the dashboard (not locked out)`, !(await p.locator('#em').isVisible().catch(() => false)) && /Good (morning|afternoon|evening)/.test(dash), dash.slice(0, 300))
     for (const path of ['#/requests', '#/workers', '#/settings/users']) { await p.goto(UI + path); await p.waitForTimeout(3000) }

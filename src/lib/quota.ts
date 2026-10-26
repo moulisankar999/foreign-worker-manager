@@ -1,4 +1,4 @@
-/* Quota & Recruitment (v1.4 draft): data access, country checklists, cost categories, helpers.
+/* Approval & Recruitment (v1.4 draft): data access, country checklists, cost categories, helpers.
  * Server: migrations 036-038 (tables qr_*, read-only RLS by company scope, every write through audited RPCs). */
 import { useEffect, useState, useSyncExternalStore } from 'react'
 import { supabase } from './supabase'
@@ -139,13 +139,16 @@ async function all<T>(table: string, order = 'created_at'): Promise<T[]> {
     if (!data || data.length < 1000) return out
   }
 }
+/** v1.4.2: older stored texts said "CMO" — shown as COM (Check Out Memo). Display only; stored data is unchanged. */
+export const com = <T,>(x: T): T => (typeof x === 'string' ? x.replace(/\bCMO(s?)\b/g, 'COM$1') as T : x)
+const comRows = <T extends object,>(list: T[], keys: (keyof T)[]): T[] => list.map((r) => { const o = { ...r }; for (const k of keys) o[k] = com(o[k]); return o })
 export function reloadQuota(): Promise<void> {
   if (loading) return loading
   loading = (async () => {
     try {
       const [quotas, ledger, requests, batches, recruits, events, payments, exits, runaways, claims, claimItems, files, tally, rules] = await Promise.all([
-        all<Quota>('qr_quotas'), all<Entry>('qr_ledger', 'id'), all<UseReq>('qr_use_requests', 'requested_at'), all<Batch>('qr_batches'), all<Recruit>('qr_recruits'),
-        all<QEvent>('qr_events', 'id'), all<Payment>('qr_payments'), all<Exit>('qr_exits'), all<Runaway>('qr_runaways'), all<Claim>('qr_claims'),
+        all<Quota>('qr_quotas'), all<Entry>('qr_ledger', 'id'), all<UseReq>('qr_use_requests_v', 'requested_at'), all<Batch>('qr_batches'), all<Recruit>('qr_recruits'),
+        all<QEvent>('qr_events_v', 'id'), all<Payment>('qr_payments'), all<Exit>('qr_exits'), all<Runaway>('qr_runaways'), all<Claim>('qr_claims'),
         supabase.from('qr_claim_items').select('*').then((r) => { if (r.error) throw r.error; return (r.data || []) as ClaimItem[] }),
         all<QFile>('qr_files', 'uploaded_at'),
         supabase.rpc('qr_tally', { p_company: null }).then((r) => { if (r.error) throw r.error; return (r.data || []) as Tally[] }),
@@ -162,7 +165,7 @@ export function reloadQuota(): Promise<void> {
         rows<AgentBatch>(supabase.from('qr_agent_batches').select('*')), all<AgentDoc>('qr_agent_docs', 'submitted_at'),
         rows<MasterRow>(supabase.rpc('qr_master', { p_company: null })), rows<ServerAlert>(supabase.rpc('qr_alerts')),
       ])
-      state = { loaded: true, quotas, ledger, requests, batches, recruits, events, payments, exits, runaways, claims, claimItems, files, tally, rules, windows, agents, agentBatches, agentDocs, master, alerts, reg, regCat, followups, replacements }
+      state = { loaded: true, quotas, ledger: comRows(ledger, ['note']), requests, batches, recruits, events: comRows(events, ['action', 'note']), payments, exits, runaways, claims, claimItems, files, tally, rules, windows, agents, agentBatches, agentDocs, master, alerts: comRows(alerts, ['text' as keyof ServerAlert]), reg, regCat, followups: comRows(followups, ['title' as keyof FollowUp]), replacements }
     } catch (e) {
       state = { ...state, loaded: true, error: (e as Error).message }
     } finally { loading = null; emit() }
@@ -231,24 +234,29 @@ export async function fileBytes(f: QFile): Promise<{ bytes: ArrayBuffer; ok: boo
 /* ---------------- roles ---------------- */
 export const qRank = (r?: Role | string | null) => ({ super_admin: 4, admin: 4, general_manager: 3, hr_admin: 2, hr_manager: 1, manager: 1 } as Record<string, number>)[r || ''] || 0
 const RANK_OF_LABEL: Record<string, number> = { CEO: 4, 'General Manager': 3, 'HR Admin': 2, 'HR Manager': 1 }
-/** lower roles see a superior's role, not the person's name */
+/** lower roles never see who a superior is or which role they hold: just "Approver" (the 1.4.2 views mask it server-side too) */
 export const whoLabel = (name: string | null | undefined, role: string | null | undefined, myRank: number) =>
-  role && (RANK_OF_LABEL[role] || 0) > myRank ? role : [name, role && role !== name ? `(${role})` : ''].filter(Boolean).join(' ')
+  (role && (RANK_OF_LABEL[role] || 0) > myRank) || role === 'Approver' ? 'Approver' : [name, role && role !== name ? `(${role})` : ''].filter(Boolean).join(' ')
 
 /* ---------------- labels ---------------- */
 export const UR_STATUS: Record<UseReq['status'], { label: string; tone: string }> = {
-  pending: { label: 'Waiting for GM / CEO', tone: 'amber' }, gm_approved: { label: 'GM approved — waiting for CEO', tone: 'blue' },
+  pending: { label: 'Sent for approval', tone: 'amber' }, gm_approved: { label: 'At the next approval step', tone: 'blue' },
   approved: { label: 'Approved', tone: 'green' }, returned: { label: 'Returned for changes', tone: 'orange' }, rejected: { label: 'Rejected', tone: 'red' }, cancelled: { label: 'Cancelled', tone: 'gray' },
 }
+/** status label as the viewer may read it: HR sees neutral steps, the GM never sees CEO powers, the CEO sees all */
+export const urLabel = (s: UseReq['status'], rank: number) =>
+  rank >= 4 ? ({ pending: 'Waiting for GM / CEO', gm_approved: 'GM approved — waiting for CEO' } as Record<string, string>)[s] || UR_STATUS[s].label
+    : rank === 3 ? ({ pending: 'Waiting for approval', gm_approved: 'Approved by GM — waiting for final approval' } as Record<string, string>)[s] || UR_STATUS[s].label
+      : UR_STATUS[s].label
 export const ENTRY_LABEL: Record<string, string> = {
   approved: 'Approved (letter)', reserve: 'Reserved (use request)', release: 'Released', use: 'Used (calling visa)', use_existing: 'Used (existing worker)', return: 'Returned to balance',
   expire: 'Expired / lapsed', transfer_out: 'Transferred out', transfer_in: 'Transferred in', adjust_up: 'Adjustment +', adjust_down: 'Adjustment −',
-  exit_cmo: 'Exited via CMO (copy on file)', exit_other: 'Exited (death / transfer)', exit_other_elig: 'Exit (earlier record)', exit_void: 'Exit record voided',
-  runaway: 'Runaway (no CMO)', runaway_void: 'Runaway found / returned', claim_submit: 'In an additional quota application', claim_release: 'Back on file', claim_approved: 'Used in an approved application', reversal: 'Reversal',
+  exit_cmo: 'Exited via COM (copy on file)', exit_other: 'Exited (death / transfer)', exit_other_elig: 'Exit (earlier record)', exit_void: 'Exit record voided',
+  runaway: 'Runaway (no COM)', runaway_void: 'Runaway found / returned', claim_submit: 'In an additional quota application', claim_release: 'Back on file', claim_approved: 'Used in an approved application', reversal: 'Reversal',
 }
-export const EXIT_KIND: Record<Exit['kind'], string> = { cmo: 'Check Out Memo (CMO)', death: 'Death', transfer: 'Transfer to another employer' }
+export const EXIT_KIND: Record<Exit['kind'], string> = { cmo: 'Check Out Memo (COM)', death: 'Death', transfer: 'Transfer to another employer' }
 export const EXIT_STATUS: Record<Exit['status'], { label: string; tone: string }> = {
-  eligible: { label: 'CMO on file', tone: 'green' }, claimed: { label: 'In an application', tone: 'blue' }, replaced: { label: 'Used in an application', tone: 'gray' },
+  eligible: { label: 'COM on file', tone: 'green' }, claimed: { label: 'In an application', tone: 'blue' }, replaced: { label: 'Used in an application', tone: 'gray' },
   not_eligible: { label: 'Recorded', tone: 'gray' }, void: { label: 'Void', tone: 'red' },
 }
 export const CLAIM_STATUS: Record<Claim['status'], { label: string; tone: string }> = {
@@ -334,13 +342,13 @@ export function quotaAlerts(d: QData, workers: { id: string; fullName: string; w
     if (!r.imm_ref) out.push({ level: due < today ? 'red' : 'amber', text: `${r.worker_name}: Immigration runaway report (FWCMS eRUNAWAY) ${due < today ? 'OVERDUE since' : 'due by'} ${due}`, link: `/quota?tab=exits&run=${r.id}`, company: r.company_id })
     if (!r.police_report_no) out.push({ level: 'red', text: `${r.worker_name}: police report not recorded`, link: `/quota?tab=exits&run=${r.id}`, company: r.company_id })
   }
-  // departed with no CMO after N days
+  // departed with no COM after N days
   const withExit = new Set(d.exits.filter((x) => x.status !== 'void').map((x) => x.worker_id))
   const withRun = new Set(d.runaways.map((x) => x.worker_id))
   for (const w of workers) {
     if (!['Resigned', 'Terminated', 'Contract Ended', 'Repatriated'].includes(w.status) || withExit.has(w.id)) continue
     const since = w.exitDate ? -(daysUntil(w.exitDate) ?? 0) : 999
-    if (since >= d.rules.cmo_missing_days) out.push({ level: 'red', text: `${w.fullName} (${w.workerNo}) left ${since >= 999 ? '' : since + ' days ago '}with no CMO in the register`, link: `/workers/${w.id}`, company: '' })
+    if (since >= d.rules.cmo_missing_days) out.push({ level: 'red', text: `${w.fullName} (${w.workerNo}) left ${since >= 999 ? '' : since + ' days ago '}with no COM in the register`, link: `/workers/${w.id}`, company: '' })
   }
   for (const w of workers.filter((x) => x.status === 'Absconded' && !withRun.has(x.id))) out.push({ level: 'red', text: `${w.fullName} (${w.workerNo}) is Absconded with no runaway case`, link: `/quota?tab=exits&newrun=${w.id}`, company: '' })
   // anti-misuse (server, same scope as the user): use without approval, workers beyond recorded use, expiry 90/60/30 with unused balance,

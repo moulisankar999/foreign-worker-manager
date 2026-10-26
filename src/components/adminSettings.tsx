@@ -53,16 +53,16 @@ export function ApprovalRulesCard() {
 }
 
 /* ---------------- HR Admin powers ---------------- */
-const FLAG_LABEL: Record<keyof HrAdminFlags, string> = { manageUsers: 'Approve users & set roles/outlets (except CEO)', deleteWorkers: 'Delete worker records', viewSalary: 'See salaries, loans & payroll', viewAudit: 'See the audit log', resetPasswords: 'Reset passwords of users in their companies (never CEO / HR Admin)' }
+const FLAG_LABEL: Record<keyof HrAdminFlags, string> = { manageUsers: 'Approve users & set roles/outlets (except CEO)', deleteWorkers: 'Delete worker records', viewSalary: 'See salaries, loans & payroll', viewAudit: 'See the audit log', resetPasswords: 'Reset passwords of users in their companies (never CEO / HR Admin)', createCompanies: 'HR Admin: add companies (with SSM details and directors)', hrmCreateCompanies: 'HR Manager: add companies (sees directors\' IC / passport masked; cannot delete)' }
 export function HrFlagsCard() {
   const { top } = useAuth()
   const isSuper = top('hr.flags') // CEO, or a General Manager with this power
   const f = useConfig().hr_admin
   return (
-    <Card title="HR Admin permissions">
-      <p className="muted small">What HR Admins may do in addition to approving requests. {isSuper ? 'Changes apply immediately for everyone.' : 'Shown here for reference.'}</p>
+    <Card title="HR Admin & HR Manager permissions">
+      <p className="muted small">What HR Admins (and, where marked, HR Managers) may do in addition to approving requests. Deleting companies, SSM documents or directors is always CEO / General Manager only. {isSuper ? 'Changes apply immediately for everyone.' : 'Shown here for reference.'}</p>
       {(Object.keys(FLAG_LABEL) as (keyof HrAdminFlags)[]).map((k) => (
-        <label key={k} className="check"><input type="checkbox" checked={!!f[k]} disabled={!isSuper} onChange={(e) => saveConfig('hr_admin', { ...f, [k]: e.target.checked }).catch(err)} /> {FLAG_LABEL[k]}</label>
+        <label key={k} className="check" data-testid={`hrflag-${k}`}><input type="checkbox" checked={k === 'createCompanies' || k === 'hrmCreateCompanies' ? f[k] !== false : !!f[k]} disabled={!isSuper} onChange={(e) => saveConfig('hr_admin', { ...f, [k]: e.target.checked }).catch(err)} /> {FLAG_LABEL[k]}</label>
       ))}
     </Card>
   )

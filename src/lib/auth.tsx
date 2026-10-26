@@ -37,6 +37,13 @@ export interface Perms {
   canApproveUsers: boolean
   /** roles I may add with "Add user" (always below my own; the server re-checks) */
   creatableRoles: Role[]
+  /** v1.4.2 companies (server: co_can_create / co_full / co_view / co_can_delete) */
+  canCreateCompany: boolean
+  canDeleteCompany: boolean
+  /** company details + SSM copies (CEO, GM, HR Admin, HR Manager) */
+  canSeeCompanyDetails: boolean
+  /** directors' full IC / passport and ID copies; edit directors and documents (CEO, GM, HR Admin) */
+  canSeeDirectorIds: boolean
 }
 interface AuthCtx extends Perms {
   session: Session | null
@@ -159,6 +166,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     myOutlets: profile?.outlet_ids || [],
     myCompanies: profile?.company_ids || [],
     canApproveUsers: isSuper || (isGm && can('users.approve')) || (isHrAdmin && !!session && ruleFor(cfg.user_approvals, session.user.id).enabled),
+    canCreateCompany: isSuper || isGm || (isHrAdmin && flags.createCompanies !== false) || (role === 'hr_manager' && flags.hrmCreateCompanies !== false),
+    canDeleteCompany: isSuper || isGm,
+    canSeeCompanyDetails: isSuper || isGm || isHrAdmin || role === 'hr_manager',
+    canSeeDirectorIds: isSuper || isGm || isHrAdmin,
     creatableRoles: isSuper ? ['general_manager', 'hr_admin', 'hr_manager', 'outlet_manager', 'viewer']
       : isGm ? (can('users.create') ? ['hr_admin', 'hr_manager', 'outlet_manager', 'viewer'] : [])
       : isHrAdmin ? ['hr_manager', 'outlet_manager', 'viewer'] : role === 'hr_manager' ? ['outlet_manager'] : [],

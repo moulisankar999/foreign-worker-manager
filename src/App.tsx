@@ -16,6 +16,7 @@ import WorkerForm from './pages/WorkerForm'
 import Alerts from './pages/Alerts'
 import Reports from './pages/Reports'
 import SettingsPage from './pages/Settings'
+import CompanyDetailPage from './pages/CompanyDetail'
 import MemoPrint from './pages/MemoPrint'
 import PayslipPrint from './pages/PayslipPrint'
 import Login, { Pending } from './pages/Login'
@@ -48,7 +49,7 @@ const NAV = [
   { to: '/alerts', label: 'Alerts', icon: 'alert' },
   { to: '/reports', label: 'Reports', icon: 'chart', desk: true },
   { to: '/compliance', label: 'Compliance', icon: 'shield', desk: true, hr: true },
-  { to: '/quota', label: 'Quota & Recruitment', icon: 'plane', desk: true, quota: true },
+  { to: '/quota', label: 'Approval & Recruitment', icon: 'plane', desk: true, quota: true },
   { to: '/ceo-review', label: 'CEO review', icon: 'lock', desk: true, ceo: true },
   { to: '/control', label: 'Software Control', icon: 'shield', desk: true, ceo: true },
   { to: '/settings', label: 'Settings', icon: 'gear', desk: true },
@@ -146,6 +147,7 @@ function MainApp() {
             <Route path="/reports" element={<Reports />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/settings/:tab" element={<SettingsPage />} />
+            <Route path="/companies/:id" element={<CompanyDetailPage />} />
             <Route path="/help" element={<HelpPage />} />
             <Route path="/help/:tab" element={<HelpPage />} />
             <Route path="/requests" element={<RequestsPage />} />
