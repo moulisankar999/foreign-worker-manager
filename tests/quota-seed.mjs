@@ -77,12 +77,25 @@ const uI = await rpc('hrm', 'qr_request_use', { p: { quota_id: QR, country: 'Ind
 await rpc('gm', 'qr_decide_use', { p_id: uI, p_action: 'approve', p_note: 'Headcount matches the outlet plan' })
 await rpc('ceo', 'qr_decide_use', { p_id: uI, p_action: 'approve', p_note: 'Approved' })
 const S = (o) => o
-await rpc('hrm', 'qr_save_recruit', { p: { id: ri[0], stage: 'onboarding', vdr_applied: day(-40), vdr_no: 'VDR-IN-0001', vdr_approved: day(-30), vdr_expiry: day(60), flight_no: 'MH181', flight_at: at(-10), airport: 'KLIA T1', pickup_by: 'Azman (driver)', arrived_at: at(-10, 14), hostel_id: HOSTEL, steps: S({ airport_letter: { done: true }, fomema: { done: true }, emigrate: { done: true } }) } })
-await rpc('hrm', 'qr_save_recruit', { p: { id: ri[1], stage: 'arrival', vdr_applied: day(-40), vdr_no: 'VDR-IN-0002', vdr_approved: day(-30), vdr_expiry: day(60), flight_no: 'MH181', flight_at: at(-35), airport: 'KLIA T1', pickup_by: 'Azman (driver)', arrived_at: at(-35, 14), hostel_id: HOSTEL, steps: S({ airport_letter: { done: true } }) } })
-await rpc('hrm', 'qr_save_recruit', { p: { id: ri[2], stage: 'travel', vdr_applied: day(-25), vdr_no: 'VDR-IN-0003', vdr_approved: day(-12), vdr_expiry: day(78), flight_no: 'AK12', flight_at: at(2, 7), airport: 'KLIA T2', steps: S({ airport_letter: { done: true } }) } })
-await rpc('hrm', 'qr_save_recruit', { p: { id: ri[3], stage: 'travel', vdr_applied: day(-25), vdr_no: 'VDR-IN-0004', vdr_approved: day(-12), vdr_expiry: day(78), flight_no: 'AK12', flight_at: at(9, 7), airport: 'KLIA T2', pickup_by: 'Azman (driver)' } })
-await rpc('hrm', 'qr_save_recruit', { p: { id: ri[4], stage: 'vdr', vdr_applied: day(-6), vdr_no: 'VDR-IN-0005' } })
-await rpc('hrm', 'qr_save_recruit', { p: { id: ri[5], stage: 'medical' } })
+// pipeline rules (039): stages cannot be skipped — the CEO marks earlier stages done with a note (demo only), then HR saves details
+const defs = async (country, ecr) => ok(await admin.rpc('qr_pipeline_def', { p_country: country, p_ecr: ecr }), 'pipeline_def')
+async function upTo(id, country, ecr, target) {
+  const st = []; for (const d of await defs(country, ecr)) if (!st.includes(d.stage)) st.push(d.stage)
+  for (const s of st) { if (s === target) break; const r = await U.ceo.c.rpc('qr_stage_override', { p_id: id, p_stage: s, p_note: 'Demo data: earlier stage completed' }); if (r.error && !/Nothing to mark|cannot be marked/.test(r.error.message)) console.log('override', s, r.error.message) }
+}
+const soft = async (who, fn, args) => { try { return await rpc(who, fn, args) } catch (e) { console.log('demo step skipped:', e.message) } }
+await upTo(ri[0], 'India', 'ECR', 'onboard')
+await soft('hrm', 'qr_save_recruit', { p: { id: ri[0], vdr_applied: day(-40), vdr_no: 'VDR-IN-0001', vdr_approved: day(-30), vdr_expiry: day(60), flight_no: 'MH181', flight_at: at(-10), airport: 'KLIA T1', pickup_by: 'Azman (driver)', arrived_at: at(-10, 14), hostel_id: HOSTEL, steps: S({ airport_letter: { done: true }, fomema: { done: true }, emigrate: { done: true } }) } })
+await upTo(ri[1], 'India', 'ECNR', 'hr_brief')
+await soft('hrm', 'qr_save_recruit', { p: { id: ri[1], vdr_applied: day(-40), vdr_no: 'VDR-IN-0002', vdr_approved: day(-30), vdr_expiry: day(60), flight_no: 'MH181', flight_at: at(-35), airport: 'KLIA T1', pickup_by: 'Azman (driver)', arrived_at: at(-35, 14), hostel_id: HOSTEL, steps: S({ airport_letter: { done: true } }) } })
+await upTo(ri[2], 'India', 'ECR', 'departure')
+await soft('hrm', 'qr_save_recruit', { p: { id: ri[2], vdr_applied: day(-25), vdr_no: 'VDR-IN-0003', vdr_approved: day(-12), vdr_expiry: day(78), flight_no: 'AK12', flight_at: at(2, 7), airport: 'KLIA T2', steps: S({ airport_letter: { done: true } }) } })
+await upTo(ri[3], 'India', 'ECR', 'ticket')
+await soft('hrm', 'qr_save_recruit', { p: { id: ri[3], vdr_applied: day(-25), vdr_no: 'VDR-IN-0004', vdr_approved: day(-12), vdr_expiry: day(78), flight_no: 'AK12', flight_at: at(9, 7), airport: 'KLIA T2', pickup_by: 'Azman (driver)' } })
+await upTo(ri[4], 'India', 'ECNR', 'vdr')
+await soft('hrm', 'qr_save_recruit', { p: { id: ri[4], vdr_applied: day(-6), vdr_no: 'VDR-IN-0005' } })
+await upTo(ri[5], 'India', 'ECR', 'medical')
+await soft('hrm', 'qr_save_recruit', { p: { id: ri[5] } })
 
 // ---- Nepal batch (Resort): request waiting for the GM
 const bN = await rpc('hrm', 'qr_save_batch', { p: { company_id: RESORT, quota_id: QR, country: 'Nepal', title: 'Nepal batch Dec 2026 — waiters', target_count: 4, budget_total: 30000, agent_name: 'Demo Himalayan Manpower, Kathmandu', expected_arrival: day(45), hostel_id: HOSTEL } })
