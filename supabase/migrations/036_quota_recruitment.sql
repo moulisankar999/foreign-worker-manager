@@ -1,4 +1,4 @@
--- 034 Quota & Recruitment (v1.4.0 draft) — admin-only module: quota letters, append-only quota ledger,
+-- 036 Quota & Recruitment (v1.4.0 draft) — admin-only module: quota letters, append-only quota ledger,
 -- Quota Use Requests (GM + CEO approval before any calling visa), recruitment pipeline, costs, CMO register,
 -- runaway cases and replacement-quota claims. Additive only: new tables / functions / bucket; nothing existing changes.
 -- Visibility: CEO, GM, HR Admin, HR Manager (company scope). Outlet Manager, Viewer and workers see nothing.
@@ -926,7 +926,7 @@ insert into public.system_map (key, sort, title, content) values ('quota', 35, '
     jsonb_build_array('Quota Use Request', 'Every use of quota is requested by HR or the GM and reserves the slots. GM then CEO approve; the CEO alone is final (GM step skipped); GM alone never is. Nobody decides their own request. Reject / cancel releases the slots.'),
     jsonb_build_array('Calling visa gate', 'Triggers qr_recruit_gate and qr_ledger_check refuse a VDR application or a ''use'' entry unless the Quota Use Request is approved by the CEO.'),
     jsonb_build_array('Double-claim guard', 'Unique index qr_claim_items_once: one CMO sits in one live claim only; approved CMOs become ''replaced'' for good.'),
-    jsonb_build_array('Migration', '034_quota_recruitment.sql (additive only)'))),
+    jsonb_build_array('Migration', '036_quota_recruitment.sql (additive only)'))),
   jsonb_build_object('t', 'steps', 'items', jsonb_build_array(
     'Record the approval letter (scan + numbers) → GM / CEO opens it after checking the original.',
     'HR raises a Quota Use Request for the batch → GM approves → CEO approves (or CEO directly).',

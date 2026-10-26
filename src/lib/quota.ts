@@ -1,5 +1,5 @@
 /* Quota & Recruitment (v1.4 draft): data access, country checklists, cost categories, helpers.
- * Server: migration 034 (tables qr_*, read-only RLS by company scope, every write through audited RPCs). */
+ * Server: migration 036 (tables qr_*, read-only RLS by company scope, every write through audited RPCs). */
 import { useEffect, useState, useSyncExternalStore } from 'react'
 import { supabase } from './supabase'
 import { daysUntil, todayISO } from './util'

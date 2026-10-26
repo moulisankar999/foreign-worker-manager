@@ -1,4 +1,4 @@
--- 035: link a recruit to a Quota Use Request after the request was raised (additive).
+-- 037: link a recruit to a Quota Use Request after the request was raised (additive).
 -- Allowed while the request is pending / GM-approved / approved, same company and country, and never more recruits than slots.
 create or replace function public.qr_link_recruit(p_recruit uuid, p_request uuid) returns void language plpgsql security definer set search_path = public as $$
 declare r public.qr_recruits; u public.qr_use_requests; n int;

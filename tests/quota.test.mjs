@@ -1,4 +1,4 @@
-// Quota & Recruitment (034): RLS per role, ledger maths, Quota Use Request approvals (GM + CEO, CEO alone final),
+// Quota & Recruitment (036): RLS per role, ledger maths, Quota Use Request approvals (GM + CEO, CEO alone final),
 // VDR gate, maker-checker, cost totals, CMO tally, double-claim guard, runaway tally, reconciliation.
 // SAFETY: TEST project only (refuses live + any non-@example.com user). Never deletes users or other suites' data. Never prints secrets.
 import { createRequire } from 'module'
@@ -91,7 +91,7 @@ try {
   r = await U.ceo.c.rpc('qr_decide_use', { p_id: UR2, p_action: 'approve' }); ur = (await admin.from('qr_use_requests').select('*').eq('id', UR2).single()).data
   check('CEO alone approves → approved, GM step skipped', ur.status === 'approved' && ur.gm_skipped && ur.timeline.some((x) => /GM step skipped/.test(x.action)), JSON.stringify([ur.status, ur.gm_skipped]))
   r = await U.gm.c.rpc('qr_decide_use', { p_id: UR2, p_action: 'approve' }); check('GM cannot act on a closed request', !!r.error)
-  // 035: link a recruit to an existing request
+  // 037: link a recruit to an existing request
   const btN = (await U.hrm.c.rpc('qr_save_batch', { p: { company_id: A, quota_id: QA, country: 'Nepal', title: 'Nepal batch 1', target_count: 2 } })).data
   const RN1 = (await U.hrm.c.rpc('qr_save_recruit', { p: { batch_id: btN, full_name: 'Bikash Gurung', passport_no: 'pa1111111' } })).data
   const RN2 = (await U.hrm.c.rpc('qr_save_recruit', { p: { batch_id: btN, full_name: 'Suman Rai', passport_no: 'pa2222222' } })).data
