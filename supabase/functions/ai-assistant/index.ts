@@ -317,8 +317,8 @@ function friendlyError(e: Error, admin: boolean): string {
   const m = msg.toLowerCase()
   const detail = admin ? ` (Provider said: ${msg.replace(/^AI provider error\s*/, '').slice(0, 160)})` : ''
   if (st === 429 && /free.?tier/.test(m)) {
-    const lim = msg.match(/limit: ?(\d+)/)?.[1], wait = msg.match(/retry in ([0-9]+h)?([0-9]+m)?/i)
-    return admin ? `AI account needs billing set up: the Google AI key is on the Free tier and today's free limit${lim ? ` (${lim} requests per day for this model)` : ''} is used up. Turn on billing for the key's project in Google AI Studio to lift it${wait ? `, or wait about ${(wait[1] || '') + (wait[2] || '')} for the free limit to reset` : ''}.` : 'The assistant has reached its daily limit. Please let your administrator know, or try again later.'
+    const lim = msg.match(/limit: ?(\d+)/)?.[1], wm = msg.match(/retry in ([0-9]+h)?([0-9]+m)?/i), wait = wm && (wm[1] || wm[2]) ? (wm[1] || '') + (wm[2] || '') : ''
+    return admin ? `AI account needs billing set up: the Google AI key is on the Free tier and today's free limit${lim ? ` (${lim} requests per day for this model)` : ''} is used up. Turn on billing for the key's project in Google AI Studio to lift it${wait ? `, or wait about ${wait} for the free limit to reset` : ''}.` : 'The assistant has reached its daily limit. Please let your administrator know, or try again later.'
   }
   if (/billing|payment|prepay|credit|free.?tier|limit: ?0\b/.test(m) && (st === 400 || st === 402 || st === 403 || st === 429)) return admin ? `AI account needs billing set up: the provider account behind the AI key has no active billing or free quota. Turn on billing in Google AI Studio, then try again.${detail}` : 'The assistant is unavailable until the administrator finishes setting up the AI account.'
   if (st === 401 || st === 403 || /api key not valid|api_key_invalid|permission/.test(m)) return admin ? `The AI key was rejected (not valid or no permission). Check the AI_API_KEY secret.${detail}` : 'The assistant is unavailable right now. Please let your administrator know.'
