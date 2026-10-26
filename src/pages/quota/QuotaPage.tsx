@@ -97,7 +97,7 @@ function QuotaHero({ tally, recruits, spend, go }: { tally: Tally[]; recruits: {
   return (
     <section className="qr-hero hero160" aria-label="Quota at a glance">
       <button type="button" className="qr-donut" onClick={() => go('letters')} title="Why you see this: the balance of all active approval letters in view. Click for letters & ledger.">
-        <Donut size={132} stroke={16} label={`Quota: ${used} used, ${resv} reserved, ${avail} available of ${approved}`}
+        <Donut size={112} stroke={14} label={`Quota: ${used} used, ${resv} reserved, ${avail} available of ${approved}`}
           parts={[{ v: used, color: 'var(--pri)', name: 'Used' }, { v: resv, color: 'var(--amber)', name: 'Reserved' }, { v: avail, color: 'var(--green)', name: 'Available' }]}
           center={<span className="dn-c"><b><CountUp value={avail} /></b><small>available</small></span>} />
         <span className="qr-leg">

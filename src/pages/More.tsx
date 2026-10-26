@@ -19,7 +19,7 @@ export default function More() {
     ...(isSuper ? [['/control', 'shield', `Software Control${ctlN ? ` (${ctlN})` : ''}`, 'Health monitor, app errors, system map & renewals'] as [string, string, string, string]] : []),
     ...(qRank(role) > 0 ? [['/requests', 'check', 'Requests', 'Leave, passport, transfer and other requests — raise or decide'] as [string, string, string, string]] : []),
     ['/documents', 'doc', 'Document library', 'All scanned documents & expiries'],
-    ['/alerts', 'bell', 'Alerts', 'Expiries, overdue passports, proof pending'],
+    ...(isHr ? [['/birthdays', 'cake', 'Birthdays', 'Send a wish or call'] as [string, string, string, string]] : []),
     ['/reports', 'chart', 'Reports', 'Headcount, leave, emergency leave, passport register'],
     ...(canWrite && !isOM ? [['/compliance', 'shield', 'Compliance', 'Outlet risk, hostels, hiring, complaints, PDPA'] as [string, string, string, string]] : []),
     ...(qRank(role) > 0 ? [['/quota', 'plane', 'Approval & Recruitment', 'Quota balance, approvals, recruits, Check Out Memos (COM), runaways, claims'] as [string, string, string, string]] : []),
@@ -27,11 +27,11 @@ export default function More() {
     ['/help', 'help', 'Help', 'My role, FAQ and the user manual (PDF)'],
     ['/settings', 'gear', 'Settings', isSuper || isGm ? 'Users, approval rules, notifications…' : 'Account & app'],
   ]
-  void canWrite; void isHr
+  void canWrite
   return (
     <div className="page narrow">
       <h1>More</h1>
-      <Card><ul className="rows">{items.map(([to, ic, l, d]) => <li key={to}><Link to={to} className="req-link"><span className="req-ic"><Icon name={ic} /></span><div className="r-main"><strong>{l}</strong><small>{d}</small></div></Link></li>)}</ul></Card>
+      <Card><ul className="rows more-rows">{items.map(([to, ic, l, d]) => <li key={to}><Link to={to} className="req-link"><span className="req-ic"><Icon name={ic} /></span><div className="r-main"><strong>{l}</strong><small>{d}</small></div></Link></li>)}</ul></Card>
       <SignOutRow />
     </div>
   )

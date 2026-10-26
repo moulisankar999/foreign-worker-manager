@@ -1,5 +1,6 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { ApiError, cancelRequest, changePin, createRequest, getMe, getRequests, login, logout, resubmitRequest, sb, type Me, type WReq } from './api'
+import { ApiError, cancelRequest, changePin, createRequest, getMe, getRequests, getWishes, login, logout, markWishesRead, resubmitRequest, sb, type Me, type WReq, type Wishes } from './api'
+import { BDAY_T } from './bday'
 import { LANGS, initialLang, translator, type Key, type Lang, type T } from './i18n'
 import { helpFor } from './help'
 
@@ -166,8 +167,12 @@ function Home({ t, lang, setLang, onEnded }: { t: T; lang: Lang; setLang: (l: La
   const [toast, setToast] = useState<string | null>(null)
   const [seen, setSeen] = useState<Record<string, string>>(() => { try { return JSON.parse(localStorage.getItem('fww-seen') || '{}') } catch { return {} } })
   const first = useRef(true)
+  const [wishes, setWishes] = useState<Wishes | null>(null)
+  const [bdayOpen, setBdayOpen] = useState(false)
+  const bdayAuto = useRef(false)
 
   const load = useCallback(async () => {
+    getWishes().then(setWishes, () => { /* older server without birthdays: ignore */ })
     try {
       const [m, r] = await Promise.all([getMe(), getRequests()])
       setMe(m); setReqs(r); setErr(null)
@@ -211,6 +216,12 @@ function Home({ t, lang, setLang, onEnded }: { t: T; lang: Lang; setLang: (l: La
   useEffect(() => { if (!toast) return; const id = setTimeout(() => setToast(null), 3000); return () => clearTimeout(id) }, [toast])
 
   const [helpOpen, setHelpOpen] = useState(false)
+  const unread = (wishes?.wishes || []).filter((w) => !w.read)
+  useEffect(() => { if (unread.length && !bdayAuto.current) { bdayAuto.current = true; setBdayOpen(true) } }, [unread.length])
+  const closeBday = () => {
+    setBdayOpen(false)
+    if (unread.length) { const ids = unread.map((w) => w.id); void markWishesRead(ids).catch(() => {}); setWishes((x) => x && { ...x, wishes: x.wishes.map((w) => ids.includes(w.id) ? { ...w, read: true } : w) }) }
+  }
   const tabs: { id: Tab; ic: string; k: Key }[] = [
     { id: 'home', ic: '🏠', k: 'tabHome' }, { id: 'docs', ic: '🛂', k: 'tabDocs' }, { id: 'new', ic: '＋', k: 'tabNew' },
     { id: 'req', ic: '📨', k: 'tabReq' }, { id: 'me', ic: '👤', k: 'tabMe' },
@@ -228,7 +239,7 @@ function Home({ t, lang, setLang, onEnded }: { t: T; lang: Lang; setLang: (l: La
         {offline && <div className="offline-bar">{t('offline')}</div>}
         {err && !me && <div className="err">{err}</div>}
         {!me || !reqs ? <div className="center muted">…</div>
-          : tab === 'home' ? <HomeTab t={t} lang={lang} me={me} reqs={reqs} go={setTab} />
+          : tab === 'home' ? <HomeTab t={t} lang={lang} me={me} reqs={reqs} go={setTab} bday={wishes && (wishes.today || wishes.wishes.length > 0) ? { n: wishes.wishes.length, open: () => setBdayOpen(true) } : undefined} />
           : tab === 'docs' ? <DocsTab t={t} lang={lang} me={me} />
           : tab === 'req' ? <ReqTab t={t} lang={lang} reqs={reqs} reload={load} onEnded={onEnded} toast={setToast} />
           : tab === 'new' ? <NewTab t={t} lang={lang} onEnded={onEnded} done={() => { load(); setTab('req') }} />
@@ -244,6 +255,7 @@ function Home({ t, lang, setLang, onEnded }: { t: T; lang: Lang; setLang: (l: La
       </nav>
       {toast && <div className="toast" role="status">{toast}</div>}
       {helpOpen && <HelpSheet t={t} lang={lang} signedIn onClose={() => setHelpOpen(false)} />}
+      {bdayOpen && wishes && <BdayCard lang={lang} w={wishes} onClose={closeBday} />}
     </div>
   )
 }
@@ -308,8 +320,36 @@ function HelpSheet({ t, lang, signedIn, onClose }: { t: T; lang: Lang; signedIn:
   )
 }
 
+/* ------------------------------------------------------------------ 1.6.0 birthday card (fixed overlay: the app never scrolls) */
+function BdayCard({ lang, w, onClose }: { lang: Lang; w: Wishes; onClose: () => void }) {
+  const b = BDAY_T[lang] || BDAY_T.en
+  // company wish first, then personal wishes oldest → newest
+  const list = [...w.wishes].sort((a, b) => (a.kind === 'auto' ? 0 : 1) - (b.kind === 'auto' ? 0 : 1) || a.at.localeCompare(b.at))
+  const [i, setI] = useState(0)
+  const cur = list[Math.min(i, list.length - 1)]
+  const text = cur ? (cur.kind === 'auto' ? cur.messages?.[lang] || cur.messages?.en || '' : cur.message || '') : ''
+  const from = cur ? (cur.kind === 'auto' ? w.company : [cur.from, cur.role].filter(Boolean).join(' · ')) : w.company
+  return (
+    <div className="bday" role="dialog" aria-modal="true" aria-label={b.title} data-testid="bday-card">
+      <div className="bday-conf" aria-hidden="true">{Array.from({ length: 14 }, (_, k) => <i key={k} style={{ left: `${(k * 7.3) % 100}%`, animationDelay: `${(k % 7) * 0.35}s` }} />)}</div>
+      <div className="bday-panel">
+        <div className="bday-cake" aria-hidden="true">🎂</div>
+        <h2 className="bday-title">{b.title}</h2>
+        <div className="bday-name">{w.name}</div>
+        {text && <p className="bday-msg" data-testid="bday-msg">{text}</p>}
+        <div className="bday-from"><span className="muted">{b.from}</span> <strong>{from}</strong></div>
+        {list.length > 1 && <div className="bday-dots" aria-hidden="true">{list.map((x, k) => <span key={x.id} className={k === i ? 'on' : ''} />)}</div>}
+        <div className="bday-act">
+          {i < list.length - 1 && <button type="button" className="btn" onClick={() => setI(i + 1)} data-testid="bday-next">{b.next} ›</button>}
+          <button type="button" className="btn primary" onClick={onClose} data-testid="bday-close">{b.thanks} 🙏</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 /* ------------------------------------------------------------------ Home tab */
-function HomeTab({ t, lang, me, reqs, go }: { t: T; lang: Lang; me: Me; reqs: WReq[]; go: (t: Tab) => void }) {
+function HomeTab({ t, lang, me, reqs, go, bday }: { t: T; lang: Lang; me: Me; reqs: WReq[]; go: (t: Tab) => void; bday?: { n: number; open: () => void } }) {
   const open = reqs.filter((r) => !['approved', 'completed', 'rejected', 'cancelled'].includes(r.status)).length
   const dated = me.docs.filter((d) => d.expiryDate).sort((a, b) => a.expiryDate!.localeCompare(b.expiryDate!))
   const next = dated[0]
@@ -321,6 +361,7 @@ function HomeTab({ t, lang, me, reqs, go }: { t: T; lang: Lang; me: Me; reqs: WR
         <div className="hello">{t('hello')} 👋</div>
         <div className="name ell" data-testid="worker-name">{me.name}</div>
         <div className="sub ell">{[me.outlet, me.job].filter(Boolean).join(' · ')}</div>
+        {bday && <button type="button" className="bday-chip" onClick={bday.open} data-testid="bday-chip">🎉 {BDAY_T[lang].wishes}{bday.n > 1 ? ` (${bday.n})` : ''}</button>}
       </div>
       <div className="tiles">
         <button className={'tile wide c-' + (next ? expiryTone(next.expiryDate, me.leadDays) : worst)} onClick={() => go('docs')} data-testid="home-expiry">

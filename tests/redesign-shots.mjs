@@ -12,7 +12,7 @@ const desk = { viewport: { width: 1280, height: 800 } }, phone = { viewport: { w
 const go = async (p, h) => { await p.goto(UI + '#' + h); await p.waitForTimeout(1500); await p.getByText('Loading…', { exact: true }).first().waitFor({ state: 'detached', timeout: 20000 }).catch(() => {}); await p.waitForTimeout(2500) }
 const measure = async (p, tag, name) => {
   const m = await p.evaluate(() => ({ h: document.documentElement.scrollHeight, w: document.documentElement.scrollWidth, vw: innerWidth, vh: innerHeight, path: location.hash }))
-  rows.push({ tag, name, screens: +(m.h / m.vh).toFixed(1), hOverflow: m.w > m.vw + 2, path: m.path })
+  rows.push({ tag, name, screens: +(m.h / m.vh).toFixed(1), exact: +(m.h / m.vh).toFixed(2), hOverflow: m.w > m.vw + 2, path: m.path })
 }
 for (const [tag, opt] of [['desktop', desk], ['phone', phone]]) {
   const ctx = await browser.newContext(opt); const p = await ctx.newPage()

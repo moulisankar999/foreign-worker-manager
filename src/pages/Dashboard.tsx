@@ -21,6 +21,7 @@ import { needsMyAction } from '../lib/workflow'
 import { usePendingUsers } from '../lib/userApprovals'
 import { RiskTable } from './Compliance'
 import { useOutletRisks } from '../lib/risk'
+import { birthdays } from '../lib/birthdays'
 
 const NO_EXTRA: Extra[] = [] // requests, CEO review and new users are steps in What to do next
 export default function Dashboard() {
@@ -31,7 +32,7 @@ export default function Dashboard() {
   const alerts = useAlerts()
   const nav = useNavigate()
   const [busy, setBusy] = useState(false)
-  const { isOM, canWrite, canSeeSalary, isSuper, role, session, can, route } = useAuth()
+  const { isOM, canWrite, canSeeSalary, isSuper, isHr, role, session, can, route } = useAuth()
   const ceoN = useCeoBadge()
   const { rows: reqs } = useRequests()
   const { pending: newUsers } = usePendingUsers()
@@ -108,6 +109,7 @@ export default function Dashboard() {
       </div>
     )
 
+  const bdays = birthdays(workers, 'today')
   const urgent = alerts.filter((a) => a.severity === 'critical' || a.severity === 'high').slice(0, 8)
   const labels: Record<DashTab, string> = { overview: 'Overview', expiries: 'Expiries', requests: 'Requests', pay: 'Pay', risk: 'Risk & checks', workforce: 'Workforce' }
   const actionN = mineN + newUsers.length + (isSuper ? ceoN : 0), expiringN = k.expired + k.d30
@@ -117,9 +119,10 @@ export default function Dashboard() {
           <div className="hero-top">
             <Greeting sub={`${k.total} current workers${k.exited ? ` · ${k.exited} exited` : ''}`} />
             {isSuper && <DemoChip />}
+            {isHr && bdays.length > 0 && <Link to="/birthdays" className="chip chip-pink bd-chip" data-testid="bd-chip" title="Why you see this: workers in your scope with a birthday today (Malaysia time). Tap to send a wish.">🎂 {bdays.length} birthday{bdays.length > 1 ? 's' : ''} today</Link>}
             <button type="button" className="hero-ring" onClick={() => setTab('risk')} title={`Why you see this: your compliance health score — ${health.label}. It weighs expired documents, passports held, levy, insurance and more. Click for the breakdown.`}>
               <Ring value={health.score} size={58} stroke={6} tone={`var(--${health.tone === 'gray' ? 'muted' : health.tone})`} label={`Compliance health ${health.score ?? 'not available'}`} />
-              <span><b>Compliance health</b><small>{health.label}</small></span>
+              <span><b><span className="hr-long">Compliance health</span><span className="hr-short">Compliance</span></b><small>{health.label}</small></span>
             </button>
             <div className="row gap-s wrap dash-add">
               {canWrite && <Btn kind="primary" icon="plus" onClick={() => nav('/workers/new')}>Add worker</Btn>}

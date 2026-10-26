@@ -156,7 +156,7 @@ export interface PassportSafe {
   moves?: PassportMove[]
 }
 
-export interface Outlet { id: string; name: string; type: BusinessType; address?: string; manager?: string; companyId?: string; logo?: string; /** Malaysian state (public holidays, Act 446 scope) */ state?: string; /** weekly rest day, default Sunday */ restDay?: string }
+export interface Outlet { id: string; name: string; type: BusinessType; address?: string; manager?: string; phone?: string; companyId?: string; logo?: string; /** Malaysian state (public holidays, Act 446 scope) */ state?: string; /** weekly rest day, default Sunday */ restDay?: string }
 export interface JobCategory { id: string; name: string; businessType: BusinessType }
 
 export interface Settings {

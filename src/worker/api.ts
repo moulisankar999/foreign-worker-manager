@@ -84,3 +84,9 @@ export const getRequests = () => rpc<WReq[]>('worker_requests')
 export const createRequest = (type: string, data: Record<string, unknown>) => rpc<{ id: string; ref: string; status: string }>('worker_request_create', { p_type: type, p_data: data })
 export const cancelRequest = (id: string) => rpc<void>('worker_request_cancel', { p_id: id })
 export const resubmitRequest = (id: string, note: string) => rpc<void>('worker_request_resubmit', { p_id: id, p_note: note })
+
+/* 1.6.0 birthday wishes (company auto wish + personal wishes from HR / GM / CEO); in-app only */
+export type Wish = { id: number; kind: 'auto' | 'personal'; at: string; read: boolean; from: string | null; role: string | null; message: string | null; messages: Record<string, string> | null }
+export type Wishes = { today: boolean; name: string; company: string; wishes: Wish[] }
+export const getWishes = () => rpc<Wishes>('worker_wishes')
+export const markWishesRead = (ids: number[]) => rpc<number>('worker_wish_read', { p_ids: ids })

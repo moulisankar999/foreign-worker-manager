@@ -14,6 +14,7 @@ import Workers from './pages/Workers'
 import WorkerDetail from './pages/WorkerDetail'
 import WorkerForm from './pages/WorkerForm'
 import Alerts from './pages/Alerts'
+import Birthdays from './pages/Birthdays'
 import Reports from './pages/Reports'
 import SettingsPage from './pages/Settings'
 import CompanyDetailPage from './pages/CompanyDetail'
@@ -52,6 +53,7 @@ const NAV = [
   { to: '/requests', label: 'Requests', icon: 'check' },
   { to: '/documents', label: 'Documents', icon: 'doc', desk: true },
   { to: '/alerts', label: 'Alerts', icon: 'alert' },
+  { to: '/birthdays', label: 'Birthdays', icon: 'cake', desk: true, bday: true },
   { to: '/reports', label: 'Reports', icon: 'chart', desk: true },
   { to: '/compliance', label: 'Compliance', icon: 'shield', desk: true, hr: true },
   { to: '/quota', label: 'Approval & Recruitment', icon: 'plane', desk: true, quota: true },
@@ -77,7 +79,7 @@ export default function App() {
 }
 
 function MainApp() {
-  const { canWrite, role, session, myCompanies, myOutlets, can, route, isSuper, isOM } = useAuth()
+  const { canWrite, role, session, myCompanies, myOutlets, can, route, isSuper, isOM, isHr } = useAuth()
   const ceoBadge = useCeoBadge()
   const ctlBadge = useControlBadge()
   const [aiSt] = useAiStatus(session?.user.id)
@@ -116,7 +118,7 @@ function MainApp() {
   const askAi = () => nav(`/assistant?q=${encodeURIComponent(crumb ? `About "${crumb}"${section && section.label !== crumb ? ` (${section.label})` : ''}: what needs my attention, and what should I do next?` : 'What needs my attention today?')}`)
 
   const quotaOn = qRank(role) > 0
-  const visible = NAV.filter((n) => !n.mobile && (!n.ceo || isSuper) && (!n.hr || (canWrite && !isOM)) && (!n.quota || quotaOn) && (!n.ai || isSuper || !!aiOn))
+  const visible = NAV.filter((n) => !n.mobile && (!n.ceo || isSuper) && (!n.hr || (canWrite && !isOM)) && (!n.quota || quotaOn) && (!n.ai || isSuper || !!aiOn) && (!n.bday || isHr))
   // phone tab bar: Home, Workers, Approval & Recruitment (or Requests), Alerts, More
   const TABS = [NAV[0], NAV[2], quotaOn ? NAV.find((n) => n.to === '/quota')! : NAV[3], NAV.find((n) => n.to === '/alerts')!, NAV[NAV.length - 1]]
   const tabBadge = (to: string) => badge(to) + (to === '/more' && quotaOn ? myReq : 0)
@@ -187,6 +189,7 @@ function MainApp() {
             <Route path="/workers/:id" element={<WorkerDetail />} />
             <Route path="/workers/:id/edit" element={<WorkerForm />} />
             <Route path="/alerts" element={<Alerts />} />
+            <Route path="/birthdays" element={<Birthdays />} />
             <Route path="/reports" element={<Reports />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/settings/:tab" element={<SettingsPage />} />
