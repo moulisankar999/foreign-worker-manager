@@ -205,6 +205,10 @@ Everyone can see **Settings → About** (app version, build, "Developed by Mouli
 - "Clear list" (`clear_client_errors()`, migration 032) now also resets the "App errors" health tile and writes an audit entry. The Errors tab badge and the Software Control sidebar badge update straight away.
 - Tests: `UI_URL=<TEST build> node tests/platform-ui.mjs` (TEST only; mocks Capacitor ios/android via `window.CapacitorCustomPlatform`).
 
+### Clean tables and icon buttons (v1.3.8, FW Worker 1.0.3)
+
+Every list page (users, workers, requests, documents, outlets and companies, pay and remittance, report submissions, Software Control errors, audit log and the worker-profile tabs) uses one reusable table (`src/components/dataTable.tsx`): compact rows that open on click or tap, sorting, search and filters on long lists, a sticky header, and fewer columns on phones with no sideways scroll. Row actions are icon buttons (`src/components/iconAction.tsx`) with a tooltip on hover or long-press, a native title and aria-label; delete, reject, reset and pause are tinted and still ask for confirmation. FW Worker 1.0.3 adds button titles; its tabs are unchanged. No permission or logic changes. Test: `tests/table-ui.mjs` (TEST only).
+
 ### Role help shows only the role's own work (v1.3.7)
 
 Help, FAQ and manuals for non-CEO roles no longer describe the CEO's powers or oversight, or who sets a role's powers. "How the work is shared" lists only genuine handoffs and is hidden when empty (General Manager). No permissions changed.

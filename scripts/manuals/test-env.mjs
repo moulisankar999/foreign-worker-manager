@@ -54,6 +54,9 @@ export async function seed() {
   await mk('hrm', 'Farah Aziz', 'hr_manager', { company_ids: ['main', 'c2'] })
   await mk('om', 'Ahmad Yusof', 'outlet_manager', { outlet_ids: [P + 'O1', P + 'O2'] })
   await mk('viewer', 'Siti Rahman', 'viewer')
+  { // one pending sign-up for the "Approve a new sign-up" screenshot (removed by cleanup: fwm-help- prefix)
+    const { data, error } = await admin.auth.admin.createUser({ email: `fwm-help-pending-${stamp}@example.com`, password: pw, email_confirm: true, user_metadata: { full_name: 'Ravi Kumar', outlet_id: P + 'O1' } })
+    if (error) throw error; ids.push(data.user.id) }
   const gen = await (await fetch(`${URL_}/functions/v1/worker-access`, { method: 'POST', headers: { apikey: ANON, Authorization: 'Bearer ' + U.hrm.token, 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'generate', workerId: P + 'W1' }) })).json()
   if (!/^\d{6}$/.test(gen.pin || '')) throw new Error('PIN generate failed: ' + JSON.stringify(gen).slice(0, 200))
   // requests at different steps
