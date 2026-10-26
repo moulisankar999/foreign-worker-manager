@@ -309,20 +309,75 @@ type Msg = { role: 'user' | 'assistant'; text?: string; calls?: { id: string; na
 type Out = { text?: string; calls?: { id: string; name: string; args: J }[] }
 const decls = () => TOOLS.map((t) => ({ name: t.name, description: t.description, parameters: t.parameters }))
 
-async function post(url: string, headers: Record<string, string>, body: unknown) {
-  const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(body) })
-  const t = await r.text()
-  if (!r.ok) { let m = t.slice(0, 300); try { const j = JSON.parse(t); m = j.error?.message || j.error?.type || m } catch { /* keep text */ } throw new Error(`AI provider error (${r.status}): ${m}`) }
-  return JSON.parse(t)
+// Plain-language failure message. The CEO (super admin) sees what to fix; everyone else gets a short note.
+function friendlyError(e: Error, admin: boolean): string {
+  const msg = e.message || ''
+  if (!msg.startsWith('AI provider error')) return 'Something went wrong while answering. Try again.'
+  const st = e instanceof ProviderError ? e.status : -1
+  const m = msg.toLowerCase()
+  const detail = admin ? ` (Provider said: ${msg.replace(/^AI provider error\s*/, '').slice(0, 160)})` : ''
+  if (st === 429 && /free.?tier/.test(m)) {
+    const lim = msg.match(/limit: ?(\d+)/)?.[1], wait = msg.match(/retry in ([0-9]+h)?([0-9]+m)?/i)
+    return admin ? `AI account needs billing set up: the Google AI key is on the Free tier and today's free limit${lim ? ` (${lim} requests per day for this model)` : ''} is used up. Turn on billing for the key's project in Google AI Studio to lift it${wait ? `, or wait about ${(wait[1] || '') + (wait[2] || '')} for the free limit to reset` : ''}.` : 'The assistant has reached its daily limit. Please let your administrator know, or try again later.'
+  }
+  if (/billing|payment|prepay|credit|free.?tier|limit: ?0\b/.test(m) && (st === 400 || st === 402 || st === 403 || st === 429)) return admin ? `AI account needs billing set up: the provider account behind the AI key has no active billing or free quota. Turn on billing in Google AI Studio, then try again.${detail}` : 'The assistant is unavailable until the administrator finishes setting up the AI account.'
+  if (st === 401 || st === 403 || /api key not valid|api_key_invalid|permission/.test(m)) return admin ? `The AI key was rejected (not valid or no permission). Check the AI_API_KEY secret.${detail}` : 'The assistant is unavailable right now. Please let your administrator know.'
+  if (st === 404 || /not found|is not supported/.test(m)) return admin ? `The AI model name is not available for this key. Check the AI_MODEL secret.${detail}` : 'The assistant is unavailable right now. Please let your administrator know.'
+  if (st === 429) return admin ? `AI usage limit reached at the provider (rate limit or daily quota for this key; free-tier keys have low limits). Wait a minute, or raise the limit by enabling billing.${detail}` : 'The assistant is busy right now. Try again in a minute.'
+  if ([500, 502, 503, 504].includes(st)) return admin ? `The AI provider is overloaded right now (temporary). Try again in a minute.${detail}` : 'The assistant is busy right now. Try again in a minute.'
+  if (st === 0) return admin ? `The AI provider did not answer in time. Try again in a minute.${detail}` : 'The assistant did not answer in time. Try again in a minute.'
+  return admin ? `The AI provider returned an error.${detail}` : 'The AI provider did not answer just now. Try again in a minute.'
 }
 
+class ProviderError extends Error { constructor(public status: number, msg: string) { super(msg) } }
+const BUSY = [429, 500, 502, 503, 504]
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
+// Retries a busy provider (429/5xx, network) twice with a short back-off before giving up.
+async function post(url: string, headers: Record<string, string>, body: unknown) {
+  let last: ProviderError | null = null
+  for (const wait of [0, 900, 2200]) {
+    if (wait) await sleep(wait)
+    let r: Response
+    try { r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(body), signal: AbortSignal.timeout(25000) }) } catch (e) { last = new ProviderError(0, `AI provider error (network/timeout): ${(e as Error).message.slice(0, 120)}`); break }
+    const t = await r.text()
+    if (r.ok) return JSON.parse(t)
+    let m = t.slice(0, 300); try { const j = JSON.parse(t); m = j.error?.message || j.error?.type || m } catch { /* keep text */ }
+    last = new ProviderError(r.status, `AI provider error (${r.status}): ${m}`)
+    // 429 means a quota/rate limit: retrying only burns more of it (free tier counts requests per day).
+    if (r.status === 429 || !BUSY.includes(r.status)) break
+  }
+  throw last
+}
+
+// Gemini: optional fallback when the chosen model stays overloaded. Opt-in only (AI_FALLBACK_MODELS, comma-separated);
+// with it unset the assistant only ever uses AI_MODEL.
+const GEM_FALLBACK = (env('AI_FALLBACK_MODELS') || '').split(',').map((x) => x.trim()).filter((x) => x && x !== MODEL)
+let gemModel = MODEL
 async function callGemini(sys: string, msgs: Msg[]): Promise<Out> {
   const contents = msgs.map((m) => m.role === 'tool'
     ? { role: 'user', parts: m.results.map((r) => ({ functionResponse: { name: r.name, response: r.content } })) }
     : { role: m.role === 'assistant' ? 'model' : 'user', parts: [...(m.text ? [{ text: m.text }] : []), ...(m.calls || []).map((c) => ({ functionCall: { name: c.name, args: c.args }, ...(c.args.__sig ? { thoughtSignature: c.args.__sig } : {}) }))] })
   for (const c of contents) for (const p of c.parts as J[]) { const fc = p.functionCall as J | undefined; if (fc?.args) delete (fc.args as J).__sig }
-  const j = await post(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(MODEL)}:generateContent`, { 'x-goog-api-key': env('AI_API_KEY') },
-    { systemInstruction: { parts: [{ text: sys }] }, contents, tools: [{ functionDeclarations: decls() }], generationConfig: { temperature: 0.2, maxOutputTokens: 2048 } })
+  // Gemini 3 models reject a function-call turn without a thought signature (e.g. one produced by another model
+  // after a fallback); Google documents this placeholder for that case.
+  const signed = (m: string) => m.startsWith('gemini-3') ? contents.map((c) => {
+    const ps = c.parts as J[]
+    if (c.role !== 'model' || !ps.some((p) => p.functionCall) || ps.some((p) => p.thoughtSignature)) return c
+    const i = ps.findIndex((p) => p.functionCall)
+    return { ...c, parts: ps.map((p, k) => k === i ? { ...p, thoughtSignature: 'skip_thought_signature_validator' } : p) }
+  }) : contents
+  const reqFor = (m: string) => ({ systemInstruction: { parts: [{ text: sys }] }, contents: signed(m), tools: [{ functionDeclarations: decls() }], generationConfig: { temperature: 0.2, maxOutputTokens: 2048 } })
+  // deno-lint-ignore no-explicit-any
+  let j: any = null
+  const order = [gemModel, ...[MODEL, ...GEM_FALLBACK].filter((x) => x !== gemModel)]
+  for (const m of order) {
+    try { j = await post(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(m)}:generateContent`, { 'x-goog-api-key': env('AI_API_KEY') }, reqFor(m)); gemModel = m; break } catch (e) {
+      const st = e instanceof ProviderError ? e.status : -1
+      if (!(BUSY.includes(st) || st === 0 || st === 404) || m === order.at(-1)) throw e
+      console.error('ai-assistant', `model ${m} busy/unavailable: ${(e as Error).message.slice(0, 200)}; trying the next one`)
+    }
+  }
+  if (!j) throw new Error('AI provider error (no model answered)')
   const parts = (j.candidates?.[0]?.content?.parts || []) as J[]
   const calls = parts.filter((p) => p.functionCall).map((p, i) => { const fc = p.functionCall as J; return { id: `g${i}`, name: String(fc.name), args: { ...((fc.args || {}) as J), ...(p.thoughtSignature ? { __sig: p.thoughtSignature } : {}) } } })
   return { text: parts.filter((p) => typeof p.text === 'string' && !p.thought).map((p) => p.text).join('').trim(), calls }
@@ -378,6 +433,7 @@ Deno.serve(async (req) => {
   const role = String(status.role || 'viewer')
   if (body.op === 'status' || !body.op) return json({ enabled: ENABLED, provider: ENABLED ? (MOCK ? 'mock' : PROVIDER) : null, model: ENABLED && role === 'super_admin' ? (MOCK ? 'mock' : MODEL) : undefined, limit: status.limit, used: status.used, role })
   if (body.op !== 'chat') return json({ error: 'Unknown op' }, 400)
+  gemModel = MODEL
   if (!ENABLED) return json({ disabled: true, reply: role === 'super_admin' ? 'The assistant is not switched on yet. Add the AI provider key as a Supabase secret to switch it on.' : 'The assistant is not available yet.' })
 
   const msgsIn = (Array.isArray(body.messages) ? body.messages : []) as J[]
@@ -413,8 +469,8 @@ Deno.serve(async (req) => {
     }
   } catch (e) {
     ok = false
-    reply = (e as Error).message.startsWith('AI provider error') ? 'The AI provider did not answer just now. Try again in a minute.' : 'Something went wrong while answering. Try again.'
-    console.error('ai-assistant', (e as Error).message.slice(0, 300))
+    reply = friendlyError(e as Error, role === 'super_admin')
+    console.error('ai-assistant', (e as Error).message.slice(0, 600))
   }
   await db.rpc('ai_log_chat', { p_tools: [...new Set(ctx.tools)], p_lang: lang, p_provider: MOCK ? 'mock' : PROVIDER, p_ok: ok })
   return json({ reply, tables: ctx.tables.slice(0, 4), drafts: ctx.drafts, tools: [...new Set(ctx.tools)], usage: begin.data, ...(MOCK ? { llm_saw: mockSaw.join('\n') } : {}) })
