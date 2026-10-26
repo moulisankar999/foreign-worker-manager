@@ -106,3 +106,13 @@
 /* readable cells: dates and numbers never break; headers wrap only between words */
 .rpt-tbl td.d, .rpt-tbl td.n { overflow-wrap: normal; }
 .rpt-tbl th { overflow-wrap: normal; word-break: normal; hyphens: manual; }
+
+/* 1.5.1 one-screen pass: on a phone the report library is a compact two-column grid (description on long-press / title) */
+@media (max-width: 600px) {
+  .rpt-lib { grid-template-columns: 1fr 1fr; gap: 6px; }
+  .rpt-card { padding: 8px 10px; }
+  .rpt-card b { font-size: .85rem; }
+  .rpt-card small { display: none; }
+  .rpt-tags { gap: 3px; }
+  .rpt-tag { font-size: .66rem; }
+}

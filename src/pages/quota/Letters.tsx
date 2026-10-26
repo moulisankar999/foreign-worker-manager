@@ -60,7 +60,7 @@ export function LettersTab({ company }: { company: string }) {
   return (
     <div className="qr-grid">
       <Card title="Approval letters" actions={<Btn kind="primary" icon="plus" small onClick={() => setForm({ company_id: company || ctx.companies[0]?.id, kind: 'new', approval_date: todayISO(), expiry_date: addMonths(todayISO(), 12), breakdown: {} })}>Record a letter</Btn>}>
-        <DataTable label="Approval letters" rows={quotas} rowKey={(q) => q.id}
+        <DataTable label="Approval letters" rows={quotas} rowKey={(q) => q.id} pageSize={8}
           initialSort={{ key: 'appr', dir: 'desc' }}
           columns={[
             { key: 'ref', label: 'Letter', main: true, render: (q) => <><b>{q.ref_no}</b> <Chip tone={ST_TONE[q.status]}>{q.status === 'pending' ? (ctx.isCeo ? 'Waiting for GM / CEO' : 'Waiting to be opened') : q.status}</Chip><br /><small className="muted">{ctx.cName(q.company_id)} · {KIND_LABEL[q.kind]}</small></>, sort: (q) => q.ref_no },
@@ -92,7 +92,7 @@ export function LettersTab({ company }: { company: string }) {
       <Card title={<>Ledger {selQ && <Chip tone="blue">{selQ.ref_no}</Chip>}</>} actions={<Toolbar>
         <SelectFilter label="Letter" value={qSel} onChange={(v) => setSp(v ? { tab: 'letters', q: v } : { tab: 'letters' }, { replace: true })} options={[{ value: '', label: 'All letters' }, ...quotas.map((q) => ({ value: q.id, label: q.ref_no }))]} />
         <IconAction kind="print" label="Print the statement (A4, with sign-off)" onClick={() => setPrint(true)} /></Toolbar>}>
-        <DataTable label="Quota ledger" rows={lines} rowKey={(e) => String(e.id)} dense search={(e) => `${e.ref} ${e.note} ${e.by_name} ${e.country} ${qRef(e.quota_id)}`}
+        <DataTable label="Quota ledger" rows={lines} rowKey={(e) => String(e.id)} dense pageSize={10} search={(e) => `${e.ref} ${e.note} ${e.by_name} ${e.country} ${qRef(e.quota_id)}`}
           filters={[{ key: 'kind', label: 'Movement', options: Object.entries(ENTRY_LABEL).map(([value, label]) => ({ value, label })), match: (e, v) => e.kind === v },
             { key: 'country', label: 'Country', options: [...new Set(lines.map((e) => e.country))], match: (e, v) => e.country === v }]}
           columns={[

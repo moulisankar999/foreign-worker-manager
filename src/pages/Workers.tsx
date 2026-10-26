@@ -71,7 +71,7 @@ export default function Workers() {
       {loaded && list.length === 0 ? (
         <Empty icon="users" title="No workers match">{loaded.length === 0 && <Btn kind="primary" icon="plus" onClick={() => nav('/workers/new')}>Add worker</Btn>}</Empty>
       ) : (
-        <DataTable label="Workers" rows={list} rowKey={(w) => w.id} rowTestId={() => 'worker-row'} pageSize={100} initialSort={{ key: 'name', dir: 'asc' }}
+        <DataTable label="Workers" rows={list} rowKey={(w) => w.id} rowTestId={() => 'worker-row'} pageSize={20} initialSort={{ key: 'name', dir: 'asc' }}
           rowClass={(w) => (!completeness(w, outlets).complete ? 'dt-warn' : '')}
           columns={[
             { key: 'name', label: 'Worker', main: true, sort: (w) => w.fullName.toLowerCase(),

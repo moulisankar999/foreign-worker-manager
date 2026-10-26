@@ -72,7 +72,7 @@ export function UserApprovalRulesCard() {
   const tog = (list: string[], v: string, on: boolean) => (on ? [...new Set([...list, v])] : list.filter((x) => x !== v))
   const isGmView = useAuth().isGm
   return (
-    <Card title="New-user approvals">
+    <Card title="New-user approvals" fold="closed">
       <p className="small">{isGmView ? 'You (General Manager, with the approve power)' : 'You (the CEO)'} always see and can approve <strong>every</strong> new sign-up — they appear on your dashboard under “Needs my action”. You can also let an HR Admin approve sign-ups for some companies. Sign-ups that chose no company (“unassigned”) are for you only.</p>
       {admins.length === 0 && <p className="muted small">No active HR Admins yet. Give someone the HR Admin role in Users first.</p>}
       <DataTable label="HR Admins who may approve new users" rows={admins.filter((a) => normRole(a.role) === 'hr_admin')} rowKey={(a) => a.id}

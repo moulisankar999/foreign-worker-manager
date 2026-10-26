@@ -20,7 +20,7 @@ import { useOutlets, useSettings } from '../lib/hooks'
 import { buildICS } from '../lib/ics'
 import { STATUSES, type MemoRec, type WorkerStatus } from '../lib/types'
 import { missingLanguage, otherLanguagesText, primaryLangName } from '../lib/languages'
-import { DataTable } from '../components/dataTable'
+import { DataTable, usePaged } from '../components/dataTable'
 import { age, download, fmtDate, rm, serviceText, todayISO } from '../lib/util'
 
 type Tab = 'access' | 'overview' | 'checks' | 'vault' | 'requests' | 'passport' | 'remarks' | 'docs' | 'remit' | 'family' | 'contract' | 'pay' | 'loans' | 'leave' | 'memos' | 'notes' | 'trackers'
@@ -101,9 +101,7 @@ export default function WorkerDetail() {
       {tab === 'overview' && (
         <>
           {alerts.length > 0 && (
-            <Card title="Alerts for this worker">
-              <ul className="alist">{alerts.map((a) => <li key={a.id}><div><Chip tone={sevTone(a.severity)}>{a.severity}</Chip><span className="al-t"><strong>{a.title}</strong><small>{a.detail}</small></span></div></li>)}</ul>
-            </Card>
+            <WorkerAlerts alerts={alerts} />
           )}
           <div className="grid2">
             <Card title="Documents" actions={canWrite && <button className="link" onClick={() => setTab('docs')}>Manage →</button>}>
@@ -184,5 +182,16 @@ export default function WorkerDetail() {
         </FormModal>
       )}
     </div>
+  )
+}
+
+/** 1.5.1: the worker's alerts as a folding card, 4 per page (no long scroll on a phone). */
+function WorkerAlerts({ alerts }: { alerts: ReturnType<typeof buildAlerts> }) {
+  const pg = usePaged(alerts, 4)
+  return (
+    <Card fold="open" title={<>Alerts for this worker <Chip tone="amber">{alerts.length}</Chip></>}>
+      <ul className="alist">{pg.rows.map((a) => <li key={a.id}><div><Chip tone={sevTone(a.severity)}>{a.severity}</Chip><span className="al-t"><strong>{a.title}</strong><small>{a.detail}</small></span></div></li>)}</ul>
+      {pg.pager('Alerts for this worker')}
+    </Card>
   )
 }

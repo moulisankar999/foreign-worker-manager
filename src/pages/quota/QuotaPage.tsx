@@ -5,7 +5,7 @@ import { FollowUps, MasterTable } from './Extras'
 import { useMemo, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { Card, Chip, Empty, SelectFilter, Stat, Tabs, Toolbar } from '../../components/ui'
-import { DataTable } from '../../components/dataTable'
+import { DataTable, usePaged } from '../../components/dataTable'
 import { Actions, IconAction } from '../../components/iconAction'
 import { useWorkers } from '../../lib/hooks'
 import { inCompany, OTHER_CO, setKnownCompanies, atMyt, nextStep, quotaAlerts, quotaRag, rmFmt, stageLabelIn, stepCtx, tplOf, UR_STATUS, useQuota, type Tally } from '../../lib/quota'
@@ -100,6 +100,14 @@ function Overview({ company }: { company: string }) {
   const myRecruits = d.recruits.filter(inC).filter((r) => r.status === 'active' && (r.owner_id === myId || ctx.rank >= 2))
   const arrivals = d.recruits.filter(inC).filter((r) => r.status === 'active' && r.flight_at && !r.arrived_at && (daysUntil(r.flight_at.slice(0, 10)) ?? 0) <= 14)
   const myReturned = d.requests.filter((r) => r.requested_by === myId && r.status === 'returned')
+  const sortedAlerts = [...alerts].sort((a, b) => (a.level === 'red' ? -1 : 1) - (b.level === 'red' ? -1 : 1))
+  const alertPage = usePaged(sortedAlerts, 8)
+  const taskItems = [
+    ...myReturned.map((r) => <li key={r.id}><Chip tone="orange">Returned</Chip> <Link to={`/quota?tab=approvals&open=${r.id}`}>Q-{r.ref_no}: fix and resubmit — {r.close_note || r.gm_note || r.ceo_note}</Link></li>),
+    ...arrivals.map((r) => <li key={'a' + r.id}><Chip tone="blue">Arrival</Chip> <Link to={`/quota/recruit/${r.id}`}>{r.full_name} lands {atMyt(r.flight_at)} — hostel bed, pickup, airport letter</Link></li>),
+    ...myRecruits.slice(0, 40).flatMap((r) => { const t = tplOf(d, r); const st = nextStep(r, t, stepCtx(d, r)); return st ? [<li key={'r' + r.id}><Chip>{stageLabelIn(t, st.stage)}</Chip> <Link to={`/quota/recruit/${r.id}`}>{r.full_name}: {st.label}</Link></li>] : [] }),
+  ]
+  const taskPage = usePaged(taskItems, 8)
   return (
     <div className="qr-grid">
       <div className="stats">
@@ -114,25 +122,25 @@ function Overview({ company }: { company: string }) {
       </div>
 
       {ctx.rank >= 3 && (
-        <Card title={<>Waiting for your approval {waiting.length > 0 && <Chip tone="red">{waiting.length}</Chip>}</>}>
-          {waiting.length ? <ul className="alist">{waiting.map((r) => (
+        <Card fold="open" title={<>Waiting for your approval {waiting.length > 0 && <Chip tone="red">{waiting.length}</Chip>}</>}>
+          {waiting.length ? <ul className="alist">{waiting.slice(0, 6).map((r) => (
             <li key={r.id}><Link to={`/quota?tab=approvals&open=${r.id}`}><Chip tone={UR_STATUS[r.status].tone}>Q-{r.ref_no}</Chip>
               <span className="qr-li"><span>{r.slots} × {r.country} — {r.purpose}</span>
                 <small className="muted">{ctx.cName(r.company_id)} · {ctx.who(r.requested_by_name, r.requested_by_role)} · {atMyt(r.requested_at)}</small></span></Link></li>
-          ))}</ul> : <p className="muted">Nothing is waiting for you.</p>}
+          ))}{waiting.length > 6 && <li><Link to="/quota?tab=approvals">All {waiting.length} waiting in Approvals →</Link></li>}</ul> : <p className="muted">Nothing is waiting for you.</p>}
         </Card>
       )}
 
-      <Card title={<>Alerts {alerts.filter((a) => a.level === 'red').length > 0 && <Chip tone="red">{alerts.filter((a) => a.level === 'red').length} red</Chip>}</>}>
-        {alerts.length ? <ul className="alist">{alerts.sort((a, b) => (a.level === 'red' ? -1 : 1) - (b.level === 'red' ? -1 : 1)).map((a, i) => (
-          <li key={i}><RagDot rag={a.level} /> <Link to={a.link}>{a.text}</Link></li>))}</ul> : <p className="muted">All clear.</p>}
+      <Card fold="open" title={<>Alerts <Chip tone="gray">{alerts.length}</Chip> {alerts.filter((a) => a.level === 'red').length > 0 && <Chip tone="red">{alerts.filter((a) => a.level === 'red').length} red</Chip>}</>}>
+        {alerts.length ? <><ul className="alist">{alertPage.rows.map((a, i) => (
+          <li key={i}><RagDot rag={a.level} /> <Link to={a.link}>{a.text}</Link></li>))}</ul>{alertPage.pager('Quota alerts')}</> : <p className="muted">All clear.</p>}
       </Card>
 
       {ctx.rank >= 3 && <FollowUps company={company} />}
       <MasterTable company={company} />
 
-      <Card title="Quota health — per letter and country">
-        <DataTable label="Quota health" rows={tally} rowKey={(t) => `${t.quota_id}|${t.country}`} dense
+      <Card fold="closed" title={<>Quota health — per letter and country <Chip tone="gray">{tally.length}</Chip></>}>
+        <DataTable label="Quota health" rows={tally} rowKey={(t) => `${t.quota_id}|${t.country}`} dense pageSize={10}
           initialSort={{ key: 'rag', dir: 'asc' }}
           columns={[
             { key: 'rag', label: 'Health', render: (t) => <RagDot rag={quotaRag(t, d.rules).rag} />, sort: (t) => ({ red: 0, amber: 1, green: 2 })[quotaRag(t, d.rules).rag] },
@@ -149,13 +157,11 @@ function Overview({ company }: { company: string }) {
       </Card>
 
       {ctx.rank <= 2 && (
-        <Card title="My tasks">
+        <Card fold="open" title={<>My tasks <Chip tone="gray">{taskItems.length}</Chip></>}>
           <ul className="alist">
-            {myReturned.map((r) => <li key={r.id}><Chip tone="orange">Returned</Chip> <Link to={`/quota?tab=approvals&open=${r.id}`}>Q-{r.ref_no}: fix and resubmit — {r.close_note || r.gm_note || r.ceo_note}</Link></li>)}
-            {arrivals.map((r) => <li key={r.id}><Chip tone="blue">Arrival</Chip> <Link to={`/quota/recruit/${r.id}`}>{r.full_name} lands {atMyt(r.flight_at)} — hostel bed, pickup, airport letter</Link></li>)}
-            {myRecruits.slice(0, 40).map((r) => { const t = tplOf(d, r); const st = nextStep(r, t, stepCtx(d, r)); return st ? <li key={r.id}><Chip>{stageLabelIn(t, st.stage)}</Chip> <Link to={`/quota/recruit/${r.id}`}>{r.full_name}: {st.label}</Link></li> : null })}
-            {!myReturned.length && !arrivals.length && !myRecruits.length && <li className="muted">No open tasks.</li>}
-          </ul>
+            {taskPage.rows}
+            {!taskItems.length && <li className="muted">No open tasks.</li>}
+          </ul>{taskPage.pager('My tasks')}
         </Card>
       )}
     </div>

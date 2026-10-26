@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Btn, Card, Chip, Empty } from '../../components/ui'
-import { DataTable, Details } from '../../components/dataTable'
+import { DataTable, Details, usePaged } from '../../components/dataTable'
 import { Actions, IconAction } from '../../components/iconAction'
 import { inCompany, atMyt, qcall, rmFmt, UR_STATUS, useQuota, type UseReq } from '../../lib/quota'
 import { FileField, FileLink, NoteAsk, QForm, s, useQCtx, type V } from './shared'
@@ -31,6 +31,7 @@ export function ApprovalsTab({ company }: { company: string }) {
   const qRef = (id: string) => d.quotas.find((q) => q.id === id)?.ref_no || ''
   const resvLeft = (r: UseReq) => d.ledger.filter((e) => e.use_request_id === r.id).reduce((a, e) => a + e.d_resv, 0)
   const waiting = rows.filter((r) => canDecide(r, ctx.rank, me))
+  const waitPage = usePaged(waiting, 5)
   const ACT = {
     approve: { t: 'Approve', label: 'Note (optional)', req: false, danger: false },
     reject: { t: 'Reject — the slots go back to the balance', label: 'Reason for the requester', req: true, danger: true },
@@ -44,12 +45,13 @@ export function ApprovalsTab({ company }: { company: string }) {
       <div className="note-box">
         Every quota slot is used only after its Quota Use Request is approved. The calling visa step opens once the request is approved; the timeline shows each step.
       </div>
-      {ctx.isGmUp && waiting.length > 0 && <Card title={<>Waiting for your approval <Chip tone="red">{waiting.length}</Chip></>}>
-        <ul className="alist">{waiting.map((r) => <li key={r.id}><Chip tone={UR_STATUS[r.status].tone}>Q-{r.ref_no}</Chip><span className="qr-li"><span>{r.slots} × {r.country} on {qRef(r.quota_id)} — {r.purpose}</span></span>
+      {ctx.isGmUp && waiting.length > 0 && <Card fold="open" title={<>Waiting for your approval <Chip tone="red">{waiting.length}</Chip></>}>
+        <ul className="alist">{waitPage.rows.map((r) => <li key={r.id}><Chip tone={UR_STATUS[r.status].tone}>Q-{r.ref_no}</Chip><span className="qr-li"><span>{r.slots} × {r.country} on {qRef(r.quota_id)} — {r.purpose}</span></span>
           <Actions><IconAction kind="approve" label="Approve" onClick={() => setAsk({ r, action: 'approve' })} /><IconAction kind="recall" label="Return for changes" onClick={() => setAsk({ r, action: 'return' })} /><IconAction kind="reject" label="Reject" onClick={() => setAsk({ r, action: 'reject' })} /></Actions></li>)}</ul>
+        {waitPage.pager('Waiting for your approval')}
       </Card>}
       <Card title="Quota Use Requests" actions={ctx.rank < 4 ? <Btn kind="primary" icon="plus" small onClick={() => setForm({ slots: 1 })}>New request</Btn> : <small className="muted">Requests are raised by HR or the GM.</small>}>
-        <DataTable label="Quota Use Requests" rows={rows} rowKey={(r) => r.id} open={sp.get('open') ? { key: sp.get('open')! } : null}
+        <DataTable label="Quota Use Requests" pageSize={10} rows={rows} rowKey={(r) => r.id} open={sp.get('open') ? { key: sp.get('open')! } : null}
           initialSort={{ key: 'at', dir: 'desc' }} search={(r) => `Q-${r.ref_no} ${r.purpose} ${r.country} ${qRef(r.quota_id)}`}
           filters={[{ key: 'st', label: 'Status', options: Object.keys(UR_STATUS).map((value) => ({ value, label: ctx.urLabel(value as UseReq["status"]) })), match: (r, v) => r.status === v }]}
           columns={[

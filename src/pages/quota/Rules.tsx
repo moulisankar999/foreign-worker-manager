@@ -74,7 +74,7 @@ export function RulesTab() {
     <div className="qr-grid qr-rr">
       <div className="note-box">Every regulatory number used in this module is kept here as a rule with the date it takes effect and its source. Records use the version in force on their own date, so a change never rewrites history. {canEdit ? (ctx.isCeo ? 'Your changes take effect on their date.' : 'Your changes wait for approval before they take effect.') : 'Rule changes are made by the rule owners; ask HR Admin if a number looks wrong.'}</div>
 
-      {pending.length > 0 && <Card title={<>{ctx.isCeo ? 'Waiting for your approval' : 'Waiting for approval'} <Chip tone="amber">{pending.length}</Chip></>}>
+      {pending.length > 0 && <Card fold="open" title={<>{ctx.isCeo ? 'Waiting for your approval' : 'Waiting for approval'} <Chip tone="amber">{pending.length}</Chip></>}>
         <DataTable label="Rule changes waiting" rows={pending} rowKey={(x) => x.id} dense
           columns={[
             { key: 'r', label: 'Rule', main: true, render: (x) => <><b>{catOf(x.key)?.label || x.key}</b>{x.scope && <> <Chip tone="gray">{x.scope}</Chip></>}<br /><small className="muted">{ctx.who(x.created_by_name, x.created_role)} · {atMyt(x.created_at)}</small></> },
@@ -89,11 +89,11 @@ export function RulesTab() {
           </Actions>} />
       </Card>}
 
-      {GROUPS.map((g) => {
+      {GROUPS.filter((g) => rows.some((x) => x.cat.grp === g)).map((g, gi) => {
         const list = rows.filter((x) => x.cat.grp === g)
         if (!list.length) return null
         const scoped = list[0].cat.scope_kind !== 'none' || list.some((x) => x.cat.scope_kind !== 'none')
-        return <Card key={g} title={g} actions={canEdit && scoped ? <IconAction kind="add" label={`Add a ${g === 'Country pipelines' ? 'country pipeline' : 'sector or country version'}`} onClick={() => { const c = list.find((x) => x.cat.scope_kind !== 'none')!.cat; setEd({ cat: c, scope: '', newScope: true, base: list.find((x) => x.cat.key === c.key)?.cur }) }} /> : undefined}>
+        return <Card key={g} fold={gi === 0 ? 'open' : 'closed'} title={<>{g} <Chip tone="gray">{list.length}</Chip></>} actions={canEdit && scoped ? <IconAction kind="add" label={`Add a ${g === 'Country pipelines' ? 'country pipeline' : 'sector or country version'}`} onClick={() => { const c = list.find((x) => x.cat.scope_kind !== 'none')!.cat; setEd({ cat: c, scope: '', newScope: true, base: list.find((x) => x.cat.key === c.key)?.cur }) }} /> : undefined}>
           <DataTable label={`${g} rules`} rows={list} rowKey={(x) => `${x.cat.key}|${x.scope}`} dense className="qr-sticky"
             columns={[
               { key: 'r', label: 'Rule', main: true, width: '30%', render: (x) => <><b>{x.cat.label}</b>{x.scope && x.scope !== '*' && <> <span className="pill n">{x.scope}</span></>}{x.scope === '*' && <> <span className="pill n">Default</span></>}<br /><small className="muted">{x.cat.help}</small></>, sort: (x) => x.cat.ord },
@@ -108,7 +108,7 @@ export function RulesTab() {
         </Card>
       })}
 
-      <Card title="Module settings" actions={ctx.isCeo ? <IconAction kind="edit" label="Change module settings" onClick={() => setOldEdit(true)} /> : undefined}>
+      <Card fold="closed" title="Module settings" actions={ctx.isCeo ? <IconAction kind="edit" label="Change module settings" onClick={() => setOldEdit(true)} /> : undefined}>
         <KV items={[
           ['COM missing alert', `${r.cmo_missing_days} days after a worker leaves with no COM recorded`],
           ['Utilisation amber', `${r.util_amber_pct}% of the approved slots used`],

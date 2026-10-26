@@ -909,3 +909,28 @@ button.ai-table-h { all: unset; box-sizing: border-box; display: flex; align-ite
   .ai-fit .ai-chip { padding: 7px 12px; font-size: .85rem; }
   .ai-fit .ai-thread { padding-bottom: 8px; }
 }
+
+/* v1.5.1 one-screen layout: accordion cards, wrapped tabs (no sideways swipe), page switcher */
+.card-fold > .card-h { margin-bottom: 0; }
+.card-fold.is-open > .card-h { margin-bottom: 12px; }
+.fold-btn { all: unset; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; font: inherit; color: inherit; border-radius: 8px; }
+.fold-btn:focus-visible { outline: 2px solid var(--pri); outline-offset: 3px; }
+.fold-t { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.fold-chev { transition: transform .15s; transform: rotate(-90deg); color: var(--muted); flex: none; }
+.card-fold.is-open .fold-chev { transform: none; }
+.dt-pager { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+.dt-pages { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
+.dt-pages .btn { min-width: 34px; justify-content: center; padding-left: 8px; padding-right: 8px; }
+.sticky-bar { position: sticky; bottom: 0; z-index: 5; background: var(--card, #fff); border-top: 1px solid var(--line); padding: 10px 0; display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+@media (max-width: 860px) {
+  .tabs { flex-wrap: wrap; overflow-x: visible; scroll-snap-type: none; }
+  .tabs button { padding: 7px 10px; font-size: .86rem; }
+}
+@media print { .dt-pager { display: none !important; } }
+@media print { .card-fold .fold-body[hidden] { display: block !important; } }
+
+/* 1.5.1: tab strips wrap at every width (no sideways swipe) */
+.tabs { flex-wrap: wrap; overflow-x: visible; }
+/* 1.5.1: Save / Cancel stay in view at the bottom of long forms (sticky save bar) */
+.modal-b .modal-actions { position: sticky; bottom: -16px; z-index: 3; background: var(--card); margin: 16px -18px -16px; padding: 10px 18px calc(10px + env(safe-area-inset-bottom, 0px)); border-top: 1px solid var(--line); }
+@media print { .modal-b .modal-actions { position: static; } }

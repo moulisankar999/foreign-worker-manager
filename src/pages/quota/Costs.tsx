@@ -69,7 +69,7 @@ export function CostsTab({ company }: { company: string }) {
           ]} empty={<Empty title="No payments yet" />} />
       </Card>
       <Card title="Payments" actions={<Btn kind="primary" icon="plus" small onClick={() => setForm({ company_id: company || ctx.companies[0]?.id, paid_on: todayISO() })}>Record payment</Btn>}>
-        <DataTable label="Payments" rows={all} rowKey={(p) => p.id} initialSort={{ key: 'd', dir: 'desc' }} search={(p) => `${p.payee} ${p.ref} ${p.note} ${payLabel(p.category)}`}
+        <DataTable label="Payments" pageSize={8} rows={all} rowKey={(p) => p.id} initialSort={{ key: 'd', dir: 'desc' }} search={(p) => `${p.payee} ${p.ref} ${p.note} ${payLabel(p.category)}`}
           filters={[{ key: 'c', label: 'Category', options: PAY_CATS.map((c) => ({ value: c.key, label: c.label })), match: (p, v) => p.category === v }, { key: 's', label: 'Status', options: Object.entries(ST).map(([value, x]) => ({ value, label: x.label })), match: (p, v) => p.status === v }]}
           rowClass={(p) => (p.status === 'void' ? 'strike' : '')}
           columns={[

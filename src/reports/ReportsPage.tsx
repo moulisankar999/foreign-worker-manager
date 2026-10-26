@@ -154,7 +154,7 @@ export default function ReportsPage() {
           <div key={g}>
             <div className="rpt-grp">{g}</div>
             <div className="rpt-lib">{list.map((r) => (
-              <button key={r.id} className={'rpt-card' + (r.id === def?.id ? ' on' : '') + (r.soon ? ' soon' : '')} disabled={r.soon} onClick={() => pick(r)}>
+              <button key={r.id} title={r.desc} className={'rpt-card' + (r.id === def?.id ? ' on' : '') + (r.soon ? ' soon' : '')} disabled={r.soon} onClick={() => pick(r)}>
                 <b>{r.title}</b><small>{r.desc}</small>
                 <div className="rpt-tags">
                   {r.soon && <span className="rpt-tag">Coming soon</span>}

@@ -122,7 +122,7 @@ export default function SettingsPage() {
   const jump = (t: SettingsTab, sec?: string) => {
     setQ('')
     nav('/settings/' + t)
-    if (sec) setTimeout(() => document.getElementById(sec)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 120)
+    if (sec) setTimeout(() => { const el = document.getElementById(sec); el?.querySelector<HTMLButtonElement>('.card-fold.is-closed .fold-btn')?.click(); el?.scrollIntoView({ behavior: 'smooth', block: 'start' }) }, 120)
     else window.scrollTo({ top: 0 })
   }
   const companies = useConfig().companies.items

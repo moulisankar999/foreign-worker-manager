@@ -2,7 +2,8 @@
  * airport authorisation letter, payments, history, and "Convert to worker" once he is here. */
 import { useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Btn, Card, Chip, Empty, KV } from '../../components/ui'
+import { Btn, Card, Chip, Empty, KV, Tabs, useNarrow } from '../../components/ui'
+import { usePaged } from '../../components/dataTable'
 import { IconAction } from '../../components/iconAction'
 import { toast } from '../../components/toast'
 import { Preview } from '../../reports/Preview'
@@ -32,8 +33,13 @@ export default function RecruitPage({ id }: { id: string }) {
   const nav = useNavigate()
   const r = d.recruits.find((x) => x.id === id)
   const [step, setStep] = useState<CStep | null>(null)
+  const [selStage, setSelStage] = useState<string | null>(null)
+  const [tab, setTab] = useState<'quota' | 'travel' | 'arrival' | 'pay' | 'hist'>('quota')
+  const narrow = useNarrow()
   const [edit, setEdit] = useState<'details' | 'travel' | 'link' | 'pay' | 'drop' | 'letter' | 'convert' | 'arrival' | 'fomema' | 'override' | null>(null)
   const outlets = useOutlets()
+  const payPage = usePaged(d.payments.filter((p) => p.recruit_id === id), 8)
+  const histPage = usePaged(d.events.filter((e) => e.recruit_id === id).sort((a, b) => b.id - a.id), 8)
   if (!d.loaded) return <div className="page"><p className="muted">Loading…</p></div>
   if (!r) return <div className="page"><Empty title="Recruit not found"><Link to="/quota?tab=pipeline">Back to the pipeline</Link></Empty></div>
   const tpl = tplOf(d, r)
@@ -76,77 +82,102 @@ export default function RecruitPage({ id }: { id: string }) {
   }
   const stages = [...new Map(steps.map((x) => [x.stage, x])).values()]
 
+  const stageInfo = stages.map((g) => {
+    const skip = stageSkipped(tpl, g.stage, r.ecr)
+    const list = steps.filter((x) => x.stage === g.stage).filter((st) => !skip || st.key.startsWith('_'))
+    const done = list.filter(isDone).length
+    const state = skip ? 'skip' : g.stage === curStage && active ? 'cur' : list.length && done === list.length ? 'done' : 'todo'
+    return { g, skip, list, done, state }
+  })
+  const openStage = selStage ?? (active ? curStage : stageInfo.find((x) => x.state !== 'done' && x.state !== 'skip')?.g.stage ?? stages[stages.length - 1]?.stage)
+  const pick = (k: string) => setSelStage(narrow && openStage === k ? '' : k)
+  const stepList = (info: (typeof stageInfo)[number]) => (
+    <ol className="qr-steps">{info.list.map((st) => {
+      const done = isDone(st); const v = r.steps?.[st.key]
+      const blocked = st.key === tpl.use_step || st.key === 'vdr_apply' ? ur?.status !== 'approved' : false
+      const auto = st.key.startsWith('_')
+      const isUse = st.key === tpl.use_step
+      return <li key={st.key} className={`${done ? 'done' : ''} ${isUse || st.key === '_quota' ? 'gate' : ''}`}>
+        <button type="button" className="qr-tick" aria-label={done ? `Undo: ${st.label}` : `Mark done: ${st.label}`} disabled={!active || auto || (done && isUse) || (!done && blocked)}
+          title={auto ? (st.key === '_quota' ? 'Done automatically when the Quota Use Request is approved' : 'Set in the details') : blocked && !done ? 'Locked until the Quota Use Request is approved' : undefined}
+          onClick={() => (done ? tick(st, { done: false }).catch((e) => toast(e.message, 'err')) : setStep(st))}>{done ? '✓' : ''}</button>
+        <div><span>{st.label}</span>{st.req === false && <span className="muted"> (optional)</span>}{st.ecr && <> <span className="pill n">{st.ecr}</span></>}
+          {st.key === '_quota' && <> <Chip tone={done ? 'green' : 'red'}>{ur ? `Q-${ur.ref_no} ${ctx.urLabel(ur.status)}` : 'No request linked'}</Chip></>}
+          {isUse && <> <Chip tone={done ? 'blue' : 'amber'}>{done ? 'Slot used' : 'Uses the reserved slot'}</Chip></>}
+          {v?.done && <small className="muted"> · {fmtDate(v.date || '')}{v.ref ? ` · ${v.ref}` : ''}{v.note ? ` · ${v.note}` : ''}{v.override ? (ctx.isCeo ? ' · CEO override' : ' · marked done by an approver') : ''}</small>}
+          {st.hint && !done && <small className="hint">{st.hint}</small>}</div>
+      </li>
+    })}{!info.list.length && <li className="muted">{info.skip || 'No steps in this stage.'}</li>}</ol>
+  )
+  const chip = (info: (typeof stageInfo)[number]) => (
+    <button type="button" className={`qs-chip qs-${info.state}${openStage === info.g.stage ? ' sel' : ''}`} aria-expanded={openStage === info.g.stage} aria-controls={`qs-${info.g.stage}`}
+      title={`${info.g.stageLabel}${info.skip ? ` — ${info.skip}` : ''}`} onClick={() => pick(info.g.stage)}>
+      <span className="qs-n">{info.state === 'done' ? '✓' : info.g.idx + 1}</span>
+      <span className="qs-l">{info.g.stageLabel}</span>
+      <span className="qs-c">{info.skip ? 'skip' : `${info.done}/${info.list.length}`}</span>
+      {info.state === 'cur' && <span className="pill b">Now</span>}
+    </button>
+  )
+  const sel = stageInfo.find((x) => x.g.stage === openStage)
+  const payTotal = rmFmt(pays.filter((x) => x.status !== 'void').reduce((a, x) => a + Number(x.amount_rm), 0))
+  const tabActions = tab === 'quota' ? <>{active && !r.vdr_applied && <IconAction kind="assign" label={ur ? 'Link to another request' : 'Link to a Quota Use Request'} onClick={() => setEdit('link')} />}{active && <IconAction kind="edit" label="Edit details" onClick={() => setEdit('details')} />}</>
+    : tab === 'travel' ? (active ? <><IconAction kind="edit" label="Edit visa / flight / arrival" onClick={() => setEdit('travel')} /><IconAction kind="print" label="Airport authorisation letter (A4)" onClick={() => setEdit('letter')} /></> : null)
+      : tab === 'arrival' ? (active || r.status === 'converted' ? <><IconAction kind="edit" label="Accommodation address and Immigration clearance" onClick={() => setEdit('arrival')} />{r.arrived_at && <IconAction kind="upload" label="Record the FOMEMA result" onClick={() => setEdit('fomema')} />}</> : null)
+        : tab === 'pay' ? <IconAction kind="add" label="Record a payment for him" onClick={() => setEdit('pay')} /> : null
+
   return (
-    <div className="page">
+    <div className="page qr-page">
       <header className="page-h">
         <IconAction kind="close" label="Back to the pipeline" onClick={() => nav('/quota?tab=pipeline')} />
         <div><h1>{r.full_name}</h1><small className="muted">{r.country}{r.ecr ? ` · ${r.ecr}` : ''} · {ctx.cName(r.company_id)}{batch && <> · <Link to="/quota?tab=pipeline">{batch.title}</Link></>}</small></div>
         <span className="spacer" />
         <Chip tone={r.status === 'active' ? 'blue' : r.status === 'converted' ? 'green' : 'gray'}>{r.status === 'active' ? stageLabelIn(tpl, curStage) : r.status === 'converted' ? 'Converted to worker' : r.out_kind === 'medical_unfit' ? 'Medical unfit' : r.out_kind === 'vdr_rejected' ? 'VDR rejected' : 'Dropped'}</Chip>
+        {active && <div className="row gap-s qr-finish">
+          <Btn small kind="primary" icon="userplus" disabled={!r.arrived_at} title={r.arrived_at ? undefined : 'Available once he has arrived'} onClick={() => setEdit('convert')}>Convert to worker</Btn>
+          {ctx.isHraUp && <Btn small kind="danger" icon="ban" title={r.vdr_applied ? 'A dropped recruit whose calling visa was applied keeps the slot used; return it with a ledger movement once the VDR is cancelled.' : undefined} onClick={() => setEdit('drop')}>Drop</Btn>}
+        </div>}
+        {r.status === 'converted' && r.worker_id && <Link className="btn btn-secondary btn-s" to={`/workers/${r.worker_id}`}>Open the worker record</Link>}
       </header>
 
-      <div className="qr-grid two">
-        <Card title={<>Pipeline <Chip tone="gray">{p.done} / {p.total}</Chip></>} actions={ctx.isCeo && active && curStage !== 'quota' && curStage !== 'onboard' ? <IconAction kind="unlock" label="CEO: mark the current stage done with a note" onClick={() => setEdit('override')} /> : undefined}>
-          <div className="qr-bar big"><i style={{ width: `${p.pct}%` }} /></div>
-          <small className="muted">Template {tplRow ? `from ${fmtDate(tplRow.effective_from)}` : 'default'} · {daysInStage(r)} day(s) in “{stageLabelIn(tpl, curStage)}”</small>
-          <RuleFlags f={r.rule_flags} />
-          {r.country === 'India' && !r.ecr && <div className="note-box">Set ECR or ECNR in the details to get the right India steps.</div>}
-          {stages.map((g) => { const skip = stageSkipped(tpl, g.stage, r.ecr); const list = steps.filter((x) => x.stage === g.stage); return <div key={g.stage} className={`qr-stage ${g.stage === curStage && active ? 'cur' : ''}`}>
-            <h4 className="qr-h4">{g.idx + 1}. {g.stageLabel} {skip && <span className="pill n">{skip}</span>}{g.stage === curStage && active && <span className="pill b">Now</span>}</h4>
-            <ol className="qr-steps">{list.filter((st) => !skip || st.key.startsWith('_')).map((st) => {
-              const done = isDone(st); const v = r.steps?.[st.key]
-              const blocked = st.key === tpl.use_step || st.key === 'vdr_apply' ? ur?.status !== 'approved' : false
-              const auto = st.key.startsWith('_')
-              const isUse = st.key === tpl.use_step
-              return <li key={st.key} className={`${done ? 'done' : ''} ${isUse || st.key === '_quota' ? 'gate' : ''}`}>
-                <button type="button" className="qr-tick" aria-label={done ? `Undo: ${st.label}` : `Mark done: ${st.label}`} disabled={!active || auto || (done && isUse) || (!done && blocked)}
-                  title={auto ? (st.key === '_quota' ? 'Done automatically when the Quota Use Request is approved' : 'Set in the details') : blocked && !done ? 'Locked until the Quota Use Request is approved' : undefined}
-                  onClick={() => (done ? tick(st, { done: false }).catch((e) => toast(e.message, 'err')) : setStep(st))}>{done ? '✓' : ''}</button>
-                <div><span>{st.label}</span>{st.req === false && <span className="muted"> (optional)</span>}{st.ecr && <> <span className="pill n">{st.ecr}</span></>}
-                  {st.key === '_quota' && <> <Chip tone={done ? 'green' : 'red'}>{ur ? `Q-${ur.ref_no} ${ctx.urLabel(ur.status)}` : 'No request linked'}</Chip></>}
-                  {isUse && <> <Chip tone={done ? 'blue' : 'amber'}>{done ? 'Slot used' : 'Uses the reserved slot'}</Chip></>}
-                  {v?.done && <small className="muted"> · {fmtDate(v.date || '')}{v.ref ? ` · ${v.ref}` : ''}{v.note ? ` · ${v.note}` : ''}{v.override ? (ctx.isCeo ? ' · CEO override' : ' · marked done by an approver') : ''}</small>}
-                  {st.hint && !done && <small className="hint">{st.hint}</small>}</div>
-              </li>
-            })}</ol></div>
-          })}
-        </Card>
+      <Card className="qs-card" title={<>Pipeline <Chip tone="gray">{p.done} / {p.total}</Chip></>} actions={ctx.isCeo && active && curStage !== 'quota' && curStage !== 'onboard' ? <IconAction kind="unlock" label="CEO: mark the current stage done with a note" onClick={() => setEdit('override')} /> : undefined}>
+        <div className="row gap-s qs-meta"><div className="qr-bar big" style={{ flex: 1 }}><i style={{ width: `${p.pct}%` }} /></div>
+          <small className="muted">Template {tplRow ? `from ${fmtDate(tplRow.effective_from)}` : 'default'} · {daysInStage(r)} day(s) in “{stageLabelIn(tpl, curStage)}”</small></div>
+        <RuleFlags f={r.rule_flags} />
+        {r.country === 'India' && !r.ecr && <div className="note-box">Set ECR or ECNR in the details to get the right India steps.</div>}
+        {narrow ? (
+          <ol className="qs-acc">{stageInfo.map((info) => <li key={info.g.stage} className={`qr-stage ${info.state === 'cur' ? 'cur' : ''}`}>
+            {chip(info)}
+            {openStage === info.g.stage && <div id={`qs-${info.g.stage}`} className="qs-panel">{stepList(info)}</div>}
+          </li>)}</ol>
+        ) : (<>
+          <ol className="qs-row">{stageInfo.map((info) => <li key={info.g.stage}>{chip(info)}</li>)}</ol>
+        </>)}
+      </Card>
 
-        <div className="qr-grid">
-          <Card title="Quota" actions={active && !r.vdr_applied ? <IconAction kind="assign" label={ur ? 'Link to another request' : 'Link to a Quota Use Request'} onClick={() => setEdit('link')} /> : undefined}>
+      <div className={`qr-grid two qs-below${narrow ? ' qs-narrow' : ''}`}>
+        {!narrow && sel && <Card className={`qr-stage ${sel.state === 'cur' ? 'cur' : ''}`} title={<>{sel.g.idx + 1}. {sel.g.stageLabel} {sel.skip && <span className="pill n">{sel.skip}</span>}{sel.state === 'cur' && <span className="pill b">Now</span>}<Chip tone="gray">{sel.done}/{sel.list.length}</Chip></>}>
+          <div id={`qs-${sel.g.stage}`}>{stepList(sel)}</div>
+        </Card>}
+        <Card className="qs-info" title={<Tabs compact value={tab} onChange={setTab} tabs={[{ id: 'quota', label: 'Quota & details' }, { id: 'travel', label: 'Visa & flight' }, { id: 'arrival', label: 'Arrival & FOMEMA' }, { id: 'pay', label: `Payments · ${payTotal}` }, { id: 'hist', label: 'History', badge: evs.length }]} />}
+          actions={tabActions || undefined}>
+          {tab === 'quota' && <>
+            <h4 className="qr-h4">Quota</h4>
             {ur ? <KV items={[['Request', <Link key="l" to={`/quota?tab=approvals&open=${ur.id}`}>Q-{ur.ref_no}</Link>], ['Status', <Chip key="s" tone={UR_STATUS[ur.status].tone}>{ctx.urLabel(ur.status)}</Chip>],
               ['Letter', d.quotas.find((q) => q.id === ur.quota_id)?.ref_no || '—'], ['Slots', `${ur.slots} × ${ur.country}`]]} />
               : <p className="muted">Not linked yet. Raise a Quota Use Request in <Link to="/quota?tab=approvals">Approvals</Link> and link him to it; the calling visa stays locked until it is approved.</p>}
-          </Card>
-          <Card title="Details" actions={active ? <IconAction kind="edit" label="Edit details" onClick={() => setEdit('details')} /> : undefined}>
+            <h4 className="qr-h4">Details</h4>
             <KV items={[['Passport', [r.passport_no, r.passport_expiry && `exp ${fmtDate(r.passport_expiry)}`].filter(Boolean).join(' · ') || '—'], ['Date of birth', fmtDate(r.dob || '') || '—'], ['Gender', r.gender || '—'], ['Job', r.job || '—'], ['Phone', r.phone || '—']]} />
-          </Card>
-          <Card title="Calling visa, flight & arrival" actions={active ? <><IconAction kind="edit" label="Edit visa / flight / arrival" onClick={() => setEdit('travel')} /><IconAction kind="print" label="Airport authorisation letter (A4)" onClick={() => setEdit('letter')} /></> : undefined}>
-            <KV items={[['VDR no.', r.vdr_no || '—'], ['VDR applied', fmtDate(r.vdr_applied || '') || '—'], ['VDR approved', fmtDate(r.vdr_approved || '') || '—'], ['VDR valid until', fmtDate(r.vdr_expiry || '') || '—'],
-              ['Flight', r.flight_at ? `${r.flight_no || ''} · ${atMyt(r.flight_at)}` : '—'], ['Airport', r.airport || '—'], ['Pickup by', r.pickup_by || '—'], ['Transport', r.transport || '—'],
-              ['Hostel', hostel ? `${hostel.name}${hostel.capacity ? ` (capacity ${hostel.capacity})` : ''}` : '—'], ['Arrived', r.arrived_at ? atMyt(r.arrived_at) : '—'],
-              ['FOMEMA due', r.arrived_at ? fmtDate(addDaysIso(r.arrived_at, fomemaDays)) : '—']]} />
-          </Card>
-          <Card title="Arrival, Immigration & FOMEMA" actions={active || r.status === 'converted' ? <><IconAction kind="edit" label="Accommodation address and Immigration clearance" onClick={() => setEdit('arrival')} />{r.arrived_at && <IconAction kind="upload" label="Record the FOMEMA result" onClick={() => setEdit('fomema')} />}</> : undefined}>
-            <KV items={[['Accommodation', r.accom_address ? <>{r.accom_address} <small className="muted">confirmed {fmtDate(r.accom_confirmed_on || '')}</small></> : <span className="pill warn">Confirm before FOMEMA</span>],
-              ['Immigration clearance', r.imm_cleared_at ? atMyt(r.imm_cleared_at) : r.arrived_at ? <span className="pill warn">Within {immHours} hours of landing</span> : '—'],
-              ['FOMEMA', r.fomema_result ? <><Chip tone={r.fomema_result === 'fit' ? 'green' : 'red'}>{r.fomema_result === 'fit' ? 'Fit' : 'Unfit'}</Chip> {fmtDate(r.fomema_on || '')} <FileLink f={d.files.find((f) => f.id === r.fomema_file)} label="report" /></> : r.arrived_at ? `Due by ${fmtDate(addDaysIso(r.arrived_at, fomemaDays))}` : '—']]} />
-          </Card>
-          <Card title={<>Payments <Chip tone="gray">{rmFmt(pays.filter((x) => x.status !== 'void').reduce((a, x) => a + Number(x.amount_rm), 0))}</Chip></>} actions={<IconAction kind="add" label="Record a payment for him" onClick={() => setEdit('pay')} />}>
-            {pays.length ? <ul className="alist">{pays.map((x) => <li key={x.id} className={x.status === 'void' ? 'strike' : ''}>{fmtDate(x.paid_on)} · {payLabel(x.category)} · <b>{rmFmt(x.amount_rm)}</b> {x.status === 'pending_check' && <Chip tone="amber">To check</Chip>}</li>)}</ul> : <p className="muted">No payments yet.</p>}
-          </Card>
-          <Card title="History">
-            {evs.length ? <ol className="qr-tl">{evs.map((e) => <li key={e.id}><b>{e.action}</b> <small className="muted">{atMyt(e.at)} · {ctx.who(e.by_name, e.by_role)}</small>{e.note && <div className="qr-tl-n">{e.note}</div>}</li>)}</ol> : <p className="muted">—</p>}
-          </Card>
-          {active && <Card title="Finish">
-            <div className="row-gap">
-              <Btn kind="primary" icon="userplus" disabled={!r.arrived_at} title={r.arrived_at ? undefined : 'Available once he has arrived'} onClick={() => setEdit('convert')}>Convert to worker</Btn>
-              {ctx.isHraUp && <Btn kind="danger" icon="ban" onClick={() => setEdit('drop')}>Drop</Btn>}
-            </div>
-            {r.vdr_applied && <small className="muted">A dropped recruit whose calling visa was applied keeps the slot used; return it with a ledger movement once the VDR is cancelled.</small>}
-          </Card>}
-          {r.status === 'converted' && r.worker_id && <Card title="Worker"><Link to={`/workers/${r.worker_id}`}>Open the worker record</Link></Card>}
-        </div>
+          </>}
+          {tab === 'travel' && <KV items={[['VDR no.', r.vdr_no || '—'], ['VDR applied', fmtDate(r.vdr_applied || '') || '—'], ['VDR approved', fmtDate(r.vdr_approved || '') || '—'], ['VDR valid until', fmtDate(r.vdr_expiry || '') || '—'],
+            ['Flight', r.flight_at ? `${r.flight_no || ''} · ${atMyt(r.flight_at)}` : '—'], ['Airport', r.airport || '—'], ['Pickup by', r.pickup_by || '—'], ['Transport', r.transport || '—'],
+            ['Hostel', hostel ? `${hostel.name}${hostel.capacity ? ` (capacity ${hostel.capacity})` : ''}` : '—'], ['Arrived', r.arrived_at ? atMyt(r.arrived_at) : '—'],
+            ['FOMEMA due', r.arrived_at ? fmtDate(addDaysIso(r.arrived_at, fomemaDays)) : '—']]} />}
+          {tab === 'arrival' && <KV items={[['Accommodation', r.accom_address ? <>{r.accom_address} <small className="muted">confirmed {fmtDate(r.accom_confirmed_on || '')}</small></> : <span className="pill warn">Confirm before FOMEMA</span>],
+            ['Immigration clearance', r.imm_cleared_at ? atMyt(r.imm_cleared_at) : r.arrived_at ? <span className="pill warn">Within {immHours} hours of landing</span> : '—'],
+            ['FOMEMA', r.fomema_result ? <><Chip tone={r.fomema_result === 'fit' ? 'green' : 'red'}>{r.fomema_result === 'fit' ? 'Fit' : 'Unfit'}</Chip> {fmtDate(r.fomema_on || '')} <FileLink f={d.files.find((f) => f.id === r.fomema_file)} label="report" /></> : r.arrived_at ? `Due by ${fmtDate(addDaysIso(r.arrived_at, fomemaDays))}` : '—']]} />}
+          {tab === 'pay' && (pays.length ? <><ul className="alist">{payPage.rows.map((x) => <li key={x.id} className={x.status === 'void' ? 'strike' : ''}>{fmtDate(x.paid_on)} · {payLabel(x.category)} · <b>{rmFmt(x.amount_rm)}</b> {x.status === 'pending_check' && <Chip tone="amber">To check</Chip>}</li>)}</ul>{payPage.pager('Payments')}</> : <p className="muted">No payments yet.</p>)}
+          {tab === 'hist' && (evs.length ? <><ol className="qr-tl">{histPage.rows.map((e) => <li key={e.id}><b>{e.action}</b> <small className="muted">{atMyt(e.at)} · {ctx.who(e.by_name, e.by_role)}</small>{e.note && <div className="qr-tl-n">{e.note}</div>}</li>)}</ol>{histPage.pager('History')}</> : <p className="muted">—</p>)}
+        </Card>
       </div>
 
       {step && <QForm title={step.label} initial={{ date: todayISO() }} onClose={() => setStep(null)} saveLabel="Mark done"

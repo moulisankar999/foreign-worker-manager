@@ -1,6 +1,7 @@
 /* DataTable — the one list layout used across FW Manager.
  * Compact rows with the key columns; tap / click a row to open all its details inline.
  * Sortable headers, optional search + filters for long lists, header sticks under the top bar while the page scrolls.
+ * Long lists are split into pages (v1.5.1) so a list never grows into an endless scroll.
  * Phones get fewer columns (hide: 'phone') and the row actions move into the opened row, so nothing scrolls sideways. */
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Icon } from './Icon'
@@ -48,7 +49,7 @@ const isInteractive = (t: EventTarget | null, stop: HTMLElement) => {
 
 export function DataTable<T>({
   rows, rowKey, columns, expand, actions, search, searchLabel = 'Search', filters, initialSort, empty, rowClass, rowTestId, rowId,
-  label, className, searchFrom = 8, pageSize = 50, open: openReq, onOpenChange, dense, canExpand,
+  label, className, searchFrom = 8, pageSize = 15, open: openReq, onOpenChange, dense, canExpand,
 }: {
   rows: T[]
   rowKey: (r: T) => string
@@ -84,12 +85,14 @@ export function DataTable<T>({
   const [sort, setSort] = useState(initialSort || null)
   const [open, setOpen] = useState<Set<string>>(() => new Set(openReq ? [openReq.key] : []))
   const [seen, setSeen] = useState<Set<string>>(() => new Set(openReq ? [openReq.key] : []))
-  const [limit, setLimit] = useState(pageSize)
+  const [page, setPage] = useState(0)
   const root = useRef<HTMLDivElement>(null)
+  const shownRef = useRef<T[]>([])
   useEffect(() => {
     if (!openReq) return
     const k = openReq.key
     setOpen((o) => new Set(o).add(k)); setSeen((o) => new Set(o).add(k))
+    const at = shownRef.current.findIndex((r) => rowKey(r) === k); if (at >= 0) setPage(Math.floor(at / pageSize))
     setTimeout(() => root.current?.querySelector(`tr[data-key="${CSS.escape(k)}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 120)
   }, [openReq])
   const toggle = (k: string) => {
@@ -117,7 +120,10 @@ export function DataTable<T>({
     }
     return r
   }, [rows, q, fv, sort, columns, search, filters])
-  const visible = shown.slice(0, limit)
+  shownRef.current = shown
+  const pages = Math.max(1, Math.ceil(shown.length / pageSize))
+  const pg = Math.min(page, pages - 1)
+  const visible = shown.slice(pg * pageSize, pg * pageSize + pageSize)
   const hasExpand = !!expand || !!actions
   const nCols = columns.length + (actions ? 1 : 0) + (hasExpand ? 1 : 0)
   const hideCls = (c: Column<T>) => (c.hide ? ` dt-h-${c.hide}` : '')
@@ -125,9 +131,9 @@ export function DataTable<T>({
     <div ref={root} className={`dt${dense ? ' dt-dense' : ''}${className ? ' ' + className : ''}`}>
       {(showSearch || showFilters) && (
         <div className="dt-tools">
-          {showSearch && <div className="dt-search"><Icon name="search" size={16} /><input type="search" value={q} onChange={(e) => { setQ(e.target.value); setLimit(pageSize) }} placeholder={searchLabel + '…'} aria-label={searchLabel} /></div>}
+          {showSearch && <div className="dt-search"><Icon name="search" size={16} /><input type="search" value={q} onChange={(e) => { setQ(e.target.value); setPage(0) }} placeholder={searchLabel + '…'} aria-label={searchLabel} /></div>}
           {showFilters && filters!.map((f) => (
-            <select key={f.key} value={fv[f.key] || ''} aria-label={f.label} onChange={(e) => { setFv({ ...fv, [f.key]: e.target.value }); setLimit(pageSize) }}>
+            <select key={f.key} value={fv[f.key] || ''} aria-label={f.label} onChange={(e) => { setFv({ ...fv, [f.key]: e.target.value }); setPage(0) }}>
               <option value="">{f.label}: All</option>
               {f.options.map((o) => (typeof o === 'string' ? <option key={o} value={o}>{o}</option> : <option key={o.value} value={o.value}>{o.label}</option>))}
             </select>
@@ -196,7 +202,7 @@ export function DataTable<T>({
           </tbody>
         </table>
       )}
-      {shown.length > limit && <button type="button" className="btn btn-secondary btn-s dt-more" onClick={() => setLimit(limit + pageSize)}>Show {Math.min(pageSize, shown.length - limit)} more ({shown.length - limit} left)</button>}
+      {pages > 1 && <Pager page={pg} pages={pages} total={shown.length} size={pageSize} onPage={(n) => { setPage(n); root.current?.scrollIntoView({ block: 'nearest' }) }} label={label} />}
     </div>
   )
 }
@@ -209,4 +215,29 @@ export function Details({ items }: { items: [ReactNode, ReactNode][] }) {
       {list.map(([k, v], i) => <div key={i}><dt>{k}</dt><dd>{v}</dd></div>)}
     </dl>
   )
+}
+
+/** page switcher under a long list: ‹ 1 2 … 7 › with "16–30 of 120" */
+export function Pager({ page, pages, total, size, onPage, label }: { page: number; pages: number; total: number; size: number; onPage: (n: number) => void; label: string }) {
+  const nums = [...new Set([0, page - 1, page, page + 1, pages - 1].filter((n) => n >= 0 && n < pages))].sort((a, b) => a - b)
+  return (
+    <nav className="dt-pager" aria-label={`${label}: pages`}>
+      <span className="small muted">{page * size + 1}–{Math.min(total, page * size + size)} of {total}</span>
+      <span className="dt-pages">
+        <button type="button" className="btn btn-secondary btn-s" disabled={page === 0} aria-label="Previous page" title="Previous page" onClick={() => onPage(page - 1)}><Icon name="back" size={16} /></button>
+        {nums.map((n, i) => <Fragment key={n}>{i > 0 && n - nums[i - 1] > 1 && <span className="muted">…</span>}
+          <button type="button" className={`btn btn-s ${n === page ? 'btn-primary' : 'btn-secondary'}`} aria-current={n === page ? 'page' : undefined} aria-label={`Page ${n + 1}`} onClick={() => onPage(n)}>{n + 1}</button></Fragment>)}
+        <button type="button" className="btn btn-secondary btn-s" disabled={page >= pages - 1} aria-label="Next page" title="Next page" onClick={() => onPage(page + 1)}><Icon name="fwd" size={16} /></button>
+      </span>
+    </nav>
+  )
+}
+
+/** paging for plain lists (cards, alert lists) that are not a DataTable */
+export function usePaged<T>(list: T[], size = 15, reset: unknown = null) {
+  const [page, setPage] = useState(0)
+  useEffect(() => setPage(0), [reset])
+  const pages = Math.max(1, Math.ceil(list.length / size))
+  const pg = Math.min(page, pages - 1)
+  return { rows: list.slice(pg * size, pg * size + size), pager: (label: string) => pages > 1 ? <Pager page={pg} pages={pages} total={list.length} size={size} onPage={setPage} label={label} /> : null }
 }

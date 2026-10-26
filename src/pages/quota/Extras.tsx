@@ -2,7 +2,7 @@
  * government windows, the quota application checklist + levy, and the COM follow-up (departure letter, bond refund). */
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Btn, Card, Empty, Toolbar } from '../../components/ui'
+import { Btn, Card, Chip, Empty, Toolbar } from '../../components/ui'
 import { DataTable, Details } from '../../components/dataTable'
 import { Actions, IconAction } from '../../components/iconAction'
 import { Preview } from '../../reports/Preview'
@@ -49,7 +49,7 @@ export function MasterTable({ company }: { company: string }) {
   const Num = ({ v }: { v: number }) => <td className="r qr-num">{v || <span className="muted">0</span>}</td>
   const line = (m: Record<string, string | number>, label: React.ReactNode, cls: string, key: string) => <tr key={key} className={cls}><td colSpan={4}>{label}</td>{NUMS.map(([k]) => <Num key={k} v={Number(m[k as string] || 0)} />)}</tr>
   return (
-    <Card title="Master table" actions={<Toolbar><input className="qr-search" placeholder="Search letter / sector" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search the master table" />
+    <Card fold="closed" title="Master table" actions={<Toolbar><input className="qr-search" placeholder="Search letter / sector" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search the master table" />
       <IconAction kind="print" label="A4 master table with sign-off" onClick={() => setPrint(true)} /></Toolbar>}>
       {letters.length ? <div className="qr-scroll"><table className="qr-master qr-sticky">
         <thead><tr>{th('ref_no', 'Letter', false)}{th('sector', 'Sector', false)}{th('expiry_date', 'Expires', false)}{th('days_left', 'Days left')}{NUMS.map(([k, label]) => <th key={k} className="r"><button type="button" className="qr-th" onClick={() => setSort({ k: k as string, dir: sort.k === k ? (-sort.dir as 1 | -1) : -1 })}>{label}{sort.k === k ? (sort.dir === 1 ? ' ▲' : ' ▼') : ''}</button></th>)}</tr></thead>
@@ -80,7 +80,7 @@ export function FollowUps({ company }: { company: string }) {
     .then(({ data }) => setHr((data || []).map((p) => ({ id: p.id, name: p.full_name || p.email, role: p.role, company_ids: p.company_ids })))) }, [re])
   const rows = d.followups.filter((f) => !f.company_id || inCompany(company, f.company_id))
   return (
-    <Card title={<>HR follow-ups {rows.filter((f) => f.days_late > 0).length > 0 && <span className="pill bad">{rows.filter((f) => f.days_late > 0).length} late</span>}</>}>
+    <Card fold="closed" title={<>HR follow-ups <Chip tone="gray">{rows.length}</Chip> {rows.filter((f) => f.days_late > 0).length > 0 && <span className="pill bad">{rows.filter((f) => f.days_late > 0).length} late</span>}</>}>
       <DataTable label="HR follow-ups" rows={rows} rowKey={(f) => `${f.kind}|${f.ref}`} dense initialSort={{ key: 'late', dir: 'desc' }}
         search={(f) => `${f.title} ${f.owner_name} ${f.step}`}
         filters={[{ key: 'k', label: 'Type', options: [...new Set(rows.map((f) => f.kind))], match: (f, v) => f.kind === v }]}

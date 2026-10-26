@@ -25,7 +25,7 @@ export function GmPowersCard() {
   const setMany = (keys: string[], on: boolean, what: string) => p && save({ ...p, ...Object.fromEntries(keys.map((k) => [k, on])) }, what)
   const onCount = p ? ALL_POWERS.filter((k) => p[k]).length : 0
   return (
-    <Card title="General Manager powers" className="gm-powers" actions={p && <>
+    <Card title="General Manager powers" fold="closed" className="gm-powers" actions={p && <>
       <Btn small kind="ghost" disabled={busy || onCount === ALL_POWERS.length} onClick={() => setMany(ALL_POWERS, true, 'all powers on')}>Select all</Btn>
       <Btn small kind="ghost" disabled={busy || onCount === 0} onClick={() => setMany(ALL_POWERS, false, 'all powers off')}>Clear all</Btn>
     </>}>

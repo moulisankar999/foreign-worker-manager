@@ -59,7 +59,7 @@ export function HrFlagsCard() {
   const isSuper = top('hr.flags') // CEO, or a General Manager with this power
   const f = useConfig().hr_admin
   return (
-    <Card title="HR Admin & HR Manager permissions">
+    <Card title="HR Admin & HR Manager permissions" fold="closed">
       <p className="muted small">What HR Admins (and, where marked, HR Managers) may do in addition to approving requests. Deleting companies, SSM documents or directors is always CEO / General Manager only. {isSuper ? 'Changes apply immediately for everyone.' : 'Shown here for reference.'}</p>
       {(Object.keys(FLAG_LABEL) as (keyof HrAdminFlags)[]).map((k) => (
         <label key={k} className="check" data-testid={`hrflag-${k}`}><input type="checkbox" checked={k === 'createCompanies' || k === 'hrmCreateCompanies' ? f[k] !== false : !!f[k]} disabled={!isSuper} onChange={(e) => saveConfig('hr_admin', { ...f, [k]: e.target.checked }).catch(err)} /> {FLAG_LABEL[k]}</label>
@@ -347,7 +347,7 @@ export function AuditCard() {
     <Card title="Audit log" actions={rows ? <IconAction kind="refresh" label="Refresh the audit log" onClick={() => void load()} /> : <Btn small icon="eye" onClick={load}>Show</Btn>}>
       <p className="muted small">Every approval, role change, document and settings change is recorded by the database and cannot be edited.</p>
       {rows && (
-        <DataTable label="Audit log" className="audit-t" rows={rows} rowKey={(r) => String(r.id)} searchFrom={1} pageSize={50} initialSort={{ key: 'at', dir: 'desc' }}
+        <DataTable label="Audit log" className="audit-t" rows={rows} rowKey={(r) => String(r.id)} searchFrom={1} pageSize={20} initialSort={{ key: 'at', dir: 'desc' }}
           search={(r) => `${r.user_name} ${ROLE_LABEL[r.user_role || ''] || r.user_role} ${r.action} ${r.entity} ${r.summary}`} searchLabel="Filter audit log"
           filters={[{ key: 'action', label: 'Action', options: [...new Set(rows.map((r) => r.action))].sort(), match: (r, v) => r.action === v },
             { key: 'who', label: 'Who', options: [...new Set(rows.map((r) => r.user_name || '—'))].sort(), match: (r, v) => (r.user_name || '—') === v }]}

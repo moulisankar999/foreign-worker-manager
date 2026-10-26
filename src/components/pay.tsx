@@ -380,7 +380,7 @@ export function HolidaysEditor({ canEdit }: { canEdit: boolean }) {
       <p className="muted small">Give at least 11 paid public holidays a year. Five are compulsory: National Day, the Agong’s Birthday, the Ruler’s Birthday (or Federal Territory Day), Labour Day and Malaysia Day. If a holiday falls on the rest day, the next working day is the replacement (Employment Act s.60D — {CHECK}). {state ? `${list.length} holidays listed for ${state} (${nationwide} nationwide).` : ''}</p>
       {msg && <p className={msg.startsWith('Saved') ? 'ok-msg' : 'err'} role="status">{msg}</p>}
       {all.length === 0 ? <Empty title={`No holidays for ${year} yet`}>{canEdit ? 'Add them from the official gazette when they are announced.' : 'HR will add them when they are announced.'}</Empty> : (
-        <DataTable label="Public holidays" rows={list} rowKey={(x) => x.id} initialSort={{ key: 'date', dir: 'asc' }} search={(x) => `${x.name} ${x.states.join(' ')}`} searchLabel="Search holidays" searchFrom={12} pageSize={100}
+        <DataTable label="Public holidays" rows={list} rowKey={(x) => x.id} initialSort={{ key: 'date', dir: 'asc' }} search={(x) => `${x.name} ${x.states.join(' ')}`} searchLabel="Search holidays" searchFrom={12} pageSize={20}
           columns={[
             { key: 'date', label: 'Date', sort: (x) => x.date, render: (x) => <span className="nowrap">{fmtDate(x.date)}<small>{parseISO(x.date)?.toLocaleDateString('en-GB', { weekday: 'short' })}</small></span> },
             { key: 'name', label: 'Holiday', main: true, sort: (x) => x.name, render: (x) => x.name },

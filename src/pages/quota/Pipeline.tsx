@@ -18,7 +18,8 @@ export function PipelineTab({ company }: { company: string }) {
   const ctx = useQCtx()
   const d = useQuota()
   const nav = useNavigate()
-  const [view, setView] = useState<'board' | 'table'>(() => (localStorage.getItem('qr.view') as 'board' | 'table') || 'board')
+  const [view, setView] = useState<'board' | 'table'>(() => (localStorage.getItem('qr.view2') as 'board' | 'table') || 'table')
+  const [more, setMore] = useState<Set<string>>(new Set())
   const [batch, setBatch] = useState('')
   const [bForm, setBForm] = useState<V | null>(null)
   const [rForm, setRForm] = useState<V | null>(null)
@@ -26,7 +27,7 @@ export function PipelineTab({ company }: { company: string }) {
   const batches = d.batches.filter((b) => inCompany(company, b.company_id))
   const recruits = d.recruits.filter((r) => (inCompany(company, r.company_id)) && (!batch || r.batch_id === batch) && (showDone || r.status === 'active'))
   const spent = (b: Batch) => d.payments.filter((p) => p.batch_id === b.id && p.status !== 'void').reduce((a, p) => a + Number(p.amount_rm), 0)
-  const setV = (v: 'board' | 'table') => { setView(v); localStorage.setItem('qr.view', v) }
+  const setV = (v: 'board' | 'table') => { setView(v); localStorage.setItem('qr.view2', v) }
   const ur = (r: Recruit) => d.requests.find((u) => u.id === r.use_request_id)
   const bCountry = batches.find((b) => b.id === batch)?.country
   const tpl: Template = (regAt(d.reg, 'pipeline', bCountry || 'India')?.value as Template) || DEFAULT_TEMPLATE
@@ -37,8 +38,8 @@ export function PipelineTab({ company }: { company: string }) {
 
   return (
     <div className="qr-grid">
-      <Card title="Batches" actions={<Btn kind="primary" icon="plus" small onClick={() => setBForm({ company_id: company || ctx.companies[0]?.id, target_count: 1 })}>New batch</Btn>}>
-        <DataTable label="Recruitment batches" rows={batches} rowKey={(b) => b.id} initialSort={{ key: 'arr', dir: 'asc' }}
+      <Card fold={batches.length > 3 && d.recruits.some((r) => inCompany(company, r.company_id)) ? 'closed' : 'open'} title={<>Batches <Chip tone="gray">{batches.length}</Chip></>} actions={<Btn kind="primary" icon="plus" small onClick={() => setBForm({ company_id: company || ctx.companies[0]?.id, target_count: 1 })}>New batch</Btn>}>
+        <DataTable label="Recruitment batches" rows={batches} rowKey={(b) => b.id} pageSize={5} initialSort={{ key: 'arr', dir: 'asc' }}
           columns={[
             { key: 't', label: 'Batch', main: true, render: (b) => <><b>{b.title}</b> {b.status === 'closed' && <Chip tone="gray">Closed</Chip>}<br /><small className="muted">{b.country} · {ctx.cName(b.company_id)}</small></>, sort: (b) => b.title },
             { key: 'n', label: 'Recruits', align: 'right', render: (b) => `${d.recruits.filter((r) => r.batch_id === b.id && r.status !== 'dropped').length} / ${b.target_count}` },
@@ -59,13 +60,14 @@ export function PipelineTab({ company }: { company: string }) {
       <Card title={<>Recruits <span className="qr-stage-counts">{STAGES.filter((x) => counts[x.key]).map((x) => <span key={x.key} className="pill n" title={x.label}>{x.label} <b>{counts[x.key]}</b></span>)}</span></>} actions={<Toolbar>
         <SelectFilter label="Batch" value={batch} onChange={setBatch} options={[{ value: '', label: 'All batches' }, ...batches.map((b) => ({ value: b.id, label: b.title }))]} />
         <label className="check"><input type="checkbox" checked={showDone} onChange={(e) => setShowDone(e.target.checked)} /> Converted / dropped</label>
-        <div className="qr-seg" role="group" aria-label="View"><button className={view === 'board' ? 'on' : ''} onClick={() => setV('board')}>Board</button><button className={view === 'table' ? 'on' : ''} onClick={() => setV('table')}>Table</button></div>
+        <div className="qr-seg" role="group" aria-label="View"><button className={view === 'board' ? 'on' : ''} onClick={() => setV('board')}>Board</button><button className={view === 'table' ? 'on' : ''} onClick={() => setV('table')}>List</button></div>
         <Btn icon="plus" small onClick={() => setRForm({ company_id: company || ctx.companies[0]?.id, batch_id: batch || undefined, country: batches.find((b) => b.id === batch)?.country })}>Add recruit</Btn>
       </Toolbar>}>
         {view === 'board' ? (
-          <div className="qr-board">{[...STAGES, ...(showDone ? [{ key: 'converted', label: 'Converted' }] : [])].map((st) => {
-            const list = recruits.filter((r) => recruitStage(d, r) === st.key)
-            return <section key={st.key} className="qr-col"><h4>{st.label} <Chip tone="gray">{list.length}</Chip></h4>
+          <div className="qr-board">{[...STAGES, ...(showDone ? [{ key: 'converted', label: 'Converted' }] : [])].filter((st) => recruits.some((r) => recruitStage(d, r) === st.key)).map((st) => {
+            const all = recruits.filter((r) => recruitStage(d, r) === st.key)
+            const list = more.has(st.key) ? all : all.slice(0, 4)
+            return <section key={st.key} className="qr-col"><h4>{st.label} <Chip tone="gray">{all.length}</Chip></h4>
               {list.map((r) => { const t = tplOf(d, r); const c = stepCtx(d, r); const p = progress(r, t, c); const u = ur(r); const age = daysInStage(r); return (
                 <Link key={r.id} to={`/quota/recruit/${r.id}`} className={`qr-card ${r.status === 'dropped' ? 'dropped' : ''}`}>
                   <b>{r.full_name}</b><small>{r.country}{r.ecr ? ` · ${r.ecr}` : ''} · {r.job || '—'}</small>
@@ -75,19 +77,23 @@ export function PipelineTab({ company }: { company: string }) {
                   <RuleFlags f={r.rule_flags} />
                   {u ? <Chip tone={UR_STATUS[u.status].tone}>Q-{u.ref_no} {ctx.urLabel(u.status)}</Chip> : <Chip tone="gray">No quota request</Chip>}
                 </Link>) })}
-              {!list.length && <small className="muted">—</small>}
+              {all.length > 4 && <button type="button" className="btn btn-secondary btn-s qr-more" onClick={() => setMore((m) => { const n = new Set(m); if (n.has(st.key)) n.delete(st.key); else n.add(st.key); return n })}>{more.has(st.key) ? 'Show fewer' : `+${all.length - 4} more`}</button>}
             </section>
-          })}</div>
+          })}{!recruits.length && <Empty title="No recruits">Add the selected candidates to a batch.</Empty>}</div>
         ) : (
           <DataTable label="Recruits" rows={recruits} rowKey={(r) => r.id} search={(r) => `${r.full_name} ${r.passport_no} ${r.job} ${r.country}`}
             filters={[{ key: 'c', label: 'Country', options: COUNTRIES, match: (r, v) => r.country === v }, { key: 'st', label: 'Stage', options: STAGES.map((x) => ({ value: x.key, label: x.label })), match: (r, v) => recruitStage(d, r) === v }]}
             columns={[
-              { key: 'n', label: 'Recruit', main: true, render: (r) => <><b>{r.full_name}</b>{r.status !== 'active' && <> <Chip tone={r.status === 'converted' ? 'green' : 'gray'}>{r.status}</Chip></>}<br /><small className="muted">{r.country}{r.ecr ? ` · ${r.ecr}` : ''} · {r.passport_no || 'no passport yet'}</small><RuleFlags f={r.rule_flags} /></>, sort: (r) => r.full_name },
+              { key: 'n', label: 'Recruit', main: true, render: (r) => <><Link to={`/quota/recruit/${r.id}`}><b>{r.full_name}</b></Link>{r.status !== 'active' && <> <Chip tone={r.status === 'converted' ? 'green' : 'gray'}>{r.status}</Chip></>}<br /><small className="muted">{r.country}{r.ecr ? ` · ${r.ecr}` : ''} · {r.passport_no || 'no passport yet'}</small><RuleFlags f={r.rule_flags} /></>, sort: (r) => r.full_name },
               { key: 'st', label: 'Stage', render: (r) => <>{stageLabelIn(tplOf(d, r), recruitStage(d, r))}{r.status === 'active' && <><br /><small className={`qr-age ${daysInStage(r) > STALL ? 'late' : ''}`}>{daysInStage(r)} d</small></>}</>, sort: (r) => STAGES.findIndex((x) => x.key === recruitStage(d, r)) },
-              { key: 'p', label: 'Progress', hide: 'phone', align: 'right', render: (r) => <span className="qr-num">{progress(r, tplOf(d, r), stepCtx(d, r)).pct}%</span>, sort: (r) => progress(r, tplOf(d, r), stepCtx(d, r)).pct },
+              { key: 'p', label: 'Progress', width: '150px', render: (r) => { const p = progress(r, tplOf(d, r), stepCtx(d, r)); return <span className="qr-prog" title={`${p.done} of ${p.total} steps`}><span className="qr-bar"><i style={{ width: `${p.pct}%` }} /></span><span className="qr-num">{p.pct}%</span></span> }, sort: (r) => progress(r, tplOf(d, r), stepCtx(d, r)).pct },
               { key: 'q', label: 'Quota request', hide: 'tablet', render: (r) => { const u = ur(r); return u ? <Chip tone={UR_STATUS[u.status].tone}>Q-{u.ref_no} {ctx.urLabel(u.status)}</Chip> : '—' } },
               { key: 'f', label: 'Flight', hide: 'wide', render: (r) => r.flight_at ? `${r.flight_no || ''} ${fmtDate(r.flight_at.slice(0, 10))}` : '—', sort: (r) => r.flight_at || '9' },
             ]}
+            expand={(r) => { const t = tplOf(d, r); const c = stepCtx(d, r); const p = progress(r, t, c); const u = ur(r); return <>
+              <Details items={[['Next step', nextStep(r, t, c)?.label || 'All steps done'], ['Steps done', `${p.done} / ${p.total}`], ['Batch', d.batches.find((b) => b.id === r.batch_id)?.title || '—'], ['Job', r.job || '—'],
+                ['Quota request', u ? <Chip key="u" tone={UR_STATUS[u.status].tone}>Q-{u.ref_no} {ctx.urLabel(u.status)}</Chip> : '—'], ['Flight', r.flight_at ? `${r.flight_no || ''} ${fmtDate(r.flight_at.slice(0, 10))}` : '—']]} />
+              <Link className="btn btn-secondary btn-s" to={`/quota/recruit/${r.id}`}>Open the recruit's steps</Link></> }}
             actions={(r) => <Actions><IconAction kind="view" label="Open recruit" onClick={() => nav(`/quota/recruit/${r.id}`)} /></Actions>}
             empty={<Empty title="No recruits">Add the selected candidates to a batch.</Empty>} />
         )}

@@ -6,6 +6,7 @@ import { useAlerts, useOutlets, useSettings } from '../lib/hooks'
 import { buildICS } from '../lib/ics'
 import { notifyOnOpen, notifySupported, requestNotify } from '../lib/notify'
 import { BUSINESS_TYPES } from '../lib/types'
+import { usePaged } from '../components/dataTable'
 import { download, fmtDate, toCSV, todayISO } from '../lib/util'
 
 export default function Alerts() {
@@ -21,6 +22,7 @@ export default function Alerts() {
 
   const cats = useMemo(() => Array.from(new Set(all.map((a) => a.category))).sort(), [all])
   const list = all.filter((a) => (!cat || a.category === cat) && (!outlet || a.outletId === outlet) && (!type || a.businessType === type) && (!sev || a.severity === sev))
+  const paged = usePaged(list, 20, `${cat}|${outlet}|${type}|${sev}`)
   const counts = SEVERITY_ORDER.map((x) => ({ x, n: all.filter((a) => a.severity === x).length }))
   const exportICS = (rows: Alert[]) => download(`worker-expiries-${todayISO()}.ics`, buildICS(rows.filter((a) => a.date), Math.max(...s.leadTimes)), 'text/calendar')
 
@@ -50,7 +52,7 @@ export default function Alerts() {
       <Card>
         {list.length === 0 ? <Empty icon="check" title="No alerts here" /> : (
           <ul className="alist big">
-            {list.map((a) => (
+            {paged.rows.map((a) => (
               <li key={a.id}>
                 <Link to={`/workers/${a.workerId}`}>
                   <Chip tone={sevTone(a.severity)}>{a.days !== null ? (a.days < 0 ? `${-a.days}d late` : `${a.days}d`) : a.severity}</Chip>
@@ -61,6 +63,7 @@ export default function Alerts() {
             ))}
           </ul>
         )}
+        {paged.pager('Alerts')}
       </Card>
     </div>
   )

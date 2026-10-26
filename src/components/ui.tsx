@@ -5,9 +5,12 @@ import { fmtDate } from '../lib/util'
 import { PhoneInput } from './phoneInput'
 import { fmtMoneyInput, moneyIssue, parseMoney, type Issue, type Issues } from '../lib/validate'
 
-export function Card({ title, actions, children, className = '' }: { title?: ReactNode; actions?: ReactNode; children: ReactNode; className?: string }) {
-  return (
-    <section className={`card ${className}`}>
+/** A card. `fold` makes it an accordion section (v1.5.1): the title toggles the body, 'open' or 'closed' to start. */
+export function Card({ title, actions, children, className = '', fold, id }: { title?: ReactNode; actions?: ReactNode; children: ReactNode; className?: string; fold?: 'open' | 'closed'; id?: string }) {
+  const [open, setOpen] = useState(fold !== 'closed')
+  const bid = useId()
+  if (!fold) return (
+    <section id={id} className={`card ${className}`}>
       {(title || actions) && (
         <header className="card-h">
           {title && <h3>{title}</h3>}
@@ -15,6 +18,16 @@ export function Card({ title, actions, children, className = '' }: { title?: Rea
         </header>
       )}
       {children}
+    </section>
+  )
+  return (
+    <section id={id} className={`card card-fold ${open ? 'is-open' : 'is-closed'} ${className}`}>
+      <header className="card-h">
+        <h3><button type="button" className="fold-btn" aria-expanded={open} aria-controls={bid} onClick={() => setOpen(!open)}>
+          <Icon name="chev" size={18} className="fold-chev" /><span className="fold-t">{title}</span></button></h3>
+        {actions && open && <div className="row gap-s">{actions}</div>}
+      </header>
+      <div id={bid} className="fold-body" hidden={!open}>{children}</div>
     </section>
   )
 }
@@ -217,9 +230,9 @@ export function ColumnChart({ data }: { data: { label: string; value: number; pa
   )
 }
 
-export function Tabs<T extends string>({ tabs, value, onChange }: { tabs: { id: T; label: string; badge?: number }[]; value: T; onChange: (t: T) => void }) {
+export function Tabs<T extends string>({ tabs, value, onChange, compact }: { tabs: { id: T; label: string; badge?: number }[]; value: T; onChange: (t: T) => void; compact?: boolean }) {
   return (
-    <div className="tabs" role="tablist">
+    <div className={`tabs${compact ? ' tabs-c' : ''}`} role="tablist">
       {tabs.map((t) => (
         <button key={t.id} role="tab" aria-selected={value === t.id} className={value === t.id ? 'on' : ''} onClick={() => onChange(t.id)}>
           {t.label}
@@ -269,4 +282,15 @@ export function SelectFilter({ label, value, onChange, options }: { label: strin
       </select>
     </label>
   )
+}
+
+/** true on phone-width screens (≤ 860px), follows rotation / resizing */
+export function useNarrow(q = '(max-width: 860px)') {
+  const get = () => typeof window !== 'undefined' && !!window.matchMedia?.(q).matches
+  const [n, setN] = useState(get)
+  useEffect(() => {
+    const m = window.matchMedia?.(q); if (!m) return
+    const f = () => setN(m.matches); m.addEventListener?.('change', f); return () => m.removeEventListener?.('change', f)
+  }, [q])
+  return n
 }
