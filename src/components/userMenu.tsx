@@ -88,9 +88,9 @@ export function UserMenu() {
           </div>
           <ThemeSwitch />
           {isSuper && (
-            <label className="umenu-item umenu-check" title="The demo company for Apple's app review is left out of totals, alerts and reports unless this is on">
+            <label className="umenu-item umenu-check" title="SAMPLE and DEMO companies (sample data and the app-review demo) are left out of totals, alerts and reports unless this is on">
               <input type="checkbox" role="menuitemcheckbox" aria-checked={showDemo} checked={showDemo} onChange={(e) => setShowDemo(e.target.checked)} />
-              <span>Show demo data <small className="muted">(Apple review company)</small></span>
+              <span>Show sample &amp; demo data <small className="muted">(SAMPLE and DEMO companies)</small></span>
             </label>
           )}
           <Link role="menuitem" to="/settings/account" className="umenu-item" onClick={() => setOpen(false)}><Icon name="gear" size={18} /> Account &amp; settings</Link>

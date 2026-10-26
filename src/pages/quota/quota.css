@@ -122,3 +122,4 @@ textarea.mono { font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; 
 .qr-more { width: 100%; justify-content: center; }
 .qr-prog { display: inline-flex; align-items: center; gap: 6px; width: 100%; }
 .qr-prog .qr-bar { flex: 1; min-width: 40px; }
+.qs-doc { margin-left: 8px; font-size: .82rem; white-space: nowrap; }

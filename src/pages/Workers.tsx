@@ -1,4 +1,7 @@
 import { useMemo, useState } from 'react'
+import { useLiveQuery } from 'dexie-react-hooks'
+import { db } from '../lib/db'
+import { demoOutletIds, setShowDemo, useHideDemo } from '../lib/demo'
 import { useAuth } from '../lib/auth'
 import { DataTable, Details } from '../components/dataTable'
 import { Actions, IconAction } from '../components/iconAction'
@@ -58,6 +61,7 @@ export default function Workers() {
         <div><h1>Workers</h1><p className="muted">{list.length} of {loaded?.length ?? 0} shown</p></div>
         <Btn kind="primary" icon="plus" onClick={() => nav('/workers/new')}>Add</Btn>
       </div>
+      <SampleHint />
       <Toolbar>
         <div className="search">
           <input value={q} onChange={(e) => { setQ(e.target.value); set('q', e.target.value) }} placeholder="Search name, ID, passport, phone, family…" aria-label="Search workers" />
@@ -105,6 +109,20 @@ export default function Workers() {
             )
           }} />
       )}
+    </div>
+  )
+}
+
+/** 1.5.1: the CEO can see that SAMPLE / DEMO workers are hidden and show them in one tap (same switch as the account menu). */
+function SampleHint() {
+  const { isSuper } = useAuth()
+  const hide = useHideDemo()
+  const n = useLiveQuery(async () => { const ids = await demoOutletIds(); return ids.size ? (await db.workers.toArray()).filter((w) => ids.has(w.outletId || '')).length : 0 }, []) ?? 0
+  if (!isSuper || !hide || !n) return null
+  return (
+    <div className="note-box sample-hint">
+      {n} sample / demo worker{n === 1 ? ' is' : 's are'} hidden (left out of totals, alerts and reports).{' '}
+      <Btn small icon="eye" onClick={() => setShowDemo(true)}>Show sample &amp; demo data</Btn>
     </div>
   )
 }

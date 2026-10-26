@@ -232,12 +232,12 @@ function OutletRiskCard() {
   )
 }
 
-/** CEO: "Show demo data" switch (the Apple review demo company is left out of totals, alerts and reports by default) */
+/** CEO: "Show sample & demo data" switch (SAMPLE and DEMO companies are left out of totals, alerts and reports by default) */
 function DemoChip() {
   const on = useShowDemo()
   return (
-    <label className={`demo-chip${on ? ' on' : ''}`} title="The demo company for Apple's app review is left out of totals, alerts and reports unless this is on">
-      <input type="checkbox" checked={on} onChange={(e) => setShowDemo(e.target.checked)} /> Show demo data
+    <label className={`demo-chip${on ? ' on' : ''}`} title="SAMPLE and DEMO companies (sample data and the app-review demo) are left out of totals, alerts and reports unless this is on">
+      <input type="checkbox" checked={on} onChange={(e) => setShowDemo(e.target.checked)} /> Show sample &amp; demo data
     </label>
   )
 }

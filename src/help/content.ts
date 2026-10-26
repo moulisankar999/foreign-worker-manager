@@ -51,7 +51,7 @@ export const chainFor = (r: HelpRole): string[] => {
 export const ROLE_INFO: Record<HelpRole, RoleInfo> = {
   ceo: {
     purpose: 'The CEO is the owner of FW Manager. You see everything, set the rules every other role works by. Only one person should hold this role.',
-    sees: ['Every company, outlet and worker, including salary, loans and confidential requests', 'Every request at every step, with its full history', 'CEO review: every General Manager decision and every rejection', 'The audit log, Control Center (health, errors, system map) and all reports', 'The Apple-review demo company — only when you switch "Show demo data" on'],
+    sees: ['Every company, outlet and worker, including salary, loans and confidential requests', 'Every request at every step, with its full history', 'CEO review: every General Manager decision and every rejection', 'The audit log, Control Center (health, errors, system map) and all reports', 'SAMPLE companies and the app-review demo company — only when you switch "Show sample & demo data" on'],
     can: ['Do anything any other role can do', 'Overrule, amend, recall or mark reviewed any decided request (CEO review)', 'Assign or escalate a request to any person at any level', 'Add, pause, resume, reset and delete any user and set each role\'s powers (General Manager powers, HR Admin limits)', 'Set approval rules, request types, required printed submissions, notifications and backups', 'Approve signed-off printed submissions', 'Switch the demo data on or off and run the Control Center checks'],
     cannot: ['The audit history is permanent — every action, including yours, is recorded', 'Worker app PINs are shown once and never stored in readable form', 'Deleting a user is permanent, so use Pause when someone may return; workers are set to Exited, never deleted'],
     reportsTo: 'No one in the app. You review the General Manager\'s decisions.',
@@ -288,8 +288,8 @@ export const GUIDES: Guide[] = [
     tip: 'Files are stored privately per company. Every change is in the audit log. "HR Admin & HR Manager permissions" in Settings decides whether HR may add companies.' },
   { id: 'companies-hrm', group: 'Settings & system', title: 'Companies: add one and view its details', roles: ['hrm'],
     steps: ['"+ Add company…" in the company list of a new approval letter, or Settings → Companies & Outlets → "Add company".', 'Fill in the name, sector and any SSM details, documents and directors you have, then Save. The new company is selected straight away.', 'Open a company (eye icon) to view its details and SSM copies. Directors\' IC / passport numbers show the last 4 digits only.', 'You can update the name, sector and the company details (SSM numbers, addresses, phone, email).'] },
-  { id: 'demo', group: 'Settings & system', title: 'Demo data switch (Apple review company)', roles: ['ceo'],
-    steps: ['Tap your initials at the top right.', 'Tick "Show demo data" to include the demo company in totals, alerts and reports. Untick it to hide it again.'],
+  { id: 'demo', group: 'Settings & system', title: 'Sample & demo data switch', roles: ['ceo'],
+    steps: ['Tap your initials at the top right.', 'Tick "Show sample & demo data" to include the SAMPLE and DEMO companies (and their workers) in lists, totals, alerts and reports. Untick it to hide them again. The Workers page also has a one-tap button while they are hidden.'],
     shots: ['usermenu-demo'],
     tip: 'The demo company exists only for Apple\'s app review. Keep it hidden for daily work.' },
   { id: 'control', group: 'Settings & system', title: 'Control Center (health, errors, system map)', roles: ['ceo'],
@@ -385,7 +385,7 @@ export const FAQS: Faq[] = [
   { roles: ['ceo'], q: 'What is the difference between Overrule, Amend and Recall?', a: 'Overrule flips the decision (approve ↔ reject) with your reason. Amend corrects details and keeps the original values in history. Recall pulls the request back to you, open, to decide later.' },
   { roles: ['ceo'], q: 'How do I give the General Manager more powers?', a: 'Settings → Users & access → "General Manager powers". Switch each power on or off; it applies immediately.' },
   { roles: ['ceo', 'gm', 'hra', 'hrm'], q: 'Where do I keep a company\'s SSM copies and directors?', a: 'Open the company (Settings → Companies & Outlets → eye icon). The SSM documents and Directors tabs hold them; files are stored privately for that company only.' },
-  { roles: ['ceo'], q: 'What is the "Show demo data" switch?', a: 'The demo company exists only for Apple\'s app review. It is hidden from totals, alerts and reports unless you tick "Show demo data" in your account menu.' },
+  { roles: ['ceo'], q: 'What is the "Show sample & demo data" switch?', a: 'SAMPLE companies hold example data, and the DEMO company exists for the app review. Both are hidden from worker lists, totals, alerts and reports unless you tick "Show sample & demo data" in your account menu (or tap the button on the Workers page).' },
   { roles: ['ceo'], q: 'How do I know the system is healthy?', a: 'Software Control → Control Center. Green checks are fine; red needs action. The Errors tab lists app errors from every device.' },
   { roles: ['ceo'], q: 'How are backups made?', a: 'The cloud database is backed up automatically every day (the Control Center shows its status). Settings → Data & backup lets you download an extra JSON copy or restore one.' },
   { roles: ['ceo'], q: 'Someone left the company. Pause or delete?', a: 'Pause first. Delete only when you are sure; their history stays in the audit log either way.' },
