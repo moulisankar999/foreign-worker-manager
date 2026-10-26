@@ -4,6 +4,7 @@
 import { createRequire } from 'module'
 import fs from 'fs'
 import crypto from 'crypto'
+import { rid, cleanupOwn, makeCeo, keepConfig, addItems, soleCeoProbe } from './_own.mjs'
 const require = createRequire(new URL('../package.json', import.meta.url))
 const { createClient } = require('@supabase/supabase-js')
 const LIVE_REF = 'gnepquxtwkyffjmoydnv'
@@ -12,8 +13,7 @@ const URL_ = env.TEST_SUPABASE_URL, ANON = env.TEST_ANON_KEY, SERVICE = env.TEST
 if (!URL_ || URL_.includes(LIVE_REF) || !URL_.includes(env.TEST_PROJECT_REF)) { console.error('ABORT: not the test project'); process.exit(1) }
 const opts = { auth: { persistSession: false, autoRefreshToken: false } }
 const admin = createClient(URL_, SERVICE, opts)
-{ const { data, error } = await admin.auth.admin.listUsers({ perPage: 1000 }); if (error) throw error
-  if (data.users.some((u) => !/@example\.com$/.test(u.email || ''))) { console.error('ABORT: project has real users'); process.exit(1) } }
+// suites only create/remove their own prefixed @example.com users, so other (real or other-work) users are left alone
 
 let pass = 0, fail = 0
 const check = (name, ok, extra = '') => { ok ? pass++ : fail++; console.log(ok ? 'PASS' : 'FAIL', name, ok ? '' : extra) }
@@ -21,7 +21,7 @@ const pw = crypto.randomBytes(12).toString('hex'), stamp = Date.now()
 const U = {}
 const mkClient = () => createClient(URL_, ANON, opts)
 async function mk(key, meta = {}) {
-  const email = `fwu-${key}-${stamp}@example.com`
+  const email = `${PFX}${key}-${stamp}@example.com`
   const { data, error } = await admin.auth.admin.createUser({ email, password: pw, email_confirm: true, user_metadata: { full_name: key.toUpperCase(), ...meta } })
   if (error) throw error
   const c = mkClient()
@@ -41,25 +41,26 @@ const W = (id, outletId) => ({ entity: 'workers', id, deleted: false, client_ts:
 const pullIds = async (c) => { const r = await c.rpc('pull_records', { p_since: '1970-01-01', p_limit: 1000 }); return r.error ? 'ERR' : r.data.filter((x) => x.entity === 'workers' && !x.deleted).map((x) => x.id).sort().join() }
 
 // fresh project state (TEST project only; guarded above)
-await admin.from('records').delete().neq('id', '__none__')
-await admin.from('requests').delete().neq('type', '__none__')
-{ const { data } = await admin.auth.admin.listUsers({ perPage: 1000 }); for (const u of data.users) await admin.auth.admin.deleteUser(u.id) }
-await admin.from('profiles').delete().neq('id', '00000000-0000-0000-0000-000000000000') // leftovers of soft-deleted test users
-await admin.from('app_config').upsert({ key: 'companies', value: { items: [{ id: 'main', name: 'Main company' }, { id: 'c2', name: 'Second Co' }] } })
+const PFX = 'fwu-'
+await cleanupOwn(admin, PFX) // only this suite's own leftovers; never other work on TEST
+const O1_ = rid('O1'), O2_ = rid('O2'), W1_ = rid('W1'), W2_ = rid('W2'), RM1_ = rid('RM1')
+const restoreCfg = await keepConfig(admin, ['hr_admin', 'user_approvals'])
+const undoCos = await addItems(admin, 'companies', [{ id: 'main', name: 'Main company' }, { id: 'c2', name: 'Second Co' }]) // add-only: never replaces the TEST companies list
 await admin.from('app_config').upsert({ key: 'user_approvals', value: { hrAdmins: {} } })
 await admin.from('app_config').update({ value: { manageUsers: true, deleteWorkers: false, viewSalary: true, viewAudit: true, resetPasswords: false } }).eq('key', 'hr_admin')
 
 try {
   const S = await mk('super')
+  await makeCeo(admin, S.id)
   await S.c.rpc('push_records', { p_rows: [
-    { entity: 'outlets', id: 'O1', client_ts: now(), data: { id: 'O1', name: 'Outlet One', companyId: 'main' } },
-    { entity: 'outlets', id: 'O2', client_ts: now(), data: { id: 'O2', name: 'Outlet Two', companyId: 'c2' } },
-    W('W1', 'O1'), W('W2', 'O2')] })
+    { entity: 'outlets', id: O1_, client_ts: now(), data: { id: O1_, name: 'Outlet One', companyId: 'main' } },
+    { entity: 'outlets', id: O2_, client_ts: now(), data: { id: O2_, name: 'Outlet Two', companyId: 'c2' } },
+    W(W1_, O1_), W(W2_, O2_)] })
   for (const k of ['s2', 'hra', 'hrb', 'om', 'v2']) await mk(k)
   const ap = (k, role, cos = [], outs = []) => S.c.rpc('approve_user', { p_id: U[k].id, p_role: role, p_company_ids: cos, p_outlet_ids: outs })
   await ap('s2', 'hr_admin'); await admin.from('profiles').update({ role: 'super_admin', company_ids: [] }).eq('id', U.s2.id); // CEO role only by the service role (never from the app)
-  await ap('hra', 'hr_admin', ['main']); await ap('hrb', 'hr_admin', ['c2']); await ap('om', 'outlet_manager', [], ['O1']); await ap('v2', 'viewer', ['c2'])
-  check('setup: om sees W1', (await pullIds(U.om.c)) === 'W1')
+  await ap('hra', 'hr_admin', ['main']); await ap('hrb', 'hr_admin', ['c2']); await ap('om', 'outlet_manager', [], [O1_]); await ap('v2', 'viewer', ['c2'])
+  check('setup: om sees W1', (await pullIds(U.om.c)) === W1_)
 
   // ---------- who may call ----------
   check('anon cannot call user-admin', (await fn('anon', 'pause', 'om')).status === 401)
@@ -85,7 +86,7 @@ try {
   const pp = await prof('om')
   check('HR admin pauses an outlet manager of his company', r.ok && pp.status === 'paused', JSON.stringify(r))
   check('pause records who / when / why', pp.paused_by_name === 'HRA' && !!pp.paused_at && pp.pause_reason === 'Investigation', JSON.stringify(pp))
-  check('paused: data access blocked at once (same token)', (await pullIds(U.om.c)) !== 'W1')
+  check('paused: data access blocked at once (same token)', (await pullIds(U.om.c)) !== W1_)
   const dr = (await U.om.c.from('records').select('id').eq('entity', 'workers')).data || []
   check('paused: direct table read returns nothing', dr.length === 0)
   const rf = await U.om.c.auth.refreshSession()
@@ -99,7 +100,7 @@ try {
   const pr = await prof('om')
   check('resume restores status and records who', r.ok && pr.status === 'active' && pr.resumed_by_name === 'HRA', JSON.stringify(r))
   const si2 = await U.om.c.auth.signInWithPassword({ email: U.om.email, password: pw })
-  check('resumed: can sign in again and sees data', !si2.error && (await pullIds(U.om.c)) === 'W1', JSON.stringify(si2.error))
+  check('resumed: can sign in again and sees data', !si2.error && (await pullIds(U.om.c)) === W1_, JSON.stringify(si2.error))
   r = await fn('super', 'pause', 's2')
   check('Super Admin can pause another Super Admin (not the last)', r.ok, JSON.stringify(r))
   r = await fn('super', 'resume', 's2')
@@ -145,9 +146,9 @@ try {
   await S.c.from('app_config').update({ value: { manageUsers: true, deleteWorkers: false, viewSalary: true, viewAudit: true, resetPasswords: false } }).eq('key', 'hr_admin')
 
   // ---------- delete (login removed, history kept) ----------
-  const rq = await U.om.c.rpc('request_create', { p_type: 'other', p_worker_id: 'W1', p_title: 'Before delete', p_data: {}, p_amount: null, p_priority: 'normal' })
+  const rq = await U.om.c.rpc('request_create', { p_type: 'other', p_worker_id: W1_, p_title: 'Before delete', p_data: {}, p_amount: null, p_priority: 'normal' })
   check('setup: request by the user to be deleted', !!rq.data?.id, JSON.stringify(rq.error))
-  await U.om.c.rpc('push_records', { p_rows: [{ entity: 'remarks', id: 'RM1', client_ts: now(), data: { id: 'RM1', workerId: 'W1', text: 'note', by: 'OM', byId: U.om.id } }] })
+  await U.om.c.rpc('push_records', { p_rows: [{ entity: 'remarks', id: RM1_, client_ts: now(), data: { id: RM1_, workerId: W1_, text: 'note', by: 'OM', byId: U.om.id } }] })
   r = await fn('super', 'delete', 'super')
   check('nobody can delete himself', r.status === 403 && /own account/.test(r.error), JSON.stringify(r))
   r = await fn('hra', 'delete', 's2')
@@ -158,12 +159,12 @@ try {
   check('profile kept as a tombstone (status deleted, who/when)', pd?.status === 'deleted' && pd.deleted_by_name === 'HRA' && !!pd.deleted_at, JSON.stringify(pd))
   const rqd = (await admin.from('requests').select('created_by_name').eq('id', rq.data.id).single()).data
   check('history kept, attributed to "deleted user OM"', rqd?.created_by_name === 'deleted user OM', JSON.stringify(rqd))
-  const rm = (await admin.from('records').select('data').eq('entity', 'remarks').eq('id', 'RM1').maybeSingle()).data
+  const rm = (await admin.from('records').select('data').eq('entity', 'remarks').eq('id', RM1_).maybeSingle()).data
   check('remarks attributed to "deleted user OM"', !rm || rm.data.by === 'deleted user OM', JSON.stringify(rm))
   const wk = (await admin.from('records').select('id').eq('entity', 'workers')).data || []
-  check('no workers / business data deleted', wk.length === 2)
+  check('no workers / business data deleted', wk.filter((w) => [W1_, W2_].includes(w.id)).length === 2, JSON.stringify(wk.length))
   check('deleted: cannot sign in', !!(await mkClient().auth.signInWithPassword({ email: U.om.email, password: newPw })).error)
-  check('deleted: old session has no data', (await pullIds(U.om.c)) !== 'W1')
+  check('deleted: old session has no data', (await pullIds(U.om.c)) !== W1_)
   check('delete: audit entry', (await audit('user.delete', U.om.id)).length === 1)
   r = await fn('super', 'resume', 'om')
   check('a deleted user cannot be resumed', r.status === 403, JSON.stringify(r))
@@ -171,10 +172,10 @@ try {
   check('a deleted user cannot be re-activated by table update', !!x.error || !x.data?.length || x.data[0].status === 'deleted', JSON.stringify(x))
   r = await fn('super', 'delete', 's2')
   check('Super Admin deletes another Super Admin (not the last)', r.ok, JSON.stringify(r))
-  check('the last Super Admin is protected (DB guard)', !!(await S.c.from('profiles').update({ status: 'inactive' }).eq('id', S.id).select('id, role, status, outlet_ids, company_ids, must_change_password')).error)
+  { const pr = await soleCeoProbe(env.TEST_PROJECT_REF, S.id, "status = 'inactive'"); check('the last Super Admin is protected (DB guard)', /^refused:/.test(pr), pr) }
 
   // ---------- pending sign-ups: reject / delete remove the request and its login ----------
-  await mk('p1', { outlet_id: 'O1' }); await mk('p2', { company_id: 'c2' }); await mk('p3')
+  await mk('p1', { outlet_id: O1_ }); await mk('p2', { company_id: 'c2' }); await mk('p3')
   r = await fn('hra', 'reject_pending', 'p1')
   check('HR admin not allowed to approve → cannot reject', r.status === 403, JSON.stringify(r))
   await S.c.from('app_config').update({ value: { hrAdmins: { [U.hra.id]: { enabled: true, companies: ['main'], roles: ['viewer', 'outlet_manager'] } } } }).eq('key', 'user_approvals')
@@ -197,7 +198,6 @@ try {
   fail++; console.log('FAIL exception', e)
 }
 // leave nothing behind: test users only (TEST project)
-{ const { data } = await admin.auth.admin.listUsers({ perPage: 1000 }); for (const u of data.users) await admin.auth.admin.deleteUser(u.id) }
-await admin.from('profiles').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+await cleanupOwn(admin, PFX); await restoreCfg(); await undoCos()
 console.log(`\n${pass} passed, ${fail} failed`)
 process.exit(fail ? 1 : 0)

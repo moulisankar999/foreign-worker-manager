@@ -5,6 +5,7 @@
 import { createRequire } from 'module'
 import fs from 'fs'
 import crypto from 'crypto'
+import { rid, cleanupOwn, makeCeo, keepConfig } from './_own.mjs'
 import { execSync } from 'child_process'
 const require = createRequire(new URL('../package.json', import.meta.url))
 const { createClient } = require('@supabase/supabase-js')
@@ -14,16 +15,19 @@ const URL_ = env.TEST_SUPABASE_URL, ANON = env.TEST_ANON_KEY, SERVICE = env.TEST
 if (!URL_ || URL_.includes(LIVE_REF) || !URL_.includes(env.TEST_PROJECT_REF)) { console.error('ABORT: not the test project'); process.exit(1) }
 const opts = { auth: { persistSession: false, autoRefreshToken: false } }
 const admin = createClient(URL_, SERVICE, opts)
-{ const { data, error } = await admin.auth.admin.listUsers({ perPage: 1000 }); if (error) throw error
-  if (data.users.some((u) => !/@example\.com$/.test(u.email || ''))) { console.error('ABORT: project has real users'); process.exit(1) } }
+// suites only create/remove their own prefixed @example.com users, so other (real or other-work) users are left alone
 
 let pass = 0, fail = 0
 const check = (name, ok, extra = '') => { ok ? pass++ : fail++; console.log(ok ? 'PASS' : 'FAIL', name, ok ? '' : extra) }
 const pw = crypto.randomBytes(12).toString('hex'), stamp = Date.now()
+const PFX = 'fwp-'
+const P1_ = rid('P1'), PW1_ = rid('PW1')
+await cleanupOwn(admin, PFX)
+const restoreCfg = await keepConfig(admin, ['rates', 'holidays'])
 const U = {}
 const mkClient = () => createClient(URL_, ANON, opts)
 async function mk(key) {
-  const email = `fwp-${key}-${stamp}@example.com`
+  const email = `${PFX}${key}-${stamp}@example.com`
   const { data, error } = await admin.auth.admin.createUser({ email, password: pw, email_confirm: true, user_metadata: { full_name: key.toUpperCase() } })
   if (error) throw error
   const c = mkClient(); const s = await c.auth.signInWithPassword({ email, password: pw }); if (s.error) throw s.error
@@ -69,12 +73,13 @@ fs.rmSync(out, { force: true })
 // ---- server: set_pay_config permissions, audit, payslip hiding
 try {
   const S = await mk('ceo')
+  await makeCeo(admin, S.id)
   await S.c.rpc('push_records', { p_rows: [
-    { entity: 'outlets', id: 'P1', client_ts: now(), data: { id: 'P1', name: 'Pay Outlet', companyId: 'main', state: 'Selangor' } },
-    { entity: 'workers', id: 'PW1', client_ts: now(), data: { id: 'PW1', workerNo: 'FWP1', fullName: 'Pay Worker', outletId: 'P1', nationality: 'Nepal', status: 'Active-Working', joinDate: '2024-01-01', documents: [], loans: [], leaves: [], initialBasicPay: 1700, minWageExempt: false, hostelDeduction: { amount: 150 }, payslips: [{ id: 'S1', month: '2026-09', basic: 1700 }] } }] })
+    { entity: 'outlets', id: P1_, client_ts: now(), data: { id: P1_, name: 'Pay Outlet', companyId: 'main', state: 'Selangor' } },
+    { entity: 'workers', id: PW1_, client_ts: now(), data: { id: PW1_, workerNo: 'FWP1', fullName: 'Pay Worker', outletId: P1_, nationality: 'Nepal', status: 'Active-Working', joinDate: '2024-01-01', documents: [], loans: [], leaves: [], initialBasicPay: 1700, minWageExempt: false, hostelDeduction: { amount: 150 }, payslips: [{ id: 'S1', month: '2026-09', basic: 1700 }] } }] })
   for (const k of ['gm', 'hra', 'hrm', 'om']) await mk(k)
   const ap = (k, role, cos = [], outs = []) => S.c.rpc('approve_user', { p_id: U[k].id, p_role: role, p_company_ids: cos, p_outlet_ids: outs })
-  await ap('gm', 'general_manager'); await ap('hra', 'hr_admin'); await ap('hrm', 'hr_manager'); await ap('om', 'outlet_manager', [], ['P1'])
+  await ap('gm', 'general_manager'); await ap('hra', 'hr_admin'); await ap('hrm', 'hr_manager'); await ap('om', 'outlet_manager', [], [P1_])
   const set = (k, key, value) => U[k].c.rpc('set_pay_config', { p_key: key, p_value: value })
   const rates = { ...R, payDays: 7 }
   let x = await set('ceo', 'rates', rates); check('CEO can save pay rates', !x.error, err(x))
@@ -93,19 +98,19 @@ try {
   check('rate change audited', (au.data || []).some((a) => a.action === 'update'), JSON.stringify(au))
   const rd = await U.om.c.from('app_config').select('value').eq('key', 'rates').maybeSingle()
   check('everyone signed in can read the rates', rd.data?.value?.payDays === 7, err(rd))
-  const pull = async (k) => (await U[k].c.rpc('pull_records', { p_since: '1970-01-01', p_limit: 1000 })).data?.find((r) => r.id === 'PW1')?.data
+  const pull = async (k) => (await U[k].c.rpc('pull_records', { p_since: '1970-01-01', p_limit: 1000 })).data?.find((r) => r.id === PW1_)?.data
   const om = await pull('om'), hrm = await pull('hrm')
   check('outlet manager does not receive payslips / hostel / exemption', om && !('payslips' in om) && !('hostelDeduction' in om) && !('minWageExempt' in om) && !('initialBasicPay' in om), JSON.stringify(om && Object.keys(om)))
   check('HR manager receives payslips', Array.isArray(hrm?.payslips) && hrm.payslips.length === 1)
   // outlet manager edits the worker → hidden pay data must survive
-  x = await U.om.c.rpc('push_records', { p_rows: [{ entity: 'workers', id: 'PW1', client_ts: now(), data: { ...om, phone: '0123' } }] })
-  const after = (await admin.from('records').select('data').eq('entity', 'workers').eq('id', 'PW1').single()).data?.data
+  x = await U.om.c.rpc('push_records', { p_rows: [{ entity: 'workers', id: PW1_, client_ts: now(), data: { ...om, phone: '0123' } }] })
+  const after = (await admin.from('records').select('data').eq('entity', 'workers').eq('id', PW1_).single()).data?.data
   check('payslips kept after an outlet-manager edit', Array.isArray(after?.payslips) && after.payslips.length === 1 && after.hostelDeduction?.amount === 150, JSON.stringify(after && Object.keys(after)))
 } catch (e) { fail++; console.log('FAIL exception', e.message) }
 finally {
-  await admin.from('records').delete().in('id', ['P1', 'PW1'])
-  await admin.from('app_config').delete().in('key', ['rates', 'holidays'])
+  await admin.from('records').delete().in('id', [P1_, PW1_])
   for (const k of Object.keys(U)) await admin.auth.admin.deleteUser(U[k].id).catch(() => {})
 }
+await cleanupOwn(admin, PFX); await restoreCfg()
 console.log(`\n${pass} passed, ${fail} failed`)
 process.exit(fail ? 1 : 0)

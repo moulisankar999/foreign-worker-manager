@@ -41,36 +41,37 @@ $$;
 grant execute on function public.role_rank(text), public.my_rank(), public.user_rank(uuid), public.actor_ok(uuid, text),
   public.pw_reset_actor_ok(uuid), public.req_hier_ok(uuid, uuid, text, uuid, text, text), public.req_visible(uuid) to authenticated;
 
-/* ---------- rows: restrictive policies (ANDed with the existing ones) ---------- */
+/* ---------- rows: restrictive policies (ANDed with the existing ones) ----------
+   The caller's rank / id / CEO flag are wrapped in (select …) so Postgres works them out once per query, not per row. */
 drop policy if exists "hierarchy: no superiors" on public.profiles;
 create policy "hierarchy: no superiors" on public.profiles as restrictive for select to authenticated
-  using (id = auth.uid() or public.role_rank(role) <= public.my_rank());
+  using (id = (select auth.uid()) or public.role_rank(role) <= (select public.my_rank()));
 
 drop policy if exists "hierarchy: no superiors" on public.requests;
 create policy "hierarchy: no superiors" on public.requests as restrictive for select to authenticated
-  using (public.req_hier_ok(id, created_by, created_by_role, assigned_to, status, assigned_role));
+  using ((select public.my_rank()) >= 5 or public.req_hier_ok(id, created_by, created_by_role, assigned_to, status, assigned_role));
 
 drop policy if exists "hierarchy: no superiors" on public.request_events;
 create policy "hierarchy: no superiors" on public.request_events as restrictive for select to authenticated
-  using ((action not like 'ceo\_%' or public.is_ceo()) and public.req_visible(request_id));
+  using ((select public.is_ceo()) or (action not like 'ceo\_%' and public.req_visible(request_id)));
 
 drop policy if exists "hierarchy: no superiors" on public.audit_log;
 create policy "hierarchy: no superiors" on public.audit_log as restrictive for select to authenticated
-  using (public.is_ceo() or (
-        public.actor_ok(user_id, user_role)
+  using ((select public.is_ceo()) or (
+        (user_id = (select auth.uid()) or coalesce(greatest(public.role_rank(user_role), public.user_rank(user_id)), 0) <= (select public.my_rank()))
     and action not like 'request.ceo\_%'
-    and not (entity in ('profile','profiles') and entity_id ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
-             and coalesce(public.user_rank(entity_id::uuid), 0) > public.my_rank())
-    and public.role_rank(details->>'toRole') <= public.my_rank()
-    and public.role_rank(details->>'role') <= public.my_rank()));
+    and not (entity in ('profile','profiles')
+             and coalesce(public.user_rank(case when entity_id ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then entity_id::uuid end), 0) > (select public.my_rank()))
+    and public.role_rank(details->>'toRole') <= (select public.my_rank())
+    and public.role_rank(details->>'role') <= (select public.my_rank())));
 
 drop policy if exists "hierarchy: no superiors" on public.notification_deliveries;
 create policy "hierarchy: no superiors" on public.notification_deliveries as restrictive for select to authenticated
-  using (public.is_ceo() or user_id is null or user_id = auth.uid() or coalesce(public.user_rank(user_id), 0) <= public.my_rank());
+  using ((select public.is_ceo()) or user_id is null or user_id = (select auth.uid()) or coalesce(public.user_rank(user_id), 0) <= (select public.my_rank()));
 
 drop policy if exists "hierarchy: no superiors" on public.notification_events;
 create policy "hierarchy: no superiors" on public.notification_events as restrictive for select to authenticated
-  using (public.is_ceo() or ((actor is null or public.actor_ok(actor, null))
+  using ((select public.is_ceo()) or ((actor is null or actor = (select auth.uid()) or coalesce(public.user_rank(actor), 0) <= (select public.my_rank()))
     and event not in ('ceo_review','gm_assigned','user_approved_by_hr','ceo_overruled')));
 
 /* ---------- names: masked read views + column grants ----------
@@ -129,8 +130,9 @@ create or replace view public.request_events_v with (security_barrier = true) as
 select e.id, e.request_id, e.at,
   case when a.b then e.by end as by, case when a.b then e.by_name end as by_name, case when a.b then e.by_role end as by_role,
   e.action, e.from_status, e.to_status,
-  -- a note sent between higher levels stays with them; decisions and notes for this step are shown
-  case when a.b or e.to_user = auth.uid() or e.action not in ('assign','escalate','skipped') then e.comment end as comment,
+  -- a hand-over note written higher up (assign / escalate / skip) stays with them, even when the hand-over names you;
+  -- decisions and notes on the steps themselves are shown
+  case when a.b or e.action not in ('assign','escalate','skipped') then e.comment end as comment,
   case when a.t then e.to_user end as to_user, case when a.t then e.to_name end as to_name, case when a.t then e.to_role end as to_role,
   case when a.b then e.meta end as meta
 from public.request_events e
@@ -140,8 +142,11 @@ where public.can_see_request(e.request_id) and (e.action not like 'ceo\_%' or pu
 create or replace function public.mask_hr_task(t public.hr_tasks) returns public.hr_tasks language plpgsql stable set search_path = public as $$
 begin
   if public.my_rank() >= 5 then return t; end if;
-  if not public.actor_ok(t.created_by, null) then t.created_by := null; t.created_by_name := null; end if;
-  if not public.actor_ok(t.done_by, null) then t.done_by := null; t.done_by_name := null; end if;
+  -- a removed account has no rank any more: its stored name could be a superior's, so it is not shown
+  if not public.actor_ok(t.created_by, null) or (t.created_by is not null and public.user_rank(t.created_by) is null and t.created_by <> auth.uid())
+    then t.created_by := null; t.created_by_name := null; end if;
+  if not public.actor_ok(t.done_by, null) or (t.done_by is not null and public.user_rank(t.done_by) is null and t.done_by <> auth.uid())
+    then t.done_by := null; t.done_by_name := null; end if;
   t.title := replace(t.title, 'Adjust to the CEO''s changes: ', 'Adjust to the final decision: ');
   t.details := regexp_replace(t.details, ' — CEO: .*$', '');
   return t;
@@ -154,18 +159,11 @@ grant execute on function public.mask_request(public.requests), public.mask_hr_t
 revoke all on public.profiles_v, public.requests_v, public.request_events_v, public.hr_tasks_v from anon, public;
 grant select on public.profiles_v, public.requests_v, public.request_events_v, public.hr_tasks_v to authenticated;
 
--- signed-in users read only the columns that do not name anyone (realtime only sends the readable columns too)
-revoke select on public.profiles from anon, authenticated;
-grant select (id, email, full_name, role, status, created_at, updated_at, outlet_ids, phone, notify_optout, wa_optin, wa_optin_at, company_ids,
-  requested_company_id, requested_outlet_id, approved_at, rejected_at, reject_reason, paused_at, pause_reason, resumed_at, deleted_at,
-  must_change_password, pw_reset_at, added_at) on public.profiles to authenticated;
-revoke select on public.requests from anon, authenticated;
-grant select (id, ref_no, type, worker_id, outlet_id, title, data, amount, priority, status, required_level, created_by, created_at, updated_at,
-  decided_at, applied_at, result, ceo_locked, source, confidential, manager_due_at, manager_overdue, manager_decided_at, assigned_at) on public.requests to authenticated;
-revoke select on public.request_events from anon, authenticated;
-grant select (id, request_id, at, action, from_status, to_status) on public.request_events to authenticated;
-revoke select on public.hr_tasks from anon, authenticated;
-grant select (id, request_id, worker_id, kind, status, created_at, done_at, done_note) on public.hr_tasks to authenticated;
+-- Backward compatible with v1.3.8 clients: the base tables keep their full column grants (old apps select '*').
+-- Superior ROWS are hidden by the restrictive policies above; v1.3.9+ reads the masked *_v views for names.
+-- The column lock that also hides superior NAMES on the base tables is held back in
+-- supabase/pending/hierarchy_column_lock.sql — apply it only once no v1.3.8-or-older client is in use.
+grant select on public.profiles, public.requests, public.request_events, public.hr_tasks to authenticated;
 
 /* ---------- server functions: neutral wording, masked results ---------- */
 do $$

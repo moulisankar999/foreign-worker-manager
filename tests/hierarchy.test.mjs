@@ -16,8 +16,7 @@ const URL_ = env.TEST_SUPABASE_URL, ANON = env.TEST_ANON_KEY, SERVICE = env.TEST
 if (!URL_ || URL_.includes(LIVE_REF) || !URL_.includes(env.TEST_PROJECT_REF)) { console.error('ABORT: not the test project'); process.exit(1) }
 const opts = { auth: { persistSession: false, autoRefreshToken: false } }
 const admin = createClient(URL_, SERVICE, opts)
-{ const { data, error } = await admin.auth.admin.listUsers({ perPage: 1000 }); if (error) throw error
-  if (data.users.some((u) => !/@example\.com$/.test(u.email || ''))) { console.error('ABORT: project has real users'); process.exit(1) } }
+// suites only create/remove their own prefixed @example.com users, so other (real or other-work) users are left alone
 
 let pass = 0, fail = 0
 const check = (name, ok, extra = '') => { ok ? pass++ : fail++; console.log(ok ? 'PASS' : 'FAIL', name, ok ? '' : String(extra).slice(0, 600)) }
@@ -87,6 +86,7 @@ try {
   const rC = (await create('ceo', 'other')).data
   const rD = (await create('gm', 'other')).data
   check('CEO and GM can raise requests', !!rC?.id && !!rD?.id)
+  const rCstep = { manager_review: 'om', submitted: 'hrm', recommended: 'hra', escalated: 'gm' }[(await adminReq(rC.id))?.status]
 
   // CEO assigns a request to HR Admin → the GM cannot override it; message is neutral
   const rE = (await create('om', 'loan', 200)).data
@@ -130,8 +130,10 @@ try {
     check(`${L}: profiles table has nobody above`, !pb.error && !(pb.data || []).some((p) => p.id !== me.id && rank(p.role) > myR), JSON.stringify(pb.error))
     const mine = (pv.data || []).find((p) => p.id === me.id)
     check(`${L}: own row hides who (above) approved him`, mine && !mine.approved_by && !mine.approved_by_name && !mine.approved_by_role, JSON.stringify(mine && [mine.approved_by_name, mine.approved_by_role]))
-    const pAct = await me.c.from('profiles').select('approved_by_name')
-    check(`${L}: actor columns are not readable on the base table`, !!pAct.error)
+    // v1.3.8 apps read the base tables with select('*'): they must keep working (own row loads) and still see nobody above
+    const pOld = await me.c.from('profiles').select('*')
+    check(`${L}: v1.3.8 compatibility — profiles select('*') loads his own account`, !pOld.error && (pOld.data || []).some((p) => p.id === me.id), JSON.stringify(pOld.error))
+    check(`${L}: v1.3.8 compatibility — base profiles list has nobody above`, !(pOld.data || []).some((p) => p.id !== me.id && rank(p.role) > myR))
     // requests
     const rv = await me.c.from('requests_v').select('*')
     const bad = (rv.data || []).filter((r) => {
@@ -142,22 +144,27 @@ try {
     })
     check(`${L}: requests list has no request raised by a superior he is not part of`, !rv.error && bad.length === 0, JSON.stringify(rv.error || bad.map((r) => r.id)))
     if (myR <= 1) check(`${L}: does not see the CEO- or GM-raised requests`, !(rv.data || []).some((r) => r.id === rC.id || r.id === rD.id), JSON.stringify((rv.data || []).map((r) => r.id)))
-    if (k !== 'gm') check(`${L}: does not see the CEO-raised request`, !(rv.data || []).some((r) => r.id === rC.id))
+    if (k !== 'gm' && k !== rCstep) check(`${L}: does not see the CEO-raised request`, !(rv.data || []).some((r) => r.id === rC.id))
+    if (k === rCstep) check(`${L}: sees the CEO-raised request only because it waits at their step (approval exception)`, (rv.data || []).some((r) => r.id === rC.id && !r.created_by_name))
     const leak = (rv.data || []).filter((r) => {
       const a = allReqs.find((q) => q.id === r.id) || {}
       return (rank(a.decided_by_role) > myR && (r.decided_by_name || r.decided_by_role)) || (rank(a.assigned_by_role) > myR && (r.assigned_by_name || r.assigned_by_role)) ||
         (rank(roleOf[a.created_by]) > myR && (r.created_by_name || r.created_by_role)) || r.ceo_updated_at || (r.assigned_role && rank(r.assigned_role) > myR)
     })
     check(`${L}: no superior name/role on any visible request`, leak.length === 0, JSON.stringify(leak.map((r) => [r.id, r.decided_by_name, r.assigned_by_name, r.created_by_name])))
-    const rb = await me.c.from('requests').select('id,decided_by_name')
-    check(`${L}: request actor columns are not readable on the base table`, !!rb.error)
+    const rb = await me.c.from('requests').select('*')
+    const vIds = new Set((rv.data || []).map((r) => r.id))
+    check(`${L}: v1.3.8 compatibility — requests select('*') works and lists the same requests as requests_v`, !rb.error && (rb.data || []).length === vIds.size && (rb.data || []).every((r) => vIds.has(r.id)), JSON.stringify(rb.error || [(rb.data || []).length, vIds.size]))
     // timeline
     const ev = await me.c.from('request_events_v').select('*')
     const evBad = (ev.data || []).filter((e) => e.action.startsWith('ceo_') || rank(e.by_role) > myR || rank(e.to_role) > myR || /CEO secret reason|CEO private note/.test(e.comment || ''))
     check(`${L}: timeline has no CEO/superior lines or notes`, !ev.error && evBad.length === 0, JSON.stringify(ev.error || evBad))
     const eb = await me.c.from('request_events').select('id,action')
     check(`${L}: request_events base rows hold no ceo_* actions`, !eb.error && !(eb.data || []).some((e) => e.action.startsWith('ceo_')), JSON.stringify(eb.error))
-    check(`${L}: request_events actor columns are not readable on the base table`, !!(await me.c.from('request_events').select('by_name')).error)
+    const eOld = await me.c.from('request_events').select('*')
+    check(`${L}: v1.3.8 compatibility — request_events select('*') works, no ceo_* rows`, !eOld.error && !(eOld.data || []).some((e) => e.action.startsWith('ceo_')), JSON.stringify(eOld.error))
+    const hOld = await me.c.from('hr_tasks').select('*')
+    check(`${L}: v1.3.8 compatibility — hr_tasks select('*') works`, !hOld.error, JSON.stringify(hOld.error))
     // audit, notifications, HR tasks
     const au = await me.c.from('audit_log').select('user_id,user_role,action,details')
     const auBad = (au.data || []).filter((a) => rank(a.user_role) > myR || rank(roleOf[a.user_id]) > myR || a.action.startsWith('request.ceo_') || rank(a.details?.toRole) > myR || rank(a.details?.role) > myR)
@@ -199,7 +206,8 @@ try {
   for (let i = 0; i < 20 && !got.some((p) => p.new?.id === rR?.id); i++) await new Promise((r) => setTimeout(r, 500))
   const ev = got.find((p) => p.new?.id === rR?.id)
   check('realtime: HR Manager gets the change event for a new request', !!ev, `${got.length} events`)
-  check('realtime payload carries no actor names', ev && !('created_by_name' in (ev.new || {})) && !('decided_by_name' in (ev.new || {})), JSON.stringify(Object.keys(ev?.new || {})))
+  const n = ev?.new || {}
+  check('realtime payload names nobody above the receiver', ev && [n.created_by_role, n.decided_by_role, n.assigned_by_role, n.assigned_role].every((r) => rank(r) <= rank('hr_manager')), JSON.stringify([n.created_by_role, n.decided_by_role, n.assigned_by_role]))
 } catch (e) {
   check('exception', false, e?.stack || e)
 } finally {

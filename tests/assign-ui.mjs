@@ -82,7 +82,7 @@ try {
   // HR Manager (requester): no Assign button, told who has it
   const hrm = await login(users.hrm); await openReq(hrm.p)
   body = await hrm.p.locator('body').innerText()
-  check('HR Manager: no Assign button; sees "Assigned to: UI HRA (HR Admin)"', await hrm.p.getByRole('button', { name: 'Assign…' }).count() === 0 && body.includes('Assigned to: UI HRA (HR Admin)'))
+  check('HR Manager: no Assign button; sees "Assigned to: the next approval step" (superior not named)', await hrm.p.getByRole('button', { name: 'Assign…' }).count() === 0 && body.includes('Assigned to: the next approval step') && !body.includes('UI HRA'), body.slice(0, 500))
   await hrm.ctx.close()
 
   // CEO: amend, keep it moving

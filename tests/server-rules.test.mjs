@@ -4,6 +4,8 @@
 import { createRequire } from 'module'
 import fs from 'fs'
 import crypto from 'crypto'
+import { execSync } from 'child_process'
+import { rid, cleanupOwn, makeCeo, keepConfig } from './_own.mjs'
 const require = createRequire(new URL('../package.json', import.meta.url))
 const { createClient } = require('@supabase/supabase-js')
 const LIVE_REF = 'gnepquxtwkyffjmoydnv'
@@ -12,15 +14,30 @@ const URL_ = env.TEST_SUPABASE_URL, ANON = env.TEST_ANON_KEY, SERVICE = env.TEST
 if (!URL_ || URL_.includes(LIVE_REF) || !URL_.includes(env.TEST_PROJECT_REF)) { console.error('ABORT: not the test project'); process.exit(1) }
 const opts = { auth: { persistSession: false, autoRefreshToken: false } }
 const admin = createClient(URL_, SERVICE, opts)
-{ const { data, error } = await admin.auth.admin.listUsers({ perPage: 1000 }); if (error) throw error
-  if (data.users.some((u) => !/@example\.com$/.test(u.email || ''))) { console.error('ABORT: project has real users'); process.exit(1) } }
+// suites only create/remove their own prefixed @example.com users, so other (real or other-work) users are left alone
 
 let pass = 0, fail = 0
 const check = (name, ok, extra = '') => { ok ? pass++ : fail++; console.log(ok ? 'PASS' : 'FAIL', name, ok ? '' : extra) }
 const pw = crypto.randomBytes(12).toString('hex'), stamp = Date.now()
 const users = {}
+function lastCeoProbe(sid) {
+  if (!/^[0-9a-f-]{36}$/.test(sid)) throw new Error('bad id')
+  const f = `/tmp/fws-lastceo-${stamp}.sql`
+  fs.writeFileSync(f, `do $$ declare res text; n int; begin
+  update public.profiles set role = 'viewer' where role in ('super_admin','admin') and id <> '${sid}' and coalesce(status, '') <> 'deleted';
+  perform set_config('request.jwt.claims', json_build_object('sub','${sid}','role','authenticated')::text, true);
+  execute 'set local role authenticated';
+  begin
+    update public.profiles set role = 'viewer' where id = '${sid}';
+    get diagnostics n = row_count; res := 'updated:' || n;
+  exception when others then res := 'refused:' || sqlerrm; end;
+  raise exception 'FWM_RESULT[%]', res;
+end $$;`)
+  const out = execSync(`/workspace/tools/q.sh ${env.TEST_PROJECT_REF} ${f}`, { encoding: 'utf8' }); fs.rmSync(f, { force: true })
+  return (/FWM_RESULT\[(.*?)\]/.exec(out) || [, 'no result: ' + out.slice(0, 200)])[1]
+}
 async function mk(key) {
-  const email = `fwm-${key}-${stamp}@example.com`
+  const email = `${PFX}${key}-${stamp}@example.com`
   const { data, error } = await admin.auth.admin.createUser({ email, password: pw, email_confirm: true, user_metadata: { full_name: key.toUpperCase() } })
   if (error) throw error
   const c = createClient(URL_, ANON, opts)
@@ -29,30 +46,31 @@ async function mk(key) {
   return users[key]
 }
 // fresh project state (TEST project only; guarded above)
-await admin.from('records').delete().neq('id', '__none__')
-await admin.from('requests').delete().neq('type', '__none__')
-await admin.from('documents').delete().neq('category', '__none__')
-{ const { data } = await admin.auth.admin.listUsers({ perPage: 1000 }); for (const u of data.users) await admin.auth.admin.deleteUser(u.id) }
+const PFX = 'fws-'
+await cleanupOwn(admin, PFX) // only this suite's own leftovers; never other work on TEST
+const O1_ = rid('O1'), O2_ = rid('O2'), W1_ = rid('W1'), W2_ = rid('W2'), W3_ = rid('W3')
+const restoreCfg = await keepConfig(admin, ['approval_rules', 'hr_admin'])
 const seedRules = JSON.parse(/\('approval_rules', '(.+?)'::jsonb\)/.exec(fs.readFileSync(new URL('../supabase/migrations/003_roles_requests_vault.sql', import.meta.url), 'utf8'))[1].replace(/''/g, "'"))
 await admin.from('app_config').update({ value: seedRules }).eq('key', 'approval_rules')
 await admin.from('app_config').update({ value: { manageUsers: true, deleteWorkers: false, viewSalary: true, viewAudit: true } }).eq('key', 'hr_admin')
 
 try {
   const S = await mk('super')
+  await makeCeo(admin, S.id)
   const me = await S.c.from('profiles_v').select('*').eq('id', S.id).single()
-  check('first user becomes active super_admin', me.data?.role === 'super_admin' && me.data?.status === 'active', JSON.stringify(me.data))
+  check('suite CEO is an active super_admin', me.data?.role === 'super_admin' && me.data?.status === 'active', JSON.stringify(me.data))
   for (const k of ['hra', 'hrm', 'om1', 'om2', 'view', 'pend']) await mk(k)
   const p0 = await S.c.from('profiles').select('role,status').eq('id', users.hra.id).single()
   check('later sign-ups are pending viewers', p0.data?.role === 'viewer' && p0.data?.status === 'pending')
   const setRole = (who, role, outlet_ids = []) => S.c.from('profiles').update({ role, status: 'active', outlet_ids }).eq('id', users[who].id).select('id, role, status, outlet_ids, company_ids, must_change_password').single()
   await setRole('hra', 'hr_admin'); await setRole('hrm', 'hr_manager'); await setRole('view', 'viewer')
-  const o1 = await setRole('om1', 'outlet_manager', ['O1'])
-  await setRole('om2', 'outlet_manager', ['O2'])
-  check('super admin assigns outlet manager with outlets', o1.data?.outlet_ids?.[0] === 'O1', JSON.stringify(o1.error || o1.data))
-  const hrmOut = await setRole('hrm', 'hr_manager', ['O1'])
-  check('HR manager can be scoped to outlets (companies feature)', hrmOut.data?.outlet_ids?.[0] === 'O1', JSON.stringify(hrmOut.error))
+  const o1 = await setRole('om1', 'outlet_manager', [O1_])
+  await setRole('om2', 'outlet_manager', [O2_])
+  check('super admin assigns outlet manager with outlets', o1.data?.outlet_ids?.[0] === O1_, JSON.stringify(o1.error || o1.data))
+  const hrmOut = await setRole('hrm', 'hr_manager', [O1_])
+  check('HR manager can be scoped to outlets (companies feature)', hrmOut.data?.outlet_ids?.[0] === O1_, JSON.stringify(hrmOut.error))
   await setRole('hrm', 'hr_manager', [])
-  const supOut = await S.c.from('profiles').update({ outlet_ids: ['O1'], company_ids: ['main'] }).eq('id', S.id).select('id, role, status, outlet_ids, company_ids, must_change_password').single()
+  const supOut = await S.c.from('profiles').update({ outlet_ids: [O1_], company_ids: ['main'] }).eq('id', S.id).select('id, role, status, outlet_ids, company_ids, must_change_password').single()
   check('super admin is never scoped (outlets/companies cleared)', supOut.data?.outlet_ids?.length === 0 && supOut.data?.company_ids?.length === 0, JSON.stringify(supOut.error))
 
   // user management limits
@@ -64,65 +82,67 @@ try {
   check('HR admin cannot approve sign-ups unless the Super Admin allows it', !!e3.error || !e3.data?.length, JSON.stringify(e3.data))
   const e4 = await users.hrm.c.from('profiles').update({ status: 'disabled' }).eq('id', users.pend.id).select('id, role, status, outlet_ids, company_ids, must_change_password')
   check('HR manager cannot manage users', !!e4.error || !e4.data?.length)
-  const e5 = await S.c.from('profiles').update({ role: 'viewer' }).eq('id', S.id).select('id, role, status, outlet_ids, company_ids, must_change_password')
-  check('last super admin cannot demote himself', !!e5.error, JSON.stringify(e5.data))
+  // Other work on TEST has its own CEOs, so "last super admin" is checked inside one transaction that is always rolled back:
+  // the other CEOs are set aside only inside it (nobody else ever sees that), then S tries to demote himself as himself.
+  const e5 = lastCeoProbe(S.id)
+  check('last super admin cannot demote himself', /^refused:/.test(e5), e5)
 
   // data via push_records
   const now = () => new Date().toISOString()
   const W = (id, outletId, extra = {}) => ({ entity: 'workers', id, deleted: false, client_ts: now(), data: { id, workerNo: id, fullName: 'Worker ' + id, outletId, nationality: 'Nepal', initialBasicPay: 1700, bankAccount: '123', loans: [], documents: [], ...extra } })
-  const r1 = await S.c.rpc('push_records', { p_rows: [{ entity: 'outlets', id: 'O1', client_ts: now(), data: { id: 'O1', name: 'Outlet 1' } }, { entity: 'outlets', id: 'O2', client_ts: now(), data: { id: 'O2', name: 'Outlet 2' } }, W('W1', 'O1'), W('W2', 'O2'), W('W3', 'O1')] })
+  const r1 = await S.c.rpc('push_records', { p_rows: [{ entity: 'outlets', id: O1_, client_ts: now(), data: { id: O1_, name: 'Outlet 1' } }, { entity: 'outlets', id: O2_, client_ts: now(), data: { id: O2_, name: 'Outlet 2' } }, W(W1_, O1_), W(W2_, O2_), W(W3_, O1_)] })
   check('super admin push_records ok', r1.data?.ok === 5, JSON.stringify(r1))
   const pull = async (who) => { const r = await users[who].c.rpc('pull_records', { p_since: '1970-01-01', p_limit: 1000 }); if (r.error) throw r.error; return r.data }
   const om1Rows = await pull('om1')
-  const w1 = om1Rows.find((r) => r.id === 'W1'), w2 = om1Rows.find((r) => r.id === 'W2')
-  check('outlet manager sees his outlet worker', w1 && !w1.deleted && w1.data.fullName === 'Worker W1')
+  const w1 = om1Rows.find((r) => r.id === W1_), w2 = om1Rows.find((r) => r.id === W2_)
+  check('outlet manager sees his outlet worker', w1 && !w1.deleted && w1.data.fullName === 'Worker ' + W1_)
   check('outlet manager gets no salary/bank fields', w1 && w1.data.initialBasicPay === undefined && w1.data.bankAccount === undefined && w1.data.loans === undefined)
   check('other-outlet worker is hidden (tombstone, empty data)', w2 && w2.deleted && Object.keys(w2.data).length === 0)
   const dir = await users.om1.c.from('records').select('id').eq('entity', 'workers')
   check('outlet manager direct table read returns no workers', (dir.data || []).length === 0)
   const viewRows = await pull('view')
-  check('viewer sees all workers without salary', viewRows.filter((r) => r.entity === 'workers' && !r.deleted).length === 3 && viewRows.find((r) => r.id === 'W2').data.initialBasicPay === undefined)
+  check('viewer sees all workers without salary', viewRows.filter((r) => r.entity === 'workers' && !r.deleted && [W1_, W2_, W3_].includes(r.id)).length === 3 && viewRows.find((r) => r.id === W2_).data.initialBasicPay === undefined)
   const hrmRows = await pull('hrm')
-  check('HR manager sees salary', hrmRows.find((r) => r.id === 'W2').data.initialBasicPay === 1700)
+  check('HR manager sees salary', hrmRows.find((r) => r.id === W2_).data.initialBasicPay === 1700)
 
-  const p1 = await users.om1.c.rpc('push_records', { p_rows: [W('W1', 'O1', { fullName: 'HACK' })] })
+  const p1 = await users.om1.c.rpc('push_records', { p_rows: [W(W1_, O1_, { fullName: 'HACK' })] })
   check('outlet manager cannot edit worker master data', p1.data?.ok === 0 && p1.data?.rejected?.length === 1)
-  const p2 = await users.view.c.rpc('push_records', { p_rows: [{ entity: 'remarks', id: 'R0', client_ts: now(), data: { workerId: 'W1', text: 'x' } }] })
+  const p2 = await users.view.c.rpc('push_records', { p_rows: [{ entity: 'remarks', id: 'R0', client_ts: now(), data: { workerId: W1_, text: 'x' } }] })
   check('viewer cannot add remarks', p2.data?.ok === 0)
-  const p3 = await users.om1.c.rpc('push_records', { p_rows: [{ entity: 'remarks', id: 'R1', client_ts: now(), data: { workerId: 'W1', text: 'Late today', byId: 'someone-else' } }, { entity: 'remarks', id: 'R2', client_ts: now(), data: { workerId: 'W2', text: 'x' } }] })
+  const p3 = await users.om1.c.rpc('push_records', { p_rows: [{ entity: 'remarks', id: 'R1', client_ts: now(), data: { workerId: W1_, text: 'Late today', byId: 'someone-else' } }, { entity: 'remarks', id: 'R2', client_ts: now(), data: { workerId: W2_, text: 'x' } }] })
   check('outlet manager adds remark for his worker, not others', p3.data?.ok === 1 && p3.data.rejected[0]?.id === 'R2', JSON.stringify(p3))
   const rr = (await pull('om1')).find((r) => r.id === 'R1')
   check('remark author forced to caller', rr?.data?.byId === users.om1.id)
   const om2r = (await pull('om2')).find((r) => r.id === 'R1')
   check('other outlet manager cannot see the remark', !om2r || om2r.deleted)
-  const p4 = await users.hrm.c.rpc('push_records', { p_rows: [{ ...W('W3', 'O1'), deleted: true }] })
+  const p4 = await users.hrm.c.rpc('push_records', { p_rows: [{ ...W(W3_, O1_), deleted: true }] })
   check('HR manager cannot delete workers (default)', p4.data?.ok === 0)
 
   // salary protection when HR admin is not allowed salary
   await S.c.from('app_config').update({ value: { manageUsers: true, deleteWorkers: false, viewSalary: false, viewAudit: true } }).eq('key', 'hr_admin')
   const hraRows = await pull('hra')
-  check('HR admin without salary right gets no salary', hraRows.find((r) => r.id === 'W1').data.initialBasicPay === undefined)
-  const hw = hraRows.find((r) => r.id === 'W1')
-  const p5 = await users.hra.c.rpc('push_records', { p_rows: [{ entity: 'workers', id: 'W1', client_ts: now(), deleted: false, data: { ...hw.data, phone: '0123' } }] })
-  const w1s = (await admin.from('records').select('data').eq('entity', 'workers').eq('id', 'W1').single()).data.data
+  check('HR admin without salary right gets no salary', hraRows.find((r) => r.id === W1_).data.initialBasicPay === undefined)
+  const hw = hraRows.find((r) => r.id === W1_)
+  const p5 = await users.hra.c.rpc('push_records', { p_rows: [{ entity: 'workers', id: W1_, client_ts: now(), deleted: false, data: { ...hw.data, phone: '0123' } }] })
+  const w1s = (await admin.from('records').select('data').eq('entity', 'workers').eq('id', W1_).single()).data.data
   check('HR admin edit keeps hidden salary fields intact', p5.data?.ok === 1 && w1s.initialBasicPay === 1700 && w1s.bankAccount === '123' && w1s.phone === '0123', JSON.stringify(p5))
   const c1 = await users.hra.c.from('app_config').update({ value: {} }).eq('key', 'approval_rules').select()
   check('HR admin cannot edit approval rules', !!c1.error || !c1.data?.length)
   await S.c.from('app_config').update({ value: { manageUsers: true, deleteWorkers: false, viewSalary: true, viewAudit: true } }).eq('key', 'hr_admin')
-  await S.c.rpc('push_records', { p_rows: [{ ...W('W3', 'O1'), data: { ...W('W3', 'O1').data, initialBasicPay: 1800 } }] })
+  await S.c.rpc('push_records', { p_rows: [{ ...W(W3_, O1_), data: { ...W(W3_, O1_).data, initialBasicPay: 1800 } }] })
 
   // requests workflow
   const create = (who, type, wid, amount, data = {}) => users[who].c.rpc('request_create', { p_type: type, p_worker_id: wid, p_title: type, p_data: data, p_amount: amount, p_priority: 'normal' })
   const act = (who, id, action, comment = null, patch = null) => users[who].c.rpc('request_act', { p_id: id, p_action: action, p_comment: comment, p_patch: patch })
-  const a1 = await create('om1', 'salary_advance', 'W1', 300)
+  const a1 = await create('om1', 'salary_advance', W1_, 300)
   check('advance within limit needs HR admin', a1.data?.required_level === 'hr_admin', JSON.stringify(a1.error))
-  const a2 = await create('om1', 'salary_advance', 'W1', 800)
+  const a2 = await create('om1', 'salary_advance', W1_, 800)
   check('advance above limit needs super admin', a2.data?.required_level === 'super_admin')
-  const a3 = await create('om1', 'loan', 'W1', 100)
+  const a3 = await create('om1', 'loan', W1_, 100)
   check('loan always needs super admin', a3.data?.required_level === 'super_admin')
-  const a4 = await create('om1', 'salary_advance', 'W2', 100)
+  const a4 = await create('om1', 'salary_advance', W2_, 100)
   check('outlet manager cannot request for other outlet', !!a4.error)
-  const a5 = await create('view', 'other', 'W1', null)
+  const a5 = await create('view', 'other', W1_, null)
   check('viewer cannot create requests', !!a5.error)
   let x = await act('hra', a1.data.id, 'approve')
   check('HR admin cannot skip HR manager review', !!x.error)
@@ -149,7 +169,7 @@ try {
   check('HR admin cannot approve escalated', !!x.error)
   x = await act('super', a2.data.id, 'approve')
   check('super admin approves escalated', x.data?.status === 'approved')
-  const own = await create('hra', 'salary_advance', 'W1', 50)
+  const own = await create('hra', 'salary_advance', W1_, 50)
   await act('hrm', own.data.id, 'forward')
   x = await act('hra', own.data.id, 'approve')
   check('no self-approval', !!x.error)
@@ -159,29 +179,29 @@ try {
   check('other outlet manager sees none of these requests', om2q.data?.length === 0)
   const vq = await users.view.c.from('requests').select('id,created_by')
   check('viewer (lowest rank) sees no request raised by a higher role (hierarchy)', !vq.error && (vq.data || []).every((r) => !r.created_by || r.created_by === users.view.id), JSON.stringify(vq.error || vq.data))
-  const ins = await users.om1.c.from('requests').insert({ type: 'x', worker_id: 'W1' })
+  const ins = await users.om1.c.from('requests').insert({ type: 'x', worker_id: W1_ })
   check('no direct inserts into requests', !!ins.error)
   // rules change by super admin applies
   const rules = (await S.c.from('app_config').select('value').eq('key', 'approval_rules').single()).data.value
   rules.types.salary_advance.limit = 1000
   await S.c.from('app_config').update({ value: rules }).eq('key', 'approval_rules')
-  const a6 = await create('om1', 'salary_advance', 'W1', 800)
+  const a6 = await create('om1', 'salary_advance', W1_, 800)
   check('edited limit takes effect', a6.data?.required_level === 'hr_admin')
   rules.types.loan.level = 'hr_manager'
   await S.c.from('app_config').update({ value: rules }).eq('key', 'approval_rules')
-  const a7 = await create('om1', 'loan', 'W1', 100)
+  const a7 = await create('om1', 'loan', W1_, 100)
   check('loan stays super admin even if the matrix is edited', a7.data?.required_level === 'super_admin')
   rules.types.loan.level = 'super_admin'
   await S.c.from('app_config').update({ value: rules }).eq('key', 'approval_rules')
 
   // emergency leave
-  let em = await create('om1', 'emergency_leave', 'W1', null, { from: '2026-11-01', to: '2026-11-14' })
+  let em = await create('om1', 'emergency_leave', W1_, null, { from: '2026-11-01', to: '2026-11-14' })
   check('emergency leave needs a reason', !!em.error)
-  em = await create('om1', 'emergency_leave', 'W1', null, { reasonKey: 'death' })
+  em = await create('om1', 'emergency_leave', W1_, null, { reasonKey: 'death' })
   check('death reason needs relationship', !!em.error)
-  em = await create('om1', 'emergency_leave', 'W1', null, { reasonKey: 'other', reasonDetail: 'short' })
+  em = await create('om1', 'emergency_leave', W1_, null, { reasonKey: 'other', reasonDetail: 'short' })
   check('"Other" needs detailed explanation', !!em.error)
-  em = await create('om1', 'emergency_leave', 'W1', null, { reasonKey: 'death', relationship: 'Father', from: '2026-11-01', to: '2026-11-14' })
+  em = await create('om1', 'emergency_leave', W1_, null, { reasonKey: 'death', relationship: 'Father', from: '2026-11-01', to: '2026-11-14' })
   check('emergency leave with reason accepted', !!em.data?.id, JSON.stringify(em.error))
   await act('hrm', em.data.id, 'forward')
   x = await act('hra', em.data.id, 'approve')
@@ -189,12 +209,12 @@ try {
 
   // vault & storage
   const pdf = new Blob([Buffer.from('%PDF-1.4\n%%EOF')], { type: 'application/pdf' })
-  const path = `vault/W1/${crypto.randomUUID()}.pdf`
+  const path = `vault/${W1_}/${crypto.randomUUID()}.pdf`
   const up = await users.om1.c.storage.from('attachments').upload(path, pdf, { contentType: 'application/pdf' })
   check('outlet manager uploads to his worker vault', !up.error, JSON.stringify(up.error))
-  const up2 = await users.om1.c.storage.from('attachments').upload(`vault/W2/${crypto.randomUUID()}.pdf`, pdf)
+  const up2 = await users.om1.c.storage.from('attachments').upload(`vault/${W2_}/${crypto.randomUUID()}.pdf`, pdf)
   check('outlet manager cannot upload for other outlet', !!up2.error)
-  const d1 = await users.om1.c.from('documents').insert({ worker_id: 'W1', category: 'Flight ticket', title: 'MH ticket', file_path: path, mime: 'application/pdf', size_bytes: 14, request_id: em.data.id, uploaded_by: users.om1.id }).select().single()
+  const d1 = await users.om1.c.from('documents').insert({ worker_id: W1_, category: 'Flight ticket', title: 'MH ticket', file_path: path, mime: 'application/pdf', size_bytes: 14, request_id: em.data.id, uploaded_by: users.om1.id }).select().single()
   check('ticket document attached to request', !!d1.data?.id && d1.data.version === 1, JSON.stringify(d1.error))
   x = await act('hra', em.data.id, 'approve')
   check('emergency leave approved once ticket attached', x.data?.status === 'approved', JSON.stringify(x.error))
@@ -202,29 +222,29 @@ try {
   check('outlet manager gets signed URL for own doc', !!sg.data?.signedUrl)
   const sg2 = await users.om2.c.storage.from('attachments').createSignedUrl(path, 60)
   check('other outlet manager cannot get signed URL', !!sg2.error || !sg2.data?.signedUrl)
-  const restricted = await users.om1.c.from('documents').insert({ worker_id: 'W1', category: 'Payslip', file_path: path, uploaded_by: users.om1.id })
+  const restricted = await users.om1.c.from('documents').insert({ worker_id: W1_, category: 'Payslip', file_path: path, uploaded_by: users.om1.id })
   check('outlet manager cannot upload restricted category', !!restricted.error)
-  const pay = await users.hrm.c.from('documents').insert({ worker_id: 'W1', category: 'Payslip', title: 'Oct', file_path: `vault/W1/pay.pdf`, uploaded_by: users.hrm.id }).select().single()
+  const pay = await users.hrm.c.from('documents').insert({ worker_id: W1_, category: 'Payslip', title: 'Oct', file_path: `vault/${W1_}/pay.pdf`, uploaded_by: users.hrm.id }).select().single()
   const seePay = await users.om1.c.from('documents').select('id').eq('id', pay.data?.id)
   check('restricted category hidden from outlet manager', !!pay.data && seePay.data?.length === 0)
-  const v2 = await users.hrm.c.from('documents').insert({ worker_id: 'W1', category: 'Flight ticket', title: 'MH ticket (changed)', file_path: `vault/W1/t2.pdf`, group_id: d1.data.group_id, uploaded_by: users.hrm.id }).select().single()
+  const v2 = await users.hrm.c.from('documents').insert({ worker_id: W1_, category: 'Flight ticket', title: 'MH ticket (changed)', file_path: `vault/${W1_}/t2.pdf`, group_id: d1.data.group_id, uploaded_by: users.hrm.id }).select().single()
   const old = await users.hrm.c.from('documents').select('is_current').eq('id', d1.data.id).single()
   check('new version increments and keeps history', v2.data?.version === 2 && old.data?.is_current === false, JSON.stringify(v2.error))
   const om2docs = await users.om2.c.from('documents').select('id')
   check('other outlet manager sees no documents', om2docs.data?.length === 0)
 
   // passport safekeeping
-  const pf = await users.om1.c.rpc('passport_forms_issued', { p_worker_ids: ['W1', 'W2', 'W3'] })
+  const pf = await users.om1.c.rpc('passport_forms_issued', { p_worker_ids: [W1_, W2_, W3_] })
   check('consent forms issued only for own workers', pf.data === 2, JSON.stringify(pf))
-  let w = (await admin.from('records').select('data').eq('id', 'W1').eq('entity', 'workers').single()).data.data
+  let w = (await admin.from('records').select('data').eq('id', W1_).eq('entity', 'workers').single()).data.data
   check('consent status pending signature', w.passportSafe?.consent === 'pending')
-  const cpath = `vault/W1/${crypto.randomUUID()}.pdf`
+  const cpath = `vault/${W1_}/${crypto.randomUUID()}.pdf`
   await users.om1.c.storage.from('attachments').upload(cpath, pdf, { contentType: 'application/pdf' })
-  const cd = await users.om1.c.from('documents').insert({ worker_id: 'W1', category: 'Passport safekeeping consent', file_path: cpath, uploaded_by: users.om1.id }).select().single()
-  w = (await admin.from('records').select('data').eq('id', 'W1').eq('entity', 'workers').single()).data.data
+  const cd = await users.om1.c.from('documents').insert({ worker_id: W1_, category: 'Passport safekeeping consent', file_path: cpath, uploaded_by: users.om1.id }).select().single()
+  w = (await admin.from('records').select('data').eq('id', W1_).eq('entity', 'workers').single()).data.data
   check('signed consent upload → "uploaded, HR to verify"', w.passportSafe?.consent === 'uploaded' && w.passportSafe.consentDocId === cd.data?.id)
   check('salary untouched by consent hooks', w.initialBasicPay === 1700 && w.bankAccount === '123')
-  const pr = await create('om1', 'passport', 'W1', null, { action: 'Release', reason: 'Renewal at embassy' })
+  const pr = await create('om1', 'passport', W1_, null, { action: 'Release', reason: 'Renewal at embassy' })
   check('passport release request needs only HR manager', pr.data?.required_level === 'hr_manager')
   x = await act('hrm', pr.data.id, 'approve', 'Released at 3pm')
   check('HR manager approves passport release directly', x.data?.status === 'approved', JSON.stringify(x.error))
@@ -234,12 +254,13 @@ try {
   const acts = new Set(au.data?.map((a) => a.action))
   check('audit log records users, config, salary, requests, documents', ['user.update', 'config.update', 'worker.salary_change', 'request.approve', 'document.upload', 'document.new_version'].every((a) => acts.has(a)), [...acts].join(','))
   const au2 = await users.hrm.c.from('audit_log').select('id')
-  check('HR manager cannot read audit log', au2.data?.length === 0)
+  check('HR manager cannot read audit log', !au2.error && au2.data?.length === 0, JSON.stringify(au2.error || au2.data?.length))
   const anon = createClient(URL_, ANON, opts)
   const an = await anon.rpc('pull_records', { p_since: '1970-01-01' })
   check('anonymous cannot call pull_records', !!an.error || an.data?.length === 0)
   const an2 = await anon.from('documents').select('id')
   check('anonymous cannot read documents', !!an2.error || an2.data?.length === 0)
 } catch (e) { fail++; console.log('FAIL exception', e.message || e) }
+await cleanupOwn(admin, PFX); await restoreCfg()
 console.log(`\n${pass} passed, ${fail} failed`)
 process.exit(fail ? 1 : 0)

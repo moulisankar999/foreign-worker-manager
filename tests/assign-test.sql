@@ -12,6 +12,15 @@ begin
   -- the newest worker fixture left by worker-ui (falls back to the old fixed id)
   select coalesce((select wa.worker_id from public.worker_access wa where wa.worker_id like 'wu-w-%' order by wa.worker_id desc limit 1), W) into W;
   O := 'wu-o-' || substr(W, 6);
+  -- no worker-ui fixture on TEST: make a throw-away one inside this rolled-back transaction
+  if not exists (select 1 from public.worker_access wa join auth.users au on au.id = wa.user_id where wa.worker_id = W) then
+    W := 'asg-w-' || left(gen_random_uuid()::text, 8); O := 'asg-o-' || substr(W, 7); wuser := gen_random_uuid();
+    insert into public.records (entity, id, deleted, client_ts, data) values
+      ('outlets', O, false, now(), jsonb_build_object('id', O, 'name', 'ASG Outlet', 'companyId', 'main')),
+      ('workers', W, false, now(), jsonb_build_object('id', W, 'workerNo', 'ASG1', 'fullName', 'Asg Worker', 'outletId', O, 'nationality', 'India', 'status', 'Active-Working', 'joinDate', '2023-06-01'));
+    insert into auth.users (id, email, aud, role, instance_id) values (wuser, 'fwm-asgw-' || left(wuser::text, 8) || '@example.test', 'authenticated', 'authenticated', '00000000-0000-0000-0000-000000000000');
+    insert into public.worker_access (worker_id, user_id, passport_norm) values (W, wuser, 'ASG' || upper(left(wuser::text, 6)));
+  end if;
   -- test people (rolled back at the end)
   foreach u in array array[ceo, gm, hra, hra2, hrm, om, om2] loop
     insert into auth.users (id, email, aud, role, instance_id) values (u, 'fwm-asg-' || left(u::text, 8) || '@example.test', 'authenticated', 'authenticated', '00000000-0000-0000-0000-000000000000');

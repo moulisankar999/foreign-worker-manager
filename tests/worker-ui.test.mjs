@@ -14,7 +14,7 @@ if (!URL_ || URL_.includes(LIVE_REF) || !URL_.includes(env.TEST_PROJECT_REF)) { 
 const APP = process.env.WORKER_URL || 'http://localhost:4181/worker/'
 const opts = { auth: { persistSession: false, autoRefreshToken: false } }
 const admin = createClient(URL_, env.TEST_SERVICE_ROLE_KEY, opts)
-{ const { data } = await admin.auth.admin.listUsers({ perPage: 1000 }); if (data.users.some((u) => !/@example\.com$/.test(u.email || ''))) { console.error('ABORT: real users'); process.exit(1) } }
+// (no 'real users' abort any more: the suite only creates and removes its own accounts)
 const SHOTS = new URL('../screens/worker/', import.meta.url).pathname
 fs.mkdirSync(SHOTS, { recursive: true })
 
@@ -26,7 +26,7 @@ const O = 'wu-o-' + stamp, W = 'wu-w-' + stamp, PP = 'U' + stamp.toUpperCase().s
 const staffIds = []
 const plus = (d) => new Date(Date.now() + d * 864e5).toISOString().slice(0, 10)
 async function staff(key, role, outlets = []) {
-  const email = `fwu-${key}-${stamp}@example.com`
+  const email = `fwk-${key}-${stamp}@example.com`
   const { data, error } = await admin.auth.admin.createUser({ email, password: pw, email_confirm: true, user_metadata: { full_name: 'UI ' + key.toUpperCase() } })
   if (error) throw error
   staffIds.push(data.user.id)

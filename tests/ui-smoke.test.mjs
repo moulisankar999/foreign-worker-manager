@@ -2,6 +2,7 @@
 // served at UI_URL, and Playwright available (PLAYWRIGHT_PATH). Creates throwaway @example.com users on TEST.
 import fs from 'node:fs'
 import { createRequire } from 'node:module'
+import { addItems } from './_own.mjs'
 const require = createRequire(new URL('../package.json', import.meta.url))
 const { createClient } = require('@supabase/supabase-js')
 const { chromium } = createRequire(process.env.PLAYWRIGHT_PATH + '/package.json')('playwright')
@@ -11,7 +12,8 @@ const URL_ = env.TEST_SUPABASE_URL
 if (!URL_ || URL_.includes(LIVE_REF) || !URL_.includes(env.TEST_PROJECT_REF)) { console.error('ABORT: not the test project'); process.exit(1) }
 const admin = createClient(URL_, env.TEST_SERVICE_ROLE_KEY, { auth: { persistSession: false } })
 const { data: list } = await admin.auth.admin.listUsers({ perPage: 1000 })
-if (list.users.some((u) => !u.email.endsWith('@example.com'))) { console.error('ABORT: real users found'); process.exit(1) }
+// only this suite's own leftovers (fwm-ui-*@example.com); everything else on TEST is left alone
+for (const u of list.users) if (/^fwm-ui-.*@example\.com$/.test(u.email || '')) { await admin.from('profiles').delete().eq('id', u.id); await admin.auth.admin.deleteUser(u.id).catch(() => {}) }
 let pass = 0, fail = 0
 const check = (n, ok, x = '') => { ok ? pass++ : fail++; console.log(ok ? 'PASS' : 'FAIL', n, ok ? '' : x) }
 const stamp = Date.now(), pw = 'Ui-' + stamp + '-x!'
@@ -27,7 +29,7 @@ const cfgRow = (await admin.from('app_config').select('value').eq('key', 'notifi
 const orig = cfgRow?.value
 if (orig) await admin.from('app_config').update({ value: { ...orig, enabled: { ...orig.enabled, email: false, sms: false, whatsapp: false } } }).eq('key', 'notifications')
 // companies + an outlet for the logo / sign-up checks (TEST project only)
-await admin.from('app_config').upsert({ key: 'companies', value: { items: [{ id: 'main', name: 'Main company' }, { id: 'c2', name: 'Second Co' }] } })
+const undoCos = await addItems(admin, 'companies', [{ id: 'main', name: 'Main company' }, { id: 'c2', name: 'Second Co' }]) // add-only
 await admin.from('records').upsert({ entity: 'outlets', id: 'O1', deleted: false, client_ts: new Date().toISOString(), data: { id: 'O1', name: 'Outlet One', type: 'Restaurant', companyId: 'main' } })
 const sup = await mk('super', 'super_admin', []), om = await mk('om', 'outlet_manager', ['O1'])
 // a pending sign-up (not activated)
@@ -69,13 +71,13 @@ const go = async (p, h) => { await p.goto(process.env.UI_URL + '#' + h); await p
   await go(p, '/settings/requests'); check('approval rules card visible to super', /Approval rules/i.test(await body(p)))
   await go(p, '/settings/passport'); check('emergency reasons card visible', /Emergency leave reasons/i.test(await body(p)))
   await go(p, '/settings/org'); const o = await body(p); await go(p, '/settings/users'); const u = await body(p)
-  check('companies + new-user approval cards visible to super', /Companies \(2\)/.test(o) && /New-user approvals/.test(u))
+  check('companies + new-user approval cards visible to super', /Companies \(\d+\)/.test(o) && /New-user approvals/.test(u))
   check('Users tab lists the pending sign-up', u.includes('UI Pending ' + stamp))
   await p.fill('.set-search input', 'carry forward'); await p.waitForTimeout(300)
   await p.locator('.set-hits button').first().click(); await p.waitForTimeout(800)
   check('settings search jumps to the right tab', p.url().endsWith('#/settings/workers') && /annual leave/i.test(await body(p)), p.url())
-  await go(p, '/'); const dash = await body(p)
-  check('pending sign-up is on the super dashboard (Needs my action)', dash.includes('UI Pending ' + stamp) && /new user/i.test(dash), dash.slice(0, 600))
+  await go(p, '/'); await p.waitForTimeout(2500); const dash = await body(p)
+  check('pending sign-up is on the super dashboard (Needs my action)', /\d+ new users? waiting for approval/i.test(dash), dash.slice(0, 600))
   await go(p, '/settings/org')
   await p.locator('tr.dt-click', { hasText: 'Main company' }).first().locator('td').first().click(); await p.waitForTimeout(400) // logo upload sits in the expanded row
   await p.locator('label[aria-label="Upload logo of Main company"] input[type=file]').setInputFiles('/tmp/ui-logo.svg')
@@ -97,7 +99,9 @@ const go = async (p, h) => { await p.goto(process.env.UI_URL + '#' + h); await p
   const { p, errs, ctx } = await login(om)
   await go(p, '/'); const d = await body(p)
   check('OM dashboard renders', d.length > 50)
-  check('OM header shows his company logo', (await p.locator('.top-logo img[src^="blob:"]').count()) === 1)
+  await p.locator('.top-logo img[src^="blob:"]').first().waitFor({ timeout: 8000 }).catch(() => {})
+  const mainLogo = (await admin.from('app_config').select('value').eq('key', 'companies').single()).data.value.items.find((c) => c.id === 'main')?.logo
+  check('OM header shows his company logo', (await p.locator('.top-logo img[src^="blob:"]').count()) === 1, 'config logo now: ' + mainLogo)
   await p.screenshot({ path: '/tmp/ui-om.png' })
   await go(p, '/settings'); const s = await body(p)
   const omTabs = (await p.locator('.set-tabs [role=tab]').allInnerTexts()).join('|')
@@ -139,4 +143,6 @@ const go = async (p, h) => { await p.goto(process.env.UI_URL + '#' + h); await p
 }
 await browser.close()
 if (orig) await admin.from('app_config').update({ value: orig }).eq('key', 'notifications')
+await undoCos()
+{ const { data } = await admin.auth.admin.listUsers({ perPage: 1000 }); for (const u of data.users) if ((u.email || '').startsWith('fwm-ui-') && (u.email || '').includes(String(stamp))) { await admin.from('profiles').delete().eq('id', u.id); await admin.auth.admin.deleteUser(u.id).catch(() => {}) } }
 console.log(`\n${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0)

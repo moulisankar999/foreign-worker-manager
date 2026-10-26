@@ -6,6 +6,7 @@
 import { createRequire } from 'module'
 import fs from 'fs'
 import crypto from 'crypto'
+import { rid, cleanupOwn, makeCeo, keepConfig, addItems } from './_own.mjs'
 const require = createRequire(new URL('../package.json', import.meta.url))
 const { createClient } = require('@supabase/supabase-js')
 const LIVE_REF = 'gnepquxtwkyffjmoydnv'
@@ -14,8 +15,7 @@ const URL_ = env.TEST_SUPABASE_URL, ANON = env.TEST_ANON_KEY, SERVICE = env.TEST
 if (!URL_ || URL_.includes(LIVE_REF) || !URL_.includes(env.TEST_PROJECT_REF)) { console.error('ABORT: not the test project'); process.exit(1) }
 const opts = { auth: { persistSession: false, autoRefreshToken: false } }
 const admin = createClient(URL_, SERVICE, opts)
-{ const { data, error } = await admin.auth.admin.listUsers({ perPage: 1000 }); if (error) throw error
-  if (data.users.some((u) => !/@example\.com$/.test(u.email || ''))) { console.error('ABORT: project has real users'); process.exit(1) } }
+// suites only create/remove their own prefixed @example.com users, so other (real or other-work) users are left alone
 
 let pass = 0, fail = 0
 const check = (name, ok, extra = '') => { ok ? pass++ : fail++; console.log(ok ? 'PASS' : 'FAIL', name, ok ? '' : extra) }
@@ -23,7 +23,7 @@ const pw = crypto.randomBytes(12).toString('hex'), stamp = Date.now()
 const U = {}
 const mkClient = () => createClient(URL_, ANON, opts)
 async function mk(key) {
-  const email = `fwr-${key}-${stamp}@example.com`
+  const email = `${PFX}${key}-${stamp}@example.com`
   const { data, error } = await admin.auth.admin.createUser({ email, password: pw, email_confirm: true, user_metadata: { full_name: key.toUpperCase() } })
   if (error) throw error
   const c = mkClient(); const s = await c.auth.signInWithPassword({ email, password: pw }); if (s.error) throw s.error
@@ -33,11 +33,11 @@ async function mk(key) {
 const prof = async (id) => (await admin.from('profiles').select('*').eq('id', id).maybeSingle()).data
 const strip = (r) => { const { tempPassword, ...rest } = r; return JSON.stringify({ ...rest, tempPassword: tempPassword ? '(hidden)' : undefined }) }
 const now = () => new Date().toISOString()
-await admin.from('records').delete().neq('id', '__none__')
-await admin.from('requests').delete().neq('type', '__none__')
-{ const { data } = await admin.auth.admin.listUsers({ perPage: 1000 }); for (const u of data.users) await admin.auth.admin.deleteUser(u.id) }
-await admin.from('profiles').delete().neq('id', '00000000-0000-0000-0000-000000000000')
-await admin.from('app_config').upsert({ key: 'companies', value: { items: [{ id: 'main', name: 'Main company' }] } })
+const PFX = 'fwr-'
+await cleanupOwn(admin, PFX) // only this suite's own leftovers; never other work on TEST
+const O1_ = rid('O1'), W1_ = rid('W1')
+const restoreCfg = await keepConfig(admin, ['agencies', 'gm_powers', 'notifications'])
+const undoCos = await addItems(admin, 'companies', [{ id: 'main', name: 'Main company' }]) // add-only: never replaces the TEST companies list
 await admin.from('app_config').upsert({ key: 'gm_powers', value: { powers: {} } })
 { // other suites may replace the notification config; make sure the v1.2 events exist (same defaults as migration 013)
   const cur = (await admin.from('app_config').select('value').eq('key', 'notifications').maybeSingle()).data?.value || { events: {} }
@@ -51,15 +51,16 @@ const err = (r) => r.error ? r.error.message : 'no error'
 
 try {
   const S = await mk('ceo')
+  await makeCeo(admin, S.id)
   await S.c.rpc('push_records', { p_rows: [
-    { entity: 'outlets', id: 'O1', client_ts: now(), data: { id: 'O1', name: 'Outlet One', companyId: 'main' } },
-    { entity: 'workers', id: 'W1', client_ts: now(), data: { id: 'W1', workerNo: 'FW1', fullName: 'Test Worker One', outletId: 'O1', nationality: 'Nepal', status: 'Active-Working', joinDate: '2024-01-01', documents: [], loans: [], leaves: [] } }] })
+    { entity: 'outlets', id: O1_, client_ts: now(), data: { id: O1_, name: 'Outlet One', companyId: 'main' } },
+    { entity: 'workers', id: W1_, client_ts: now(), data: { id: W1_, workerNo: 'FW1', fullName: 'Test Worker One', outletId: O1_, nationality: 'Nepal', status: 'Active-Working', joinDate: '2024-01-01', documents: [], loans: [], leaves: [] } }] })
   for (const k of ['gm', 'hra', 'hrm', 'om']) await mk(k)
   const ap = (k, role, cos = [], outs = []) => S.c.rpc('approve_user', { p_id: U[k].id, p_role: role, p_company_ids: cos, p_outlet_ids: outs })
-  await ap('gm', 'general_manager'); await ap('hra', 'hr_admin'); await ap('hrm', 'hr_manager'); await ap('om', 'outlet_manager', [], ['O1'])
+  await ap('gm', 'general_manager'); await ap('hra', 'hr_admin'); await ap('hrm', 'hr_manager'); await ap('om', 'outlet_manager', [], [O1_])
   check('setup roles', (await prof(U.gm.id)).role === 'general_manager' && (await prof(U.om.id)).role === 'outlet_manager')
 
-  const create = (k, type, amount = null, data = {}) => U[k].c.rpc('request_create', { p_type: type, p_worker_id: 'W1', p_title: type, p_data: data, p_amount: amount, p_priority: 'normal' })
+  const create = (k, type, amount = null, data = {}) => U[k].c.rpc('request_create', { p_type: type, p_worker_id: W1_, p_title: type, p_data: data, p_amount: amount, p_priority: 'normal' })
   const act = (k, id, action, comment = null, patch = null) => U[k].c.rpc('request_act', { p_id: id, p_action: action, p_comment: comment, p_patch: patch })
   const decide = (k, id, d, reason = null, patch = null) => U[k].c.rpc('ceo_decide', { p_id: id, p_decision: d, p_reason: reason, p_patch: patch })
   const toGm = async (type, amount = null, data = {}) => {
@@ -163,8 +164,8 @@ try {
   }
 } catch (e) { fail++; console.log('FAIL exception', e.message) }
 finally {
-  await admin.from('requests').delete().neq('type', '__none__')
   for (const k of Object.keys(U)) await admin.auth.admin.deleteUser(U[k].id).catch(() => {})
 }
+await cleanupOwn(admin, PFX); await restoreCfg(); await undoCos()
 console.log(`\n${pass} passed, ${fail} failed`)
 process.exit(fail ? 1 : 0)

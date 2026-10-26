@@ -2,6 +2,7 @@
 // PLAYWRIGHT_PATH. Seeds "DEMO RPT" workers/outlets + @example.com users on TEST and removes them at the end.
 import fs from 'node:fs'
 import { createRequire } from 'node:module'
+import { addItems } from './_own.mjs'
 const ROOT = new URL('..', import.meta.url).pathname
 const require = createRequire(ROOT + 'package.json')
 const { createClient } = require('@supabase/supabase-js')
@@ -12,9 +13,12 @@ const URL_ = env.TEST_SUPABASE_URL, UI = process.env.UI_URL
 if (!URL_ || URL_.includes(LIVE_REF) || !URL_.includes(env.TEST_PROJECT_REF)) { console.error('ABORT: not the test project'); process.exit(1) }
 const admin = createClient(URL_, env.TEST_SERVICE_ROLE_KEY, { auth: { persistSession: false } })
 const { data: list } = await admin.auth.admin.listUsers({ perPage: 1000 })
-if (list.users.some((u) => !u.email.endsWith('@example.com'))) { console.error('ABORT: real users found'); process.exit(1) }
-for (const u of list.users) if (/^fwm-rpt-.*@example\.com$/.test(u.email)) await admin.auth.admin.deleteUser(u.id).catch(() => {})
-await admin.from('report_schedules').delete().like('title', 'DEMO %')
+{ // only this suite's leftovers: schedules made by earlier fwm-rpt-* users, then those users
+  const old = list.users.filter((u) => /^fwm-rpt-.*@example\.com$/.test(u.email || '')).map((u) => u.id)
+  if (old.length) { const ss = (await admin.from('report_schedules').select('id').in('created_by', old)).data || []
+    if (ss.length) { await admin.from('report_submissions').delete().in('schedule_id', ss.map((x) => x.id)); await admin.from('report_schedules').delete().in('id', ss.map((x) => x.id)) } }
+  for (const id of old) await admin.auth.admin.deleteUser(id).catch(() => {})
+}
 await admin.from('records').update({ deleted: true }).like('id', 'rpt1%')
 const SH = ROOT + 'screens/reports/', PDF = ROOT + 'screens/'
 fs.mkdirSync(SH, { recursive: true })
@@ -27,8 +31,7 @@ const day = (n) => { const d = new Date(); d.setDate(d.getDate() + n); return is
 const mon = (n) => { const d = new Date(); d.setMonth(d.getMonth() + n); return iso(d) }
 
 // ---- seed (TEST only) ----
-const cfgOld = (await admin.from('app_config').select('value').eq('key', 'companies').maybeSingle()).data?.value
-await admin.from('app_config').upsert({ key: 'companies', value: { items: [{ id: 'main', name: 'Sunrise Demo Sdn Bhd' }, { id: 'c2', name: 'Bayu Demo Hospitality Sdn Bhd' }] } })
+const undoCos = await addItems(admin, 'companies', [{ id: 'main', name: 'Sunrise Demo Sdn Bhd' }, { id: 'c2', name: 'Bayu Demo Hospitality Sdn Bhd' }]) // add-only: existing names are kept
 const OUT = [[`${P}-A`, 'DEMO RPT Nasi Kandar – Ampang', 'Restaurant', 'main'], [`${P}-B`, 'DEMO RPT Mart 24 – Cheras', 'Convenience Shop', 'main'], [`${P}-C`, 'DEMO RPT Grand Hotel – Melaka', 'Hotel', 'c2']]
 const put = async (entity, id, data) => { recs.push([entity, id]); const r = await admin.from('records').upsert({ entity, id, deleted: false, client_ts: new Date().toISOString(), data }); if (r.error) throw r.error }
 for (const [id, name, type, companyId] of OUT) await put('outlets', id, { id, name, type, companyId, address: 'DEMO address, Malaysia', manager: 'DEMO Manager' })
@@ -233,7 +236,7 @@ await admin.from('report_submissions').delete().in('schedule_id', [sid, sv2.data
 await admin.from('report_schedules').delete().in('id', [sid, sv2.data].filter(Boolean))
 for (const [entity, id] of recs) await admin.from('records').update({ deleted: true, client_ts: new Date().toISOString() }).eq('entity', entity).eq('id', id)
 for (const id of made) await admin.auth.admin.deleteUser(id).catch(() => {})
-if (cfgOld) await admin.from('app_config').update({ value: cfgOld }).eq('key', 'companies')
+await undoCos()
 }
 console.log(`\n${pass} passed, ${fail} failed`)
 process.exit(fail ? 1 : 0)

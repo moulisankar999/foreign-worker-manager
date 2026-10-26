@@ -4,6 +4,7 @@
 import { createRequire } from 'module'
 import fs from 'fs'
 import crypto from 'crypto'
+import { rid, cleanupOwn, makeCeo, keepConfig } from './_own.mjs'
 const require = createRequire(new URL('../package.json', import.meta.url))
 const { createClient } = require('@supabase/supabase-js')
 const LIVE_REF = 'gnepquxtwkyffjmoydnv'
@@ -12,8 +13,7 @@ const URL_ = env.TEST_SUPABASE_URL, ANON = env.TEST_ANON_KEY, SERVICE = env.TEST
 if (!URL_ || URL_.includes(LIVE_REF) || !URL_.includes(env.TEST_PROJECT_REF)) { console.error('ABORT: not the test project'); process.exit(1) }
 const opts = { auth: { persistSession: false, autoRefreshToken: false } }
 const admin = createClient(URL_, SERVICE, opts)
-{ const { data, error } = await admin.auth.admin.listUsers({ perPage: 1000 }); if (error) throw error
-  if (data.users.some((u) => !/@example\.com$/.test(u.email || ''))) { console.error('ABORT: project has real users'); process.exit(1) } }
+// suites only create/remove their own prefixed @example.com users, so other (real or other-work) users are left alone
 { const { error } = await admin.from('mock_provider_log').select('id').limit(1); if (error) { console.error('ABORT: mock provider not set up (run tests/deploy-test-functions.sh)'); process.exit(1) } }
 
 let pass = 0, fail = 0
@@ -22,7 +22,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 const pw = crypto.randomBytes(12).toString('hex'), stamp = Date.now()
 const users = {}
 async function mk(key) {
-  const email = `fwn-${key}-${stamp}@example.com`
+  const email = `${PFX}${key}-${stamp}@example.com`
   const { data, error } = await admin.auth.admin.createUser({ email, password: pw, email_confirm: true, user_metadata: { full_name: key.toUpperCase() } })
   if (error) throw error
   const c = createClient(URL_, ANON, opts)
@@ -30,25 +30,28 @@ async function mk(key) {
   return (users[key] = { id: data.user.id, c, email })
 }
 async function dispatch() {
-  for (let i = 0; i < 6; i++) {
+  for (let i = 0; i < 10; i++) {
     const r = await fetch(`${URL_}/functions/v1/notify-dispatch`, { method: 'POST', headers: { 'x-cron-secret': env.TEST_CRON_SECRET, 'Content-Type': 'application/json' }, body: '{}' })
     const j = await r.json()
-    const { count } = await admin.from('notification_deliveries').select('id', { count: 'exact', head: true }).in('status', ['queued', 'sending']).lte('next_attempt_at', new Date().toISOString())
+    const { count } = await myDel('id', { count: 'exact', head: true }).in('status', ['queued', 'sending']).lte('next_attempt_at', new Date(Date.now() + 15000).toISOString()) // this suite's rows only
     if (!count) return j
     await sleep(3000)
   }
 }
-const deliveries = async (event) => (await admin.from('notification_deliveries').select('*').eq('event', event).order('id')).data || []
+const T0 = new Date().toISOString()
+// only this suite's deliveries: its own users, or (worker-addressed, user_id null) rows created since it started
+const myDel = (cols = '*', o) => admin.from('notification_deliveries').select(cols, o).or(`user_id.in.(${Object.values(users).map((u) => u.id).join(',')}),and(user_id.is.null,created_at.gte.${T0})`)
+const deliveries = async (event) => (await myDel().eq('event', event).order('id')).data || []
 
 // fresh state (TEST project only)
-await admin.from('records').delete().neq('id', '__none__')
-await admin.from('requests').delete().neq('type', '__none__')
-await admin.from('documents').delete().neq('category', '__none__')
-await admin.from('notification_deliveries').delete().gte('id', 0)
-await admin.from('notification_events').delete().gte('id', 0)
-await admin.from('mock_provider_log').delete().gte('id', 0)
-await admin.from('whatsapp_inbound').delete().gte('id', 0)
-{ const { data } = await admin.auth.admin.listUsers({ perPage: 1000 }); for (const u of data.users) await admin.auth.admin.deleteUser(u.id) }
+const PFX = 'fwn-'
+const WAM = 'wamid.IN1-' + rid('x')
+await cleanupOwn(admin, PFX) // only this suite's own leftovers; never other work on TEST
+const O1_ = rid('O1'), O2_ = rid('O2'), W1_ = rid('W1'), W2_ = rid('W2')
+const restoreCfg = await keepConfig(admin, ['approval_rules', 'notifications'])
+// no global wipes: only look at (and later remove) log rows written after this point
+const maxId = async (t) => ((await admin.from(t).select('id').order('id', { ascending: false }).limit(1)).data?.[0]?.id ?? 0)
+const MP0 = await maxId('mock_provider_log'), WI0 = await maxId('whatsapp_inbound')
 const seed = (key) => JSON.parse(new RegExp(`\\('${key}', '(.+?)'::jsonb\\)`).exec(fs.readFileSync(new URL(`../supabase/migrations/${key === 'notifications' ? '006_whatsapp' : '003_roles_requests_vault'}.sql`, import.meta.url), 'utf8'))[1].replace(/''/g, "'"))
 const DEFAULT_CFG = seed('notifications')
 // providers are OFF by default; this test switches every channel on to exercise them against the mock provider
@@ -58,18 +61,18 @@ await admin.from('app_config').update({ value: { ...NCFG, smsSender: 'ACME', qui
 
 try {
   const S = await mk('super')
+  await makeCeo(admin, S.id)
   for (const k of ['hra', 'hrm', 'om1', 'om2']) await mk(k)
   const setRole = (who, role, outlet_ids = []) => S.c.from('profiles').update({ role, status: 'active', outlet_ids }).eq('id', users[who].id)
-  await setRole('hra', 'hr_admin'); await setRole('hrm', 'hr_manager'); await setRole('om1', 'outlet_manager', ['O1']); await setRole('om2', 'outlet_manager', ['O2'])
+  await setRole('hra', 'hr_admin'); await setRole('hrm', 'hr_manager'); await setRole('om1', 'outlet_manager', [O1_]); await setRole('om2', 'outlet_manager', [O2_])
   const ua = await deliveries('user_awaiting_approval')
   check('new sign-up queues "user awaiting approval" for user admins', ua.some((d) => d.user_id === S.id && d.channel === 'in_app'))
 
   // default config: outbound providers OFF → nothing but in-app/push is queued
   await admin.from('app_config').update({ value: { ...DEFAULT_CFG, smsSender: 'ACME' } }).eq('key', 'notifications')
-  await admin.rpc('notify', { p_event: 'emergency_submitted', p_worker: null, p_request: null, p_vars: {}, p_dedupe: 'off-test', p_users: [S.id] })
+  await admin.rpc('notify', { p_event: 'emergency_submitted', p_worker: null, p_request: null, p_vars: {}, p_dedupe: rid('off-test'), p_users: [S.id] })
   const off = await deliveries('emergency_submitted')
   check('default: WhatsApp/SMS/email master switches OFF → only in-app + push queued', off.length > 0 && off.every((d) => ['in_app', 'push'].includes(d.channel)), JSON.stringify(off.map((d) => d.channel)))
-  await admin.from('notification_deliveries').delete().gte('id', 0); await admin.from('notification_events').delete().gte('id', 0)
   await admin.from('app_config').update({ value: { ...NCFG, smsSender: 'ACME', quietHours: { ...NCFG.quietHours, enabled: false } } }).eq('key', 'notifications')
 
   // contact details
@@ -90,14 +93,14 @@ try {
   const now = () => new Date().toISOString()
   const W = (id, outletId, extra = {}) => ({ entity: 'workers', id, deleted: false, client_ts: now(), data: { id, workerNo: 'FW-' + id, fullName: 'Ram Bahadur ' + id, outletId, passportNo: 'PA1234567', phoneMY: '0134445555', documents: [], ...extra } })
   const in10 = new Date(Date.now() + 30 * 864e5).toISOString().slice(0, 10)
-  await S.c.rpc('push_records', { p_rows: [{ entity: 'outlets', id: 'O1', client_ts: now(), data: { id: 'O1', name: 'Outlet One' } }, { entity: 'outlets', id: 'O2', client_ts: now(), data: { id: 'O2', name: 'Outlet Two' } },
-    W('W1', 'O1', { waOptIn: true, waOptInAt: '2026-10-01', documents: [{ id: 'd1', type: 'Work permit (PLKS)', expiryDate: in10 }, { id: 'd2', type: 'Passport', expiryDate: '2020-01-01' }] }),
-    W('W2', 'O2', { documents: [{ id: 'd3', type: 'FOMEMA medical', expiryDate: '2021-01-01' }] })] })
+  await S.c.rpc('push_records', { p_rows: [{ entity: 'outlets', id: O1_, client_ts: now(), data: { id: O1_, name: 'Outlet One' } }, { entity: 'outlets', id: O2_, client_ts: now(), data: { id: O2_, name: 'Outlet Two' } },
+    W(W1_, O1_, { waOptIn: true, waOptInAt: '2026-10-01', documents: [{ id: 'd1', type: 'Work permit (PLKS)', expiryDate: in10 }, { id: 'd2', type: 'Passport', expiryDate: '2020-01-01' }] }),
+    W(W2_, O2_, { documents: [{ id: 'd3', type: 'FOMEMA medical', expiryDate: '2021-01-01' }] })] })
 
   // request → recipients by role + outlet
   const create = (who, type, wid, data = {}, amount = null) => users[who].c.rpc('request_create', { p_type: type, p_worker_id: wid, p_title: type, p_data: data, p_amount: amount, p_priority: 'normal' })
   const act = (who, id, action, comment = null) => users[who].c.rpc('request_act', { p_id: id, p_action: action, p_comment: comment, p_patch: null })
-  const q1 = await create('om1', 'annual_leave', 'W1', { from: '2026-12-01', to: '2026-12-05' })
+  const q1 = await create('om1', 'annual_leave', W1_, { from: '2026-12-01', to: '2026-12-05' })
   let sub = await deliveries('request_submitted')
   const subUsers = new Set(sub.filter((d) => d.channel === 'in_app').map((d) => d.user_id))
   check('submitted → HR manager notified (in-app)', sub.some((d) => d.user_id === users.hrm.id) && !sub.some((d) => d.user_id === users.hrm.id && d.channel === 'in_app'), 'opted out of in_app so only email/push')
@@ -116,35 +119,35 @@ try {
   check('leave decision → opted-in worker gets WhatsApp template on his own phone (+60)', wwa?.address === '+60134445555' && ['queued', 'sending', 'sent'].includes(wwa.status) && wwa.wa_template === 'fwm_worker_leave_update', JSON.stringify(ld))
 
   // emergency (critical) → SMS to HR manager with RM0 prefix, worker code, no name/link/phone
-  const em = await create('om1', 'emergency_leave', 'W1', { reasonKey: 'death', relationship: 'Mother', from: '2026-11-01', to: '2026-11-14' })
+  const em = await create('om1', 'emergency_leave', W1_, { reasonKey: 'death', relationship: 'Mother', from: '2026-11-01', to: '2026-11-14' })
   const es = await deliveries('emergency_submitted')
   const hrSms = es.find((d) => d.channel === 'sms' && d.user_id === users.hrm.id)
   check('emergency (critical), HR manager without WhatsApp opt-in → SMS fallback', !!hrSms && hrSms.address === '+60198887777' && !!hrSms.fallback_of, JSON.stringify(es.map((d) => [d.channel, d.status, d.user_id === users.hrm.id])))
   const hraWa = es.find((d) => d.channel === 'whatsapp' && d.user_id === users.hra.id)
-  check('emergency → opted-in HR admin queued on WhatsApp template fwm_emergency_leave', ['queued', 'sending', 'sent'].includes(hraWa?.status) && hraWa.wa_template === 'fwm_emergency_leave' && hraWa.vars?.workerNo === 'FW-W1', JSON.stringify(hraWa))
+  check('emergency → opted-in HR admin queued on WhatsApp template fwm_emergency_leave', ['queued', 'sending', 'sent'].includes(hraWa?.status) && hraWa.wa_template === 'fwm_emergency_leave' && hraWa.vars?.workerNo === 'FW-' + W1_, JSON.stringify(hraWa))
   check('opted-in HR admin gets no SMS', !es.some((d) => d.channel === 'sms' && d.user_id === users.hra.id))
   check('SMS starts with "RM0 ACME: "', hrSms?.body.startsWith('RM0 ACME: '), hrSms?.body)
-  check('SMS uses worker code, not name / passport', hrSms?.body.includes('FW-W1') && !hrSms.body.includes('Ram') && !hrSms.body.includes('PA1234567'), hrSms?.body)
+  check('SMS uses worker code, not name / passport', hrSms?.body.includes('FW-' + W1_) && !hrSms.body.includes('Ram') && !hrSms.body.includes('PA1234567'), hrSms?.body)
   check('SMS has no link and no phone number', !/https?:|www\.|#\/|\d{8,}/.test(hrSms?.body || ''), hrSms?.body)
   check('SMS fits one message (≤160)', (hrSms?.body.length || 999) <= 160)
   const em_mail = es.find((d) => d.channel === 'email' && d.user_id === users.hrm.id)
   check('email carries the deep link to the request', em_mail?.link?.includes('#/requests/' + em.data.id))
 
   // HR uploads home-leave ticket → OM notified; OM-uploaded emergency ticket → no ticket notice
-  const hl = await create('om1', 'home_leave', 'W1', { from: '2027-01-10', to: '2027-02-10' })
-  await users.hrm.c.from('documents').insert({ worker_id: 'W1', category: 'Flight ticket', title: 'AK ticket', file_path: 'vault/W1/t.pdf', request_id: hl.data.id, uploaded_by: users.hrm.id })
-  await users.om1.c.from('documents').insert({ worker_id: 'W1', category: 'Flight ticket', title: 'Emergency ticket', file_path: 'vault/W1/e.pdf', request_id: em.data.id, uploaded_by: users.om1.id })
+  const hl = await create('om1', 'home_leave', W1_, { from: '2027-01-10', to: '2027-02-10' })
+  await users.hrm.c.from('documents').insert({ worker_id: W1_, category: 'Flight ticket', title: 'AK ticket', file_path: 'vault/W1/t.pdf', request_id: hl.data.id, uploaded_by: users.hrm.id })
+  await users.om1.c.from('documents').insert({ worker_id: W1_, category: 'Flight ticket', title: 'Emergency ticket', file_path: 'vault/W1/e.pdf', request_id: em.data.id, uploaded_by: users.om1.id })
   const tu = await deliveries('ticket_uploaded')
   check('HR ticket upload → outlet manager notified in-app + SMS', tu.some((d) => d.user_id === users.om1.id && d.channel === 'in_app') && tu.some((d) => d.user_id === users.om1.id && d.channel === 'sms'), JSON.stringify(tu.map((d) => [d.channel, d.recipient])))
   check('ticket notice link opens the request', tu.find((d) => d.user_id === users.om1.id)?.link?.includes(hl.data.id))
   check('OM-uploaded emergency ticket does not trigger "ticket booked"', tu.filter((d) => d.channel === 'in_app').length === 1)
 
   // opt-out: non-critical honoured, critical not
-  await users.om1.c.rpc('push_records', { p_rows: [{ entity: 'remarks', id: 'RM1', client_ts: now(), data: { workerId: 'W1', text: 'late' } }] })
+  await users.om1.c.rpc('push_records', { p_rows: [{ entity: 'remarks', id: rid('RM1'), client_ts: now(), data: { workerId: W1_, text: 'late' } }] })
   const rm = await deliveries('remark_added')
   check('opt-out honoured for non-critical (HR manager remark email)', rm.some((d) => d.user_id === users.hrm.id) && !rm.some((d) => d.user_id === users.hrm.id && d.channel === 'email'))
   await users.hrm.c.rpc('update_my_contact', { p_phone: '0198887777', p_optout: ['emergency_submitted:sms'] })
-  await create('om1', 'emergency_leave', 'W1', { reasonKey: 'accident', relationship: 'Brother', from: '2026-11-20', to: '2026-11-25' })
+  await create('om1', 'emergency_leave', W1_, { reasonKey: 'accident', relationship: 'Brother', from: '2026-11-20', to: '2026-11-25' })
   const es2 = (await deliveries('emergency_submitted')).filter((d) => d.user_id === users.hrm.id && d.channel === 'sms')
   check('critical events ignore personal opt-out', es2.length === 2)
 
@@ -153,34 +156,34 @@ try {
   const exp = await deliveries('doc_expiring'), ex2 = await deliveries('doc_expired')
   check('sweep queues "expiring in 30 days" to HR + the outlet manager', exp.some((d) => d.user_id === users.om1.id) && exp.some((d) => d.user_id === users.hrm.id), JSON.stringify(sw))
   check('sweep queues "expired" (critical; SMS fallback for people without WhatsApp)', ex2.some((d) => d.channel === 'sms' && d.fallback_of))
-  check('running the sweep twice does not duplicate', (await admin.from('notification_events').select('id').eq('event', 'doc_expiring')).data.length === 1)
+  check('running the sweep twice does not duplicate', (await admin.from('notification_events').select('id').eq('event', 'doc_expiring').eq('worker_id', W1_)).data.length === 1)
   check('expired doc of outlet-2 worker → opted-in OM2 queued on WhatsApp', ex2.some((d) => d.user_id === users.om2.id && d.channel === 'whatsapp'))
   check('expiry notice not sent to other outlet manager', !exp.some((d) => d.user_id === users.om2.id))
 
   // dispatch through the mock providers
   const dj = await dispatch()
-  const log = (await admin.from('mock_provider_log').select('*').order('id')).data
+  const log = (await admin.from('mock_provider_log').select('*').gt('id', MP0).order('id')).data
   const smsCalls = log.filter((l) => l.path.startsWith('/sms')), mailCalls = log.filter((l) => l.path.startsWith('/email'))
   check('dispatcher used OneWaySMS adapter (GET with apiusername/mobileno/languagetype)', smsCalls.length > 0 && smsCalls.every((c) => c.query.apiusername === 'mock-user' && /^60\d+$/.test(c.query.mobileno) && c.query.languagetype === '1'), JSON.stringify(dj))
   check('every SMS sent starts with RM0 and has no URL', smsCalls.every((c) => c.query.message.startsWith('RM0 ACME: ') && !/https?:|www\./.test(c.query.message)))
   check('dispatcher used Brevo adapter for email', mailCalls.length > 0 && mailCalls.every((c) => c.has_key && JSON.parse(c.body).sender.email === 'noreply@example.com'))
   check('email html has "Open in FW Manager" link', mailCalls.some((c) => JSON.parse(c.body).htmlContent.includes('#/requests/')))
-  const sent = (await admin.from('notification_deliveries').select('channel,status,cost,provider,provider_id').in('channel', ['sms', 'email'])).data
+  const sent = (await myDel('channel,status,cost,provider,provider_id').in('channel', ['sms', 'email'])).data
   const smsSent = sent.filter((d) => d.channel === 'sms' && d.status === 'sent')
   check('SMS delivery logged with provider id and cost RM0.115', smsSent.length > 0 && smsSent.every((d) => d.provider === 'onewaysms' && d.provider_id && Number(d.cost) === 0.115), JSON.stringify(smsSent.slice(0, 2)))
-  const push = (await admin.from('notification_deliveries').select('status,last_error').eq('channel', 'push').limit(1)).data[0]
-  check('push without VAPID keys → skipped "provider not configured" (not failed)', push?.status === 'skipped' && /not configured/.test(push.last_error), JSON.stringify(push))
-  check('no SMS/email deliveries failed', !(await admin.from('notification_deliveries').select('id,last_error').eq('status', 'failed').neq('channel', 'whatsapp')).data.length)
+  const push = (await myDel('status,last_error').eq('channel', 'push').limit(1)).data[0]
+  check('push with no keys or no subscribed device → skipped (not failed)', push?.status === 'skipped' && /not configured|no device subscribed/.test(push.last_error), JSON.stringify(push))
+  check('no SMS/email deliveries failed', !(await myDel('id,last_error').eq('status', 'failed').neq('channel', 'whatsapp')).data.length)
 
   // WhatsApp Cloud API through the mock Graph endpoint
   const graph = log.filter((l) => l.path.includes('/messages'))
   const g = graph.map((c) => JSON.parse(c.body))
   const ge = g.find((b) => b.template?.name === 'fwm_emergency_leave')
   check('Graph POST /{PHONE_NUMBER_ID}/messages with approved template + params', graph.every((c) => c.path.includes('/mock-phone/messages')) && ge?.messaging_product === 'whatsapp' && ge.to === '60176665555'
-    && ge.template.language.code === 'en' && ge.template.components[0].parameters.length === 3 && ge.template.components[0].parameters[1].text === 'FW-W1', JSON.stringify(ge))
+    && ge.template.language.code === 'en' && ge.template.components[0].parameters.length === 3 && ge.template.components[0].parameters[1].text === 'FW-' + W1_, JSON.stringify(ge))
   check('template URL button carries the deep link path', ge?.template.components[1]?.parameters[0].text.startsWith('requests/'), JSON.stringify(ge?.template.components))
   check('Graph API version is current (v26.0 default)', graph[0]?.path.includes('/v26.0/'), graph[0]?.path)
-  const waSent = (await admin.from('notification_deliveries').select('*').eq('channel', 'whatsapp').eq('status', 'sent')).data
+  const waSent = (await myDel().eq('channel', 'whatsapp').eq('status', 'sent')).data
   check('WhatsApp delivery logged: wamid + cost RM0.0564', waSent.length > 0 && waSent.every((d) => d.provider_id?.startsWith('wamid.') && Number(d.cost) === 0.0564), JSON.stringify(waSent.slice(0, 1)))
   const om2wa = (await admin.from('notification_deliveries').select('*').eq('channel', 'whatsapp').eq('user_id', users.om2.id)).data
   const om2fb = (await admin.from('notification_deliveries').select('*').eq('channel', 'sms').eq('user_id', users.om2.id)).data
@@ -205,17 +208,17 @@ try {
   const cf = (await admin.from('notification_deliveries').select('status,last_error,cost').eq('id', crit.id).single()).data
   const cfb = (await admin.from('notification_deliveries').select('id').eq('fallback_of', crit.id)).data
   check('webhook "failed" → delivery failed (cost 0) + SMS fallback queued', cf.status === 'failed' && /131049/.test(cf.last_error) && Number(cf.cost) === 0 && cfb.length === 1, JSON.stringify([cf, cfb]))
-  await hook({ object: 'whatsapp_business_account', entry: [{ changes: [{ value: { contacts: [{ wa_id: '60176665555', profile: { name: 'HRA' } }], messages: [{ id: 'wamid.IN1', from: '60176665555', type: 'text', text: { body: 'STOP' } }] } }] }] })
-  const inb = (await admin.from('whatsapp_inbound').select('*').eq('wamid', 'wamid.IN1')).data[0]
+  await hook({ object: 'whatsapp_business_account', entry: [{ changes: [{ value: { contacts: [{ wa_id: '60176665555', profile: { name: 'HRA' } }], messages: [{ id: WAM, from: '60176665555', type: 'text', text: { body: 'STOP' } }] } }] }] })
+  const inb = (await admin.from('whatsapp_inbound').select('*').eq('wamid', WAM)).data[0]
   const hra2 = (await admin.from('profiles').select('wa_optin').eq('id', users.hra.id).single()).data
   check('inbound reply logged + linked to user; STOP withdraws opt-in', inb?.user_id === users.hra.id && inb.action === 'opt_out' && hra2.wa_optin === false, JSON.stringify([inb, hra2]))
   const ib = await users.hra.c.from('whatsapp_inbound').select('id')
-  check('inbound log readable by Super Admin only', (ib.data || []).length === 0 && (await S.c.from('whatsapp_inbound').select('id')).data.length === 1)
+  check('inbound log readable by Super Admin only', (ib.data || []).length === 0 && (await S.c.from('whatsapp_inbound').select('id').gt('id', WI0)).data.length === 1)
   // template admin (mock Meta)
   const wa = await fetch(`${URL_}/functions/v1/wa-admin`, { method: 'POST', headers: { Authorization: 'Bearer ' + (await S.c.auth.getSession()).data.session.access_token, 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'submit' }) }).then((r) => r.json())
   const subm = Object.values(wa.results || {}).filter((x) => String(x).startsWith('submitted')).length
   check('wa-admin submits missing templates and stores approval status', subm >= 20 && wa.results['fwm_ticket_ready:en'] === 'already on account' && wa.items?.['hello_world:en_US']?.status === 'APPROVED', JSON.stringify(wa).slice(0, 300))
-  const posted = (await admin.from('mock_provider_log').select('body').like('path', '%message_templates').eq('method', 'POST')).data.map((x) => JSON.parse(x.body))
+  const posted = (await admin.from('mock_provider_log').select('body').gt('id', MP0).like('path', '%message_templates').eq('method', 'POST')).data.map((x) => JSON.parse(x.body))
   check('submitted templates are UTILITY, no app metadata, app URL filled in', posted.length && posted.every((t) => t.category === 'UTILITY' && !t.fwm && !JSON.stringify(t).includes('__APP_URL__')))
   const wa2 = await fetch(`${URL_}/functions/v1/wa-admin`, { method: 'POST', headers: { Authorization: 'Bearer ' + (await users.hra.c.auth.getSession()).data.session.access_token }, body: '{}' })
   check('wa-admin is Super Admin only', wa2.status === 403)
@@ -223,8 +226,8 @@ try {
   // quiet hours defer non-critical, not critical
   const t = new Date(Date.now() + 8 * 3600e3), hh = (h) => String((t.getUTCHours() + h + 24) % 24).padStart(2, '0') + ':00'
   await admin.from('app_config').update({ value: { ...NCFG, smsSender: 'ACME', quietHours: { enabled: true, start: hh(-1), end: hh(2) } } }).eq('key', 'notifications')
-  await create('om1', 'salary_advance', 'W1', { month: '2026-11' }, 100)
-  await create('om1', 'emergency_leave', 'W1', { reasonKey: 'own_medical', from: '2026-12-20', to: '2026-12-22' })
+  await create('om1', 'salary_advance', W1_, { month: '2026-11' }, 100)
+  await create('om1', 'emergency_leave', W1_, { reasonKey: 'own_medical', from: '2026-12-20', to: '2026-12-22' })
   await dispatch()
   const nc = (await deliveries('request_submitted')).filter((d) => d.channel === 'email').at(-1)
   const cr = (await deliveries('emergency_submitted')).filter((d) => d.channel === 'email').at(-1)
@@ -251,5 +254,7 @@ try {
   const t2 = await users.hrm.c.rpc('notify_test', { p_channel: 'email' })
   check('only super admin can send test messages', !!t2.error)
 } catch (e) { fail++; console.log('FAIL exception', e.stack || e) }
+await admin.from('mock_provider_log').delete().gt('id', MP0); await admin.from('whatsapp_inbound').delete().gt('id', WI0)
+await cleanupOwn(admin, PFX); await restoreCfg()
 console.log(`\n${pass} passed, ${fail} failed`)
 process.exit(fail ? 1 : 0)
