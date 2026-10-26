@@ -14,7 +14,9 @@ import { useSettings, useWorkers } from '../lib/hooks'
 import { useConfig } from '../lib/config'
 import { scopeLabel } from '../lib/companies'
 import { useSignOut } from './userMenu'
-import { PendingItem, ScopePicker, byLine } from './userApprovals'
+import { PendingTable, ScopePicker, byLine } from './userApprovals'
+import { DataTable, Details } from './dataTable'
+import { Actions, IconAction } from './iconAction'
 import { StatusChip, UserActionButtons, at, statusLine, useUserPerms } from './userActions'
 import { setDirty, toast } from './toast'
 import { AddUserDialog } from './addUser'
@@ -95,7 +97,8 @@ const roleName = (r?: string) => ROLE_LABEL[normRole(r) || ''] || '—'
 export function UsersCard() {
   const { session, isSuper, isGm, myCompanies, myOutlets, canApproveUsers, creatableRoles } = useAuth()
   const [adding, setAdding] = useState(false)
-  const [focus, setFocus] = useState('')
+  const [focus, setFocus] = useState<{ key: string } | null>(null)
+  const [dirtyIds, setDirtyIds] = useState<string[]>([])
   const companies = useConfig().companies.items
   const [users, setUsers] = useState<Profile[]>([])
   const [err, setErr] = useState('')
@@ -119,25 +122,47 @@ export function UsersCard() {
   const roles = ROLES.filter((r) => r !== 'super_admin' && (isSuper || (r !== 'general_manager' && (isGm || r !== 'hr_admin'))))
   // what a company-limited HR Admin may hand out: only his own companies
   const allowed: string[] | '*' = isSuper || isGm || (!myCompanies.length && !myOutlets.length) ? '*' : myCompanies
+  // the CEO's row is only "name + CEO" for everyone else
+  const hiddenCeo = (u: Profile) => !isSuper && normRole(u.role) === 'super_admin'
   return (
-    <Card title={`Users (${users.length})`} actions={<>{creatableRoles.length > 0 && <Btn small kind="primary" icon="plus" onClick={() => setAdding(true)}>Add user</Btn>}<Btn small kind="ghost" icon="upload" title="Refresh" onClick={load} /></>}>
+    <Card title={`Users (${users.length})`} actions={<>{creatableRoles.length > 0 && <Btn small kind="primary" icon="plus" onClick={() => setAdding(true)}>Add user</Btn>}<IconAction kind="refresh" label="Refresh the list" onClick={() => void load()} /></>}>
       <p className="muted small">Staff can create their own account on the sign-in page (“Create account”) and wait for approval{creatableRoles.length > 0 ? <> — or press <strong>Add user</strong> to add someone directly (active at once, with a temporary password)</> : ''}. New sign-ups appear on the dashboard under <strong>Needs my action</strong> and here — approve them, pick their role and the companies / outlets they work for.</p>
-      {adding && <AddUserDialog onClose={() => { setAdding(false); void load() }} onEditExisting={(id) => { setAdding(false); setFocus(id); setTimeout(() => document.getElementById('user-' + id)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 150) }} />}
+      {adding && <AddUserDialog onClose={() => { setAdding(false); void load() }} onEditExisting={(id) => { setAdding(false); setFocus({ key: id }) }} />}
       <ul className="small muted role-help">{ROLES.filter((r) => isSuper || r !== 'general_manager').map((r) => <li key={r}><strong>{ROLE_LABEL[r]}</strong>: {ROLE_HELP[r]}</li>)}</ul>
       {err && <p className="err">{err}</p>}
       <div className="row gap-s wrap small"><Chip tone="green">Active {counts.active}</Chip><Chip tone="amber">Paused {counts.paused}</Chip><Chip tone="blue">Pending {pending.length}</Chip>{deleted.length > 0 && <Chip tone="red">Deleted {deleted.length}</Chip>}</div>
       {pending.length > 0 && <>
         <p className="warn small">{pending.length} person(s) waiting for approval</p>
-        {canApproveUsers && <ul className="rows users">{pending.map((u) => <PendingItem key={u.id} u={u} companies={companies} outlets={outlets} />)}</ul>}
+        {canApproveUsers && <PendingTable users={pending} companies={companies} outlets={outlets} />}
       </>}
-      <ul className="rows users">
-        {others.map((u) => <UserRow key={u.id} focus={focus === u.id} u={u} me={session?.user.id} roles={roles} allowed={allowed} companies={companies} outlets={outlets} may={permsFor(u)} onSaved={load} />)}
-      </ul>
+      <DataTable label="Users" rows={others} rowKey={(u) => u.id} rowId={(u) => 'user-' + u.id} rowTestId={(u) => `user-${u.email}`} open={focus}
+        rowClass={(u) => `${dirtyIds.includes(u.id) ? 'is-dirty' : ''}${focus?.key === u.id ? ' is-focus' : ''}${u.status === 'paused' ? ' dt-warn' : ''}`}
+        search={(u) => hiddenCeo(u) ? (u.full_name || u.email || '') : `${u.full_name} ${u.email} ${roleName(u.role)} ${u.status}`} searchLabel="Search users"
+        filters={[
+          { key: 'role', label: 'Role', options: ROLES.filter((r) => isSuper || r !== 'general_manager').map((r) => ({ value: r, label: ROLE_LABEL[r] })), match: (u, v) => normRole(u.role) === v },
+          { key: 'status', label: 'Status', options: [{ value: 'active', label: 'Active' }, { value: 'paused', label: 'Paused' }, { value: 'inactive', label: 'Switched off' }], match: (u, v) => !hiddenCeo(u) && u.status === v },
+        ]}
+        initialSort={{ key: 'name', dir: 'asc' }}
+        canExpand={(u) => !hiddenCeo(u)}
+        columns={[
+          { key: 'name', label: 'Name', main: true, sort: (u) => (u.full_name || u.email || '').toLowerCase(),
+            render: (u) => <>{u.full_name || u.email || 'user'}{u.id === session?.user.id ? ' (you)' : ''}{!hiddenCeo(u) && <small>{u.email}</small>}</> },
+          { key: 'role', label: 'Role', sort: (u) => ROLES.indexOf(normRole(u.role) as Role), render: (u) => <><Chip tone={ROLE_TONE[normRole(u.role) || ''] || 'gray'}>{hiddenCeo(u) ? 'CEO' : roleName(u.role)}</Chip>{!hiddenCeo(u) && LEGACY[u.role as string] && <> <Chip tone="amber">{LEGACY[u.role as string]}</Chip></>}</> },
+          { key: 'status', label: 'Status', hide: 'phone', sort: (u) => (hiddenCeo(u) ? '' : u.status), render: (u) => (hiddenCeo(u) ? null : <StatusChip u={u} />) },
+          { key: 'scope', label: 'Sees', hide: 'tablet', render: (u) => (hiddenCeo(u) ? null : <ScopeText u={u} companies={companies} outlets={outlets} />) },
+        ]}
+        actions={(u) => (hiddenCeo(u) ? null : <Actions><UserActionButtons u={u} may={permsFor(u)} onDone={load} /></Actions>)}
+        expand={(u) => <UserRow u={u} me={session?.user.id} roles={roles} allowed={allowed} companies={companies} outlets={outlets} may={permsFor(u)} onSaved={load}
+          onDirty={(on) => setDirtyIds((l) => (on ? (l.includes(u.id) ? l : [...l, u.id]) : l.filter((x) => x !== u.id)))} />} />
       {deleted.length > 0 && <>
         <button type="button" className="link small" onClick={() => setShowDel(!showDel)}>{showDel ? 'Hide deleted users' : `Deleted users (${deleted.length})`}</button>
-        {showDel && <ul className="rows compact">{deleted.map((u) => (
-          <li key={u.id}><div className="r-main"><strong>{u.full_name || u.email}</strong><small className="muted">Login removed by {u.deleted_by_name || '—'} · {at(u.deleted_at)} · history kept</small></div></li>
-        ))}</ul>}
+        {showDel && <DataTable label="Deleted users" dense rows={deleted} rowKey={(u) => u.id} initialSort={{ key: 'when', dir: 'desc' }}
+          rowClass={() => 'dt-muted'}
+          columns={[
+            { key: 'name', label: 'Name', main: true, sort: (u) => (u.full_name || u.email || '').toLowerCase(), render: (u) => <>{u.full_name || u.email}<small>history kept</small></> },
+            { key: 'by', label: 'Removed by', hide: 'phone', render: (u) => u.deleted_by_name || '—' },
+            { key: 'when', label: 'When', sort: (u) => u.deleted_at || '', render: (u) => <span className="small">{at(u.deleted_at)}</span> },
+          ]} />}
       </>}
     </Card>
   )
@@ -146,9 +171,9 @@ export function UsersCard() {
 const LEGACY: Record<string, string> = { admin: 'Admin (old role)', manager: 'Manager (old role)' }
 const sameSet = (a: string[], b: string[]) => a.length === b.length && a.every((x) => b.includes(x))
 
-/** One user in Settings → Users: edit role / companies / outlets, then press "Update" (nothing saves on change). */
-function UserRow({ u, me, roles, allowed, companies, outlets, may, onSaved, focus }: {
-  focus?: boolean; u: Profile; me?: string; roles: Role[]; allowed: string[] | '*'; companies: ReturnType<typeof useConfig>['companies']['items']
+/** One user's opened row in Settings → Users: details + edit role / companies / outlets, then press "Update" (nothing saves on change). */
+function UserRow({ u, me, roles, allowed, companies, outlets, may, onSaved, onDirty }: {
+  onDirty: (on: boolean) => void; u: Profile; me?: string; roles: Role[]; allowed: string[] | '*'; companies: ReturnType<typeof useConfig>['companies']['items']
   outlets: Outlet[]; may: ReturnType<ReturnType<typeof useUserPerms>>; onSaved: () => Promise<void> | void
 }) {
   const { isSuper, isGm, can } = useAuth()
@@ -163,13 +188,11 @@ function UserRow({ u, me, roles, allowed, companies, outlets, may, onSaved, focu
   const changed = d.role !== saved.role || !sameSet(d.companies, saved.companies) || !sameSet(d.outlets, saved.outlets)
   const dirty = changed || !!legacy
   const name = u.full_name || u.email || 'user'
-  useEffect(() => { setDirty('user:' + u.id, changed, name, '#/settings/users'); return () => setDirty('user:' + u.id, false) }, [changed, name, u.id])
+  useEffect(() => { setDirty('user:' + u.id, changed, name, '#/settings/users'); onDirty(changed); return () => { setDirty('user:' + u.id, false); onDirty(false) } }, [changed, name, u.id]) // eslint-disable-line react-hooks/exhaustive-deps
   const self = u.id === me
   // the CEO's row is only "name + CEO" for everyone else; GM rows are CEO-only
   const target = saved.role
-  if (!isSuper && target === 'super_admin') {
-    return <li className="user-row"><div className="r-main"><strong>{name}</strong><small><Chip tone="purple">CEO</Chip></small></div></li>
-  }
+  if (!isSuper && target === 'super_admin') return null
   const locked = self || (isGm && !can('users.roles')) || (!isSuper && (target === 'general_manager' || (!isGm && target === 'hr_admin')))
   const scoped = d.outlets.length + d.companies.length > 0
   const by = byLine(u)
@@ -199,23 +222,15 @@ function UserRow({ u, me, roles, allowed, companies, outlets, may, onSaved, focu
     await onSaved()
   }
   return (
-    <li id={'user-' + u.id} className={`user-row${changed ? ' is-dirty' : ''}${focus ? ' is-focus' : ''}`} data-testid={`user-${u.email}`}>
-      <div className="r-main">
-        <strong>{name}{self ? ' (you)' : ''}</strong>
-        <small>{u.email} · <StatusChip u={u} /> <Chip tone={ROLE_TONE[saved.role]}>{ROLE_LABEL[saved.role]}</Chip>{legacy && <> <Chip tone="amber">{legacy}</Chip></>}</small>
-        {saved.role !== 'super_admin' && saved.role !== 'general_manager' && (
-          <small className={saved.role === 'outlet_manager' && !(saved.outlets.length + saved.companies.length) ? 'warn' : 'muted'}>
-            {saved.role === 'outlet_manager' ? 'Outlets: ' : 'Sees: '}
-            {saved.outlets.length + saved.companies.length ? scopeLabel(companies, outlets, saved.companies, saved.outlets) : saved.role === 'outlet_manager' ? 'none yet — he will see no workers' : 'all companies'}
-          </small>
-        )}
-        {by && <small className="muted">{by}</small>}
-        {sl && <small className={u.status === 'paused' ? 'warn' : 'muted'}>{sl}</small>}
-        {may.lastSuper && !self && <small className="muted">Last active CEO — cannot be paused or deleted.</small>}
-      </div>
-      <div className="r-act">
-        <UserActionButtons u={u} may={may} onDone={onSaved} />
-      </div>
+    <div className="user-row">
+      <Details items={[
+        ['Email', u.email],
+        ['Status', <StatusChip u={u} />],
+        [saved.role === 'outlet_manager' ? 'Outlets' : 'Sees', saved.role !== 'super_admin' && saved.role !== 'general_manager' && <ScopeText u={u} companies={companies} outlets={outlets} />],
+        ['History', [by, sl].filter(Boolean).join(' · ')],
+      ]} />
+      {may.lastSuper && !self && <p className="small muted">Last active CEO — cannot be paused or deleted.</p>}
+      {locked && self && <p className="small muted">This is you — someone else changes your own role.</p>}
       {!locked && (
         <div className="user-edit">
           <label className="small">Role{' '}
@@ -243,8 +258,16 @@ function UserRow({ u, me, roles, allowed, companies, outlets, may, onSaved, focu
           {msg && <span className={`small ${msg.ok ? 'saved-tick' : 'err'}`} role="status">{msg.ok ? '✓ ' : ''}{msg.text}</span>}
         </div>
       )}
-    </li>
+    </div>
   )
+}
+
+/** "Sees: …" / "Outlets: …" for a user */
+function ScopeText({ u, companies, outlets }: { u: Profile; companies: ReturnType<typeof useConfig>['companies']['items']; outlets: Outlet[] }) {
+  const r = normRole(u.role)
+  if (r === 'super_admin' || r === 'general_manager') return <span className="small muted">All companies</span>
+  const n = (u.outlet_ids?.length || 0) + (u.company_ids?.length || 0)
+  return <span className={`small${r === 'outlet_manager' && !n ? ' warn' : ''}`}>{n ? scopeLabel(companies, outlets, u.company_ids || [], u.outlet_ids || []) : r === 'outlet_manager' ? 'No outlets yet — he sees no workers' : 'All companies'}</span>
 }
 
 export function PhoneAlertsCard() {

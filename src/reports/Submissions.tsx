@@ -6,6 +6,8 @@ import { useConfig } from '../lib/config'
 import { isDemoCompany, useHideDemo } from '../lib/demo'
 import { fmtDate, todayISO } from '../lib/util'
 import { FREQ_LABEL, STATE_LABEL, STATE_TONE, STEPS, canDoStep, deleteSchedule, doStep, periodLabel, periodOf, periodsFor, saveSchedule, subState, type Freq, type Schedule, type StepKey, type Submission } from './subsData'
+import { DataTable, Details } from '../components/dataTable'
+import { Actions, IconAction } from '../components/iconAction'
 import type { ReportDef } from './types'
 
 export interface Task { s: Schedule; period: string; sub?: Submission; state: ReturnType<typeof subState> }
@@ -67,43 +69,47 @@ export function SubmissionsPanel({ defs, schedules, submissions, error, onOpen }
         actions={<label className="small" style={{ display: 'flex', gap: 6, alignItems: 'center' }}><input type="checkbox" checked={showFiled} onChange={(e) => setShowFiled(e.target.checked)} /> Show filed</label>}>
         <p className="muted small">Print the report, collect the signatures in order (HR Manager → HR Admin → General Manager → CEO), then file the signed copy. Each step is recorded with the name and time.</p>
         {!list.length && <p className="muted center">Nothing due right now.</p>}
-        <div className="tbl-wrap">
-          <table className="tbl">
-            <thead><tr><th>Report</th><th>Period</th><th>Due</th><th>Status</th><th>Progress</th><th /></tr></thead>
-            <tbody>{list.map((t) => (
-              <tr key={t.s.id + t.period}>
-                <td><b>{t.s.title}</b><div className="muted small">{FREQ_LABEL[t.s.frequency]}</div></td>
-                <td>{periodLabel(t.period)}</td>
-                <td>{fmtDate(t.state.due)}<div className={'small ' + (t.state.days < 0 ? 'neg' : 'muted')}>{t.state.state === 'filed' ? '' : t.state.days < 0 ? `${-t.state.days} days late` : `in ${t.state.days} days`}</div></td>
-                <td><span className={'rpt-tag ' + STATE_TONE[t.state.state]}>{STATE_LABEL[t.state.state]}</span></td>
-                <td><div className="rpt-steps">{STEPS.map((s) => { const d = t.sub?.steps[s.key]; return <span key={s.key} className={'rpt-step' + (d ? ' done' : '')} title={d ? `${d.by_name || ''} · ${new Date(d.at).toLocaleString('en-MY', { timeZone: 'Asia/Kuala_Lumpur' })} MYT${d.note ? ' · ' + d.note : ''}` : s.who}>{s.label}</span> })}</div>
-                  {t.sub?.file_ref && <div className="muted small">File: {t.sub.file_ref}</div>}</td>
-                <td><div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                  <Btn small icon="print" onClick={() => onOpen(t)}>Open &amp; print</Btn>
-                  {SIGN_STEPS.filter((k) => canDoStep(k, role, t.sub?.steps || {}, session?.user.id).ok && !(k === 'filed' && t.sub?.steps.filed)).slice(0, 1).map((k) => (
-                    <Btn key={k} small kind="primary" disabled={!!busy} onClick={() => step(t, k)}>{k === 'filed' ? 'Mark filed' : `Sign: ${STEPS.find((s) => s.key === k)!.label.replace(' & signed', '')}`}</Btn>
-                  ))}
-                  {isCeo && t.sub && <Btn small kind="ghost" disabled={!!busy} onClick={() => step(t, 'reset')}>Reset</Btn>}
-                </div></td>
-              </tr>
-            ))}</tbody>
-          </table>
-        </div>
+        {list.length > 0 && <DataTable label="Required printed submissions" className="subs-t" rows={list} rowKey={(t) => t.s.id + t.period} rowTestId={() => 'sub-row'}
+          initialSort={{ key: 'due', dir: 'asc' }} search={(t) => `${t.s.title} ${periodLabel(t.period)} ${STATE_LABEL[t.state.state]}`} searchLabel="Search submissions"
+          filters={[{ key: 'st', label: 'Status', options: [...new Set(list.map((t) => t.state.state))].map((x) => ({ value: x, label: STATE_LABEL[x] })), match: (t, v) => t.state.state === v }]}
+          rowClass={(t) => (t.state.state === 'overdue' ? 'dt-bad' : t.state.state === 'due' ? 'dt-warn' : '')}
+          columns={[
+            { key: 'rep', label: 'Report', main: true, sort: (t) => t.s.title.toLowerCase(), render: (t) => <><b>{t.s.title}</b><small>{FREQ_LABEL[t.s.frequency]}</small></> },
+            { key: 'per', label: 'Period', sort: (t) => t.period, render: (t) => periodLabel(t.period) },
+            { key: 'due', label: 'Due', hide: 'phone', sort: (t) => t.state.due, render: (t) => <>{fmtDate(t.state.due)}<div className={'small ' + (t.state.days < 0 ? 'neg' : 'muted')}>{t.state.state === 'filed' ? '' : t.state.days < 0 ? `${-t.state.days} days late` : `in ${t.state.days} days`}</div></> },
+            { key: 'st', label: 'Status', sort: (t) => t.state.state, render: (t) => <span className={'rpt-tag ' + STATE_TONE[t.state.state]}>{STATE_LABEL[t.state.state]}</span> },
+            { key: 'prog', label: 'Progress', hide: 'tablet', render: (t) => <div className="rpt-steps">{STEPS.map((s) => { const d = t.sub?.steps[s.key]; return <span key={s.key} className={'rpt-step' + (d ? ' done' : '')} title={d ? `${d.by_name || ''} · ${new Date(d.at).toLocaleString('en-MY', { timeZone: 'Asia/Kuala_Lumpur' })} MYT${d.note ? ' · ' + d.note : ''}` : s.who}>{s.label}</span> })}</div> },
+          ]}
+          actions={(t) => (
+            <Actions>
+              <IconAction kind="print" label="Open & print" onClick={() => onOpen(t)} />
+              {SIGN_STEPS.filter((k) => canDoStep(k, role, t.sub?.steps || {}, session?.user.id).ok && !(k === 'filed' && t.sub?.steps.filed)).slice(0, 1).map((k) => (
+                <IconAction key={k} kind="approve" tone="pri" text disabled={!!busy} onClick={() => step(t, k)} label={k === 'filed' ? 'Mark filed' : `Sign: ${STEPS.find((s) => s.key === k)!.label.replace(' & signed', '')}`} />
+              ))}
+              {isCeo && t.sub && <IconAction kind="reset" label="Reset the sign-off" disabled={!!busy} onClick={() => step(t, 'reset')} />}
+            </Actions>
+          )}
+          expand={(t) => (
+            <>
+              <Details items={[['Every', FREQ_LABEL[t.s.frequency]], ['Period', periodLabel(t.period)], ['Due', fmtDate(t.state.due)], ['File reference', t.sub?.file_ref]]} />
+              <ol className="sub-steps">{STEPS.map((s) => { const d = t.sub?.steps[s.key]; return <li key={s.key} className={d ? 'done' : ''}><b>{s.label}</b> — {d ? `${d.by_name || ''} · ${new Date(d.at).toLocaleString('en-MY', { timeZone: 'Asia/Kuala_Lumpur' })} MYT${d.note ? ' · ' + d.note : ''}` : <span className="muted">{s.who}</span>}</li> })}</ol>
+            </>
+          )} />}
       </Card>
 
       {(canSchedule || schedules.length > 0) && (
         <Card title="Schedules" actions={canSchedule ? <Btn small kind="primary" icon="plus" onClick={() => setEdit({ frequency: 'monthly', due_day: 7, active: true, filters: {} })}>Add required report</Btn> : undefined}>
           {!schedules.length && <p className="muted">No required printed reports yet. {canSchedule ? 'Add one to ask HR to print, sign and file it on a routine.' : ''}</p>}
-          <div className="tbl-wrap"><table className="tbl">
-            <thead><tr><th>Report</th><th>Every</th><th>Due</th><th>Company</th><th>Set by</th><th /></tr></thead>
-            <tbody>{schedules.map((s) => (
-              <tr key={s.id} className={s.active ? '' : 'muted'}>
-                <td><b>{s.title}</b>{!s.active && <span className="rpt-tag"> paused</span>}{s.notes && <div className="muted small">{s.notes}</div>}</td>
-                <td>{FREQ_LABEL[s.frequency]}</td><td>Day {s.due_day} after the period</td><td>{s.company_id ? companyName(companies, s.company_id) : 'All companies'}</td><td>{s.created_by_name}</td>
-                <td>{canSchedule && <Btn small onClick={() => setEdit(s)}>Edit</Btn>}</td>
-              </tr>
-            ))}</tbody>
-          </table></div>
+          {schedules.length > 0 && <DataTable label="Schedules" rows={schedules} rowKey={(s) => s.id} rowClass={(s) => (s.active ? '' : 'dt-muted')}
+            columns={[
+              { key: 'rep', label: 'Report', main: true, sort: (s) => s.title.toLowerCase(), render: (s) => <><b>{s.title}</b>{!s.active && <span className="rpt-tag"> paused</span>}</> },
+              { key: 'ev', label: 'Every', sort: (s) => s.frequency, render: (s) => FREQ_LABEL[s.frequency] },
+              { key: 'due', label: 'Due', hide: 'tablet', render: (s) => `Day ${s.due_day} after the period` },
+              { key: 'co', label: 'Company', hide: 'phone', render: (s) => (s.company_id ? companyName(companies, s.company_id) : 'All companies') },
+              { key: 'by', label: 'Set by', hide: 'tablet', render: (s) => s.created_by_name },
+            ]}
+            actions={(s) => (canSchedule ? <Actions><IconAction kind="edit" label="Edit schedule" onClick={() => setEdit(s)} /></Actions> : null)}
+            expand={(s) => <Details items={[['Every', FREQ_LABEL[s.frequency]], ['Due', `Day ${s.due_day} after the period`], ['Company', s.company_id ? companyName(companies, s.company_id) : 'All companies'], ['Set by', s.created_by_name], ['Notes', s.notes], ['Active', s.active ? 'Yes' : 'Paused']]} />} />}
         </Card>
       )}
       {edit && <ScheduleForm defs={defs} init={edit} onClose={() => setEdit(null)} />}

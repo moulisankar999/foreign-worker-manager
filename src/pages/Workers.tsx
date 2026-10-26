@@ -1,4 +1,8 @@
 import { useMemo, useState } from 'react'
+import { useAuth } from '../lib/auth'
+import { DataTable, Details } from '../components/dataTable'
+import { Actions, IconAction } from '../components/iconAction'
+import type { Settings } from '../lib/types'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { Avatar, Btn, Chip, Empty, SelectFilter, Toolbar, docTone, statusTone } from '../components/ui'
 import { currentDocs, docStatus, isOnLeave, outletName, ticketInfo } from '../lib/calc'
@@ -18,6 +22,13 @@ export function matchesQuery(w: Worker, q: string, outletLabel: string) {
   return q.toLowerCase().split(/\s+/).every((t) => hay.includes(t))
 }
 
+function ExpiryChip({ w, s }: { w: Worker; s: Settings }) {
+  const nx = nextExpiry(w)
+  const st = nx ? docStatus(nx, s) : null
+  if (!nx || !st) return <span className="muted small">—</span>
+  return <Chip tone={docTone(st)}>{nx.type === 'Other' ? nx.label : nx.type.split(' ')[0]} {fmtDate(nx.expiryDate)}{daysUntil(nx.expiryDate)! < 0 ? ' · expired' : ''}</Chip>
+}
+
 export default function Workers() {
   const loaded = useWorkersLoaded()
   const outlets = useOutlets()
@@ -30,7 +41,7 @@ export default function Workers() {
   const type = sp.get('type') || ''
   const nat = sp.get('nat') || ''
   const gap = sp.get('gap') || ''
-  const [sort, setSort] = useState('name')
+  const { canWrite } = useAuth()
   const set = (k: string, v: string) => { const n = new URLSearchParams(sp); if (v) n.set(k, v); else n.delete(k); setSp(n, { replace: true }) }
 
   const list = useMemo(() => {
@@ -38,10 +49,8 @@ export default function Workers() {
       matchesQuery(w, q, outletName(outlets, w.outletId)) &&
       (!status || (status === '__leave' ? isOnLeave(w) : status === '__current' ? !['Absconded', 'Resigned', 'Terminated', 'Contract Ended', 'Repatriated'].includes(w.status) : w.status === status)) &&
       (!outlet || w.outletId === outlet) && (!type || w.businessType === type) && (!nat || w.nationality === nat) && (gap !== 'lang' || missingLanguage(w)) && (gap !== 'incomplete' || !completeness(w, outlets).complete))
-    const nx = (w: Worker) => nextExpiry(w)?.expiryDate || '9999'
-    return ws.sort((a, b) =>
-      sort === 'expiry' ? nx(a).localeCompare(nx(b)) : sort === 'join' ? a.joinDate.localeCompare(b.joinDate) : sort === 'id' ? a.workerNo.localeCompare(b.workerNo, undefined, { numeric: true }) : a.fullName.localeCompare(b.fullName))
-  }, [loaded, q, status, outlet, type, nat, gap, sort, outlets])
+    return ws
+  }, [loaded, q, status, outlet, type, nat, gap, outlets])
 
   return (
     <div className="page">
@@ -58,40 +67,43 @@ export default function Workers() {
         <SelectFilter label="Business" value={type} onChange={(v) => set('type', v)} options={[...BUSINESS_TYPES]} />
         <SelectFilter label="Nationality" value={nat} onChange={(v) => set('nat', v)} options={NATIONALITIES} />
         <SelectFilter label="Data gaps" value={gap} onChange={(v) => set('gap', v)} options={[{ value: 'incomplete', label: 'Incomplete profile (draft)' }, { value: 'lang', label: 'Language missing' }]} />
-        <label className="sel-f">
-          <span className="sr">Sort</span>
-          <select value={sort} onChange={(e) => setSort(e.target.value)} aria-label="Sort">
-            <option value="name">Sort: Name</option><option value="id">Sort: Worker ID</option><option value="expiry">Sort: Nearest expiry</option><option value="join">Sort: Join date</option>
-          </select>
-        </label>
       </Toolbar>
       {loaded && list.length === 0 ? (
         <Empty icon="users" title="No workers match">{loaded.length === 0 && <Btn kind="primary" icon="plus" onClick={() => nav('/workers/new')}>Add worker</Btn>}</Empty>
       ) : (
-        <ul className="wlist">
-          {list.map((w) => {
-            const nx = nextExpiry(w)
-            const st = nx ? docStatus(nx, s) : null
+        <DataTable label="Workers" rows={list} rowKey={(w) => w.id} rowTestId={() => 'worker-row'} pageSize={100} initialSort={{ key: 'name', dir: 'asc' }}
+          rowClass={(w) => (!completeness(w, outlets).complete ? 'dt-warn' : '')}
+          columns={[
+            { key: 'name', label: 'Worker', main: true, sort: (w) => w.fullName.toLowerCase(),
+              render: (w) => <span className="dt-person"><Avatar name={w.fullName} photo={w.photo} size={34} /><span><Link to={`/workers/${w.id}`} className="dt-link">{w.fullName}</Link><small>{w.workerNo}{!completeness(w, outlets).complete ? ' · Draft' : ''}</small></span></span> },
+            { key: 'id', label: 'Worker ID', hide: 'tablet', sort: (w) => w.workerNo, render: (w) => w.workerNo },
+            { key: 'status', label: 'Status', sort: (w) => w.status, render: (w) => <Chip tone={statusTone(w.status)}>{w.status}</Chip> },
+            { key: 'outlet', label: 'Outlet', hide: 'phone', sort: (w) => outletName(outlets, w.outletId), render: (w) => outletName(outlets, w.outletId) },
+            { key: 'nat', label: 'Nationality', hide: 'tablet', sort: (w) => w.nationality, render: (w) => w.nationality },
+            { key: 'expiry', label: 'Next expiry', hide: 'phone', sort: (w) => nextExpiry(w)?.expiryDate || '9999', render: (w) => <ExpiryChip w={w} s={s} /> },
+            { key: 'join', label: 'Service', hide: 'tablet', sort: (w) => w.joinDate, render: (w) => <span className="small">{serviceText(w.joinDate)}</span> },
+          ]}
+          actions={(w) => (
+            <Actions>
+              <IconAction kind="view" label="Open worker profile" onClick={() => nav(`/workers/${w.id}`)} />
+              {canWrite && <IconAction kind="edit" label="Edit worker" onClick={() => nav(`/workers/${w.id}/edit`)} />}
+            </Actions>
+          )}
+          expand={(w) => {
             const t = ticketInfo(w, s)
             return (
-              <li key={w.id}>
-                <Link to={`/workers/${w.id}`}>
-                  <Avatar name={w.fullName} photo={w.photo} />
-                  <div className="wl-main">
-                    <div className="wl-top"><strong>{w.fullName}</strong><Chip tone={statusTone(w.status)}>{w.status}</Chip>{!completeness(w, outlets).complete && <Chip tone="amber">Draft</Chip>}</div>
-                    <small>{w.workerNo} · {w.nationality} · {w.jobCategory || '—'} · {outletName(outlets, w.outletId)}</small>
-                    <div className="wl-chips">
-                      {nx && st && <Chip tone={docTone(st)}>{nx.type === 'Other' ? nx.label : nx.type.split(' ')[0]} {fmtDate(nx.expiryDate)}{daysUntil(nx.expiryDate)! < 0 ? ' · expired' : ''}</Chip>}
-                      {t.eligible && <Chip tone="purple">✈ Ticket ×{t.balance}</Chip>}
-                      {missingLanguage(w) && <Chip tone="amber">🗣️ Language missing</Chip>}
-                      <Chip>{serviceText(w.joinDate)}</Chip>
-                    </div>
-                  </div>
-                </Link>
-              </li>
+              <>
+                <Details items={[
+                  ['Worker ID', w.workerNo], ['Nationality', w.nationality], ['Job', w.jobCategory || '—'], ['Outlet', outletName(outlets, w.outletId)],
+                  ['Business', w.businessType], ['Phone', w.phoneMY], ['Joined', w.joinDate ? `${fmtDate(w.joinDate)} · ${serviceText(w.joinDate)}` : ''],
+                  ['Next expiry', nextExpiry(w) ? <ExpiryChip w={w} s={s} /> : 'No expiry dates'],
+                  ['Ticket', t.eligible ? <Chip tone="purple">✈ Ticket ×{t.balance}</Chip> : ''],
+                  ['Language', missingLanguage(w) ? <Chip tone="amber">🗣️ Language missing</Chip> : primaryLangName(w)],
+                  ['Profile', completeness(w, outlets).complete ? 'Complete' : <Chip tone="amber">Draft — {completeness(w, outlets).missing.map((m) => m.label).join(', ')}</Chip>],
+                ]} />
+              </>
             )
-          })}
-        </ul>
+          }} />
       )}
     </div>
   )

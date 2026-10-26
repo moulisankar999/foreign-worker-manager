@@ -11,6 +11,9 @@ import { companyName, outletCompany, ruleFor, scopeLabel, type Company } from '.
 import { approveUser, usePendingUsers } from '../lib/userApprovals'
 import { userAdmin } from '../lib/userAdmin'
 import { fmtDate } from '../lib/util'
+import { DataTable, Details } from './dataTable'
+import { Actions, IconAction } from './iconAction'
+import { toast } from './toast'
 import type { Profile, Role } from '../lib/supabase'
 import type { Outlet } from '../lib/types'
 
@@ -51,7 +54,8 @@ export function ScopePicker({ companies, outlets, value, onChange, allowed, outl
   )
 }
 
-export function PendingItem({ u, companies, outlets }: { u: Profile; companies: Company[]; outlets: Outlet[] }) {
+/** approve / reject rules for one pending sign-up (same as before; the server checks again) */
+function usePending(u: Profile, outlets: Outlet[]) {
   const { isSuper: ceo, isGm, can, session } = useAuth()
   const isSuper = ceo || (isGm && can('users.approve')) // CEO, or a General Manager with this power
   const cfg = useConfig()
@@ -61,6 +65,37 @@ export function PendingItem({ u, companies, outlets }: { u: Profile; companies: 
   const allowed: string[] | '*' = isSuper || rule.companies.includes('*') ? '*' : rule.companies
   const reqOutlet = outlets.find((o) => o.id === u.requested_outlet_id)
   const reqCompany = u.requested_company_id || (reqOutlet ? outletCompany(reqOutlet) : '')
+  return { isSuper, roles, allowed, reqOutlet, reqCompany }
+}
+
+const requestedChip = (companies: Company[], reqCompany: string, reqOutlet?: Outlet) =>
+  reqOutlet ? <Chip tone="blue">{companyName(companies, reqCompany)} · {reqOutlet.name}</Chip> : reqCompany ? <Chip tone="blue">{companyName(companies, reqCompany)}</Chip> : <Chip tone="gray">Unassigned</Chip>
+
+/** row icons: Approve (opens the row to pick role + outlets), Reject, Delete sign-up */
+function PendingActions({ u, onApprove }: { u: Profile; onApprove: () => void }) {
+  const [busy, setBusy] = useState(false)
+  const run = async (fn: () => Promise<void>) => { setBusy(true); try { await fn() } catch (e) { toast((e as Error).message, 'err') } finally { setBusy(false) } }
+  const reject = () => {
+    const reason = prompt(`Reject ${u.full_name || u.email}?\n\nThe request and its login are removed (it is noted in the audit log). Optional reason:`, '')
+    if (reason === null) return
+    void run(async () => { await userAdmin('reject_pending', u.id, { note: reason.trim() || undefined }) })
+  }
+  const remove = () => {
+    if (!confirm(`Delete the sign-up of ${u.email}?\n\nUse this for spam or duplicate sign-ups. The request and its login are removed; the email address can sign up again later.`)) return
+    void run(async () => { await userAdmin('delete_pending', u.id) })
+  }
+  return (
+    <Actions>
+      <IconAction kind="approve" label="Approve — choose role and outlets" disabled={busy} onClick={onApprove} />
+      <IconAction kind="reject" label="Reject sign-up" disabled={busy} onClick={reject} />
+      <IconAction kind="delete" label="Delete sign-up (spam / duplicate)" disabled={busy} onClick={remove} />
+    </Actions>
+  )
+}
+
+/** opened row: choose role + companies / outlets, then Approve */
+export function PendingItem({ u, companies, outlets }: { u: Profile; companies: Company[]; outlets: Outlet[] }) {
+  const { isSuper, roles, allowed, reqOutlet, reqCompany } = usePending(u, outlets)
   const [role, setRole] = useState<Role>(reqOutlet && roles.includes('outlet_manager') ? 'outlet_manager' : roles.includes('viewer') ? 'viewer' : roles[0])
   const [scope, setScope] = useState<{ companies: string[]; outlets: string[] }>(() =>
     reqOutlet ? { companies: [], outlets: [reqOutlet.id] } : reqCompany ? { companies: [reqCompany], outlets: [] } : { companies: [], outlets: [] })
@@ -77,30 +112,17 @@ export function PendingItem({ u, companies, outlets }: { u: Profile; companies: 
     if (role === 'super_admin' && !confirm(`Make ${u.full_name || u.email} the CEO (full access to everything)?`)) return
     void run(() => approveUser(u.id, role, role === 'super_admin' ? [] : effective.companies, role === 'super_admin' ? [] : effective.outlets))
   }
-  const reject = () => {
-    const reason = prompt(`Reject ${u.full_name || u.email}?\n\nThe request and its login are removed (it is noted in the audit log). Optional reason:`, '')
-    if (reason === null) return
-    void run(async () => { await userAdmin('reject_pending', u.id, { note: reason.trim() || undefined }) })
-  }
-  const remove = () => {
-    if (!confirm(`Delete the sign-up of ${u.email}?\n\nUse this for spam or duplicate sign-ups. The request and its login are removed; the email address can sign up again later.`)) return
-    void run(async () => { await userAdmin('delete_pending', u.id) })
-  }
   return (
-    <li className="pending-user">
-      <div className="r-main">
-        <strong>{u.full_name || '(no name)'}</strong>
-        <small>{u.email} · signed up {when(u.created_at)}</small>
-        <small>{reqOutlet ? <Chip tone="blue">{companyName(companies, reqCompany)} · {reqOutlet.name}</Chip> : reqCompany ? <Chip tone="blue">{companyName(companies, reqCompany)}</Chip> : <Chip tone="gray">Unassigned</Chip>}</small>
-      </div>
-      <div className="r-act">
-        <select aria-label={`Role for ${u.email}`} value={role} onChange={(e) => setRole(e.target.value as Role)} disabled={busy}>
-          {roles.map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
-        </select>
+    <div className="pending-user">
+      <Details items={[['Signed up', when(u.created_at)], ['Asked for', requestedChip(companies, reqCompany, reqOutlet)]]} />
+      <div className="user-edit">
+        <label className="small">Role{' '}
+          <select aria-label={`Role for ${u.email}`} value={role} onChange={(e) => setRole(e.target.value as Role)} disabled={busy}>
+            {roles.map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
+          </select>
+        </label>
         {needsScope && <Btn small kind="ghost" icon="store" onClick={() => setOpen(!open)}>{empty ? (isSuper && !omScope ? 'All companies' : 'Choose…') : scopeLabel(companies, outlets, effective.companies, effective.outlets).slice(0, 40)}</Btn>}
         <Btn small kind="primary" icon="check" disabled={busy} onClick={approve}>Approve</Btn>
-        <Btn small kind="ghost" icon="x" disabled={busy} onClick={reject}>Reject</Btn>
-        <Btn small kind="ghost" icon="trash" disabled={busy} onClick={remove} title="Delete this sign-up (spam / duplicate)">Delete</Btn>
       </div>
       {open && needsScope && (
         <div className="outlet-pick">
@@ -109,8 +131,28 @@ export function PendingItem({ u, companies, outlets }: { u: Profile; companies: 
         </div>
       )}
       {err && <p className="err small">{err}</p>}
-    </li>
+    </div>
   )
+}
+
+/** pending sign-ups as a table: click a row (or the Approve icon) to choose role + outlets and approve */
+export function PendingTable({ users, companies, outlets }: { users: Profile[]; companies: Company[]; outlets: Outlet[] }) {
+  const [open, setOpen] = useState<{ key: string } | null>(null)
+  return (
+    <DataTable label="New users waiting for approval" rows={users} rowKey={(u) => u.id} open={open} rowTestId={(u) => `pending-${u.email}`}
+      search={(u) => `${u.full_name} ${u.email}`} searchLabel="Search sign-ups" initialSort={{ key: 'when', dir: 'asc' }}
+      columns={[
+        { key: 'name', label: 'Name', main: true, sort: (u) => (u.full_name || u.email || '').toLowerCase(), render: (u) => <>{u.full_name || '(no name)'}<small>{u.email}</small></> },
+        { key: 'asked', label: 'Asked for', hide: 'phone', render: (u) => <ReqChip u={u} companies={companies} outlets={outlets} /> },
+        { key: 'when', label: 'Signed up', hide: 'tablet', sort: (u) => u.created_at || '', render: (u) => <span className="small">{when(u.created_at)}</span> },
+      ]}
+      actions={(u) => <PendingActions u={u} onApprove={() => setOpen({ key: u.id })} />}
+      expand={(u) => <PendingItem u={u} companies={companies} outlets={outlets} />} />
+  )
+}
+function ReqChip({ u, companies, outlets }: { u: Profile; companies: Company[]; outlets: Outlet[] }) {
+  const reqOutlet = outlets.find((o) => o.id === u.requested_outlet_id)
+  return requestedChip(companies, u.requested_company_id || (reqOutlet ? outletCompany(reqOutlet) : ''), reqOutlet)
 }
 
 /** shown at the top of the dashboard for the CEO and for HR Admins allowed to approve sign-ups */
@@ -127,12 +169,16 @@ export function PendingUsersPanel() {
     <Card title={pending.length ? `👤 New users waiting for approval (${pending.length})` : '👤 New users'} className={pending.length ? 'card-alert' : ''}
       actions={<span className="row gap-s">{recent.length > 0 && <button className="link" onClick={() => setHist(!hist)}>{hist ? 'Hide history' : `History (${recent.length})`}</button>}{!inSettings && <Link className="link" to="/settings/users">All users →</Link>}</span>}>
       {error && <p className="err small">{error}</p>}
-      {pending.length > 0 && <ul className="rows users">{pending.map((u) => <PendingItem key={u.id} u={u} companies={companies} outlets={outlets} />)}</ul>}
+      {pending.length > 0 && <PendingTable users={pending} companies={companies} outlets={outlets} />}
       {!pending.length && <p className="muted small">Nobody is waiting.</p>}
       {hist && (
-        <ul className="rows compact">{recent.slice(0, 15).map((u) => (
-          <li key={u.id}><div className="r-main"><strong>{u.full_name || u.email}</strong><small>{u.status === 'active' ? `${ROLE_LABEL[u.role] || u.role}${(u.company_ids?.length || u.outlet_ids?.length) ? ' · ' + scopeLabel(companies, outlets, u.company_ids, u.outlet_ids) : ''} · ` : ''}{byLine(u)}</small></div></li>
-        ))}</ul>
+        <DataTable label="Sign-up history" dense rows={recent.slice(0, 15)} rowKey={(u) => u.id}
+          columns={[
+            { key: 'name', label: 'Name', main: true, render: (u) => <>{u.full_name || u.email}<small>{u.email}</small></> },
+            { key: 'out', label: 'Outcome', render: (u) => u.status === 'active' ? <Chip tone="green">{ROLE_LABEL[u.role] || u.role}</Chip> : u.rejected_at ? <Chip tone="red">Rejected</Chip> : <Chip tone="gray">{u.status}</Chip> },
+            { key: 'by', label: 'By', hide: 'phone', render: (u) => <span className="small">{byLine(u)}</span> },
+          ]}
+          expand={(u) => <Details items={[['Email', u.email], ['Role', u.status === 'active' ? ROLE_LABEL[u.role] || u.role : ''], ['Sees', (u.company_ids?.length || u.outlet_ids?.length) ? scopeLabel(companies, outlets, u.company_ids, u.outlet_ids) : ''], ['History', byLine(u)]]} />} />
       )}
     </Card>
   )

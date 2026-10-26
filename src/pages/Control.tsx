@@ -7,6 +7,8 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { Btn, Card, Chip, Empty, Tabs } from '../components/ui'
 import { toast } from '../components/toast'
+import { DataTable, Details } from '../components/dataTable'
+import { IconAction } from '../components/iconAction'
 
 export type Health = { check_key: string; status: 'green' | 'amber' | 'red' | 'grey'; title: string | null; summary: string | null; advice: string | null; area: string | null; detail: Record<string, unknown>; source: string | null; sort: number; checked_at: string; changed_at: string; prev_status: string | null }
 type AppError = { id: number; created_at: string; last_seen: string; count: number; user_role: string | null; kind: string; message: string; detail: string | null; url: string | null; app_version: string | null; platform: string | null; user_agent?: string | null }
@@ -143,7 +145,6 @@ export function platformShown(r: { platform: string | null; app_version: string 
 }
 
 function ErrorList({ rows, onClear }: { rows: AppError[] | null; onClear: () => void }) {
-  const [open, setOpen] = useState<number | null>(null)
   const clear = async () => {
     if (!confirm('Clear the whole error list?')) return
     const { error } = await supabase.rpc('clear_client_errors')
@@ -151,19 +152,28 @@ function ErrorList({ rows, onClear }: { rows: AppError[] | null; onClear: () => 
   }
   if (!rows) return <p className="muted">Loading…</p>
   return (
-    <Card title={`Errors from users' devices (${rows.length})`} actions={rows.length ? <Btn small onClick={clear}>Clear list</Btn> : undefined}>
+    <Card title={`Errors from users' devices (${rows.length})`} actions={rows.length ? <IconAction kind="delete" text label="Clear list" onClick={clear} /> : undefined}>
       {!rows.length ? <Empty icon="check" title="No errors reported">JavaScript errors and failed server calls from any user's app appear here.</Empty> : (
-        <ul className="rows err-list">
-          {rows.map((r) => (
-            <li key={r.id} onClick={() => setOpen(open === r.id ? null : r.id)}>
-              <div className="r-main">
-                <strong className="err-msg">{r.message}</strong>
-                <small>{ist(r.last_seen)} · {r.kind}{r.count > 1 ? ` · ×${r.count}` : ''} · screen {r.url || '-'} · {r.user_role === 'super_admin' ? 'CEO' : r.user_role || '?'} · {platformShown(r)} {r.app_version || ''}</small>
-                {open === r.id && r.detail && <pre className="err-detail">{r.detail}</pre>}
-              </div>
-            </li>
-          ))}
-        </ul>
+        <DataTable label="Errors" className="err-list" rows={rows} rowKey={(r) => String(r.id)} rowTestId={() => 'err-row'} initialSort={{ key: 'seen', dir: 'desc' }}
+          search={(r) => `${r.message} ${r.kind} ${r.url} ${r.user_role} ${platformShown(r)} ${r.app_version}`} searchLabel="Search errors"
+          filters={[
+            { key: 'kind', label: 'Kind', options: [...new Set(rows.map((r) => r.kind))], match: (r, v) => r.kind === v },
+            { key: 'pf', label: 'Device', options: [...new Set(rows.map((r) => platformShown(r)).filter(Boolean))], match: (r, v) => platformShown(r) === v },
+          ]}
+          columns={[
+            { key: 'msg', label: 'Error', main: true, sort: (r) => r.message, render: (r) => <><span className="err-msg">{r.message}</span><small>{r.kind}{r.count > 1 ? ` · ×${r.count}` : ''}</small></> },
+            { key: 'seen', label: 'Last seen', hide: 'phone', sort: (r) => r.last_seen, render: (r) => <span className="small">{ist(r.last_seen)}</span> },
+            { key: 'count', label: 'Times', hide: 'tablet', align: 'right', sort: (r) => r.count, render: (r) => r.count },
+            { key: 'who', label: 'Role', hide: 'tablet', sort: (r) => r.user_role || '', render: (r) => <span className="small">{r.user_role === 'super_admin' ? 'CEO' : r.user_role || '?'}</span> },
+            { key: 'dev', label: 'Device', hide: 'phone', sort: (r) => platformShown(r), render: (r) => <span className="small">{platformShown(r)} {r.app_version || ''}</span> },
+          ]}
+          expand={(r) => (
+            <>
+              <Details items={[['Last seen', ist(r.last_seen)], ['First seen', ist(r.created_at)], ['Kind', r.kind], ['Times', r.count], ['Screen', r.url || '-'],
+                ['Role', r.user_role === 'super_admin' ? 'CEO' : r.user_role || '?'], ['Device', `${platformShown(r)} ${r.app_version || ''}`]]} />
+              {r.detail && <pre className="err-detail">{r.detail}</pre>}
+            </>
+          )} />
       )}
     </Card>
   )

@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { Btn, Card, Chip, KV, Modal } from './ui'
 import { toast } from './toast'
+import { IconAction } from './iconAction'
 import type { Worker } from '../lib/types'
 
 type Action = 'generate' | 'reset' | 'revoke' | 'restore' | 'unlock'
@@ -73,11 +74,11 @@ export function AppAccessPanel({ w }: { w: Worker }) {
           ]} />
           {!st.hasPassport && <p className="warn small">Add the passport number (Expiry docs → Passport) before creating a login.</p>}
           <div className="row gap-s wrap mt-s">
-            {s === 'never_set' && <Btn kind="primary" disabled={!!busy || !st.hasPassport} onClick={() => run('generate')}>🔑 Generate PIN</Btn>}
-            {(s === 'active' || s === 'locked') && <Btn disabled={!!busy} onClick={() => run('reset')}>🔁 Reset PIN</Btn>}
-            {s === 'locked' && <Btn disabled={!!busy} onClick={() => run('unlock')}>🔓 Unlock</Btn>}
-            {(s === 'active' || s === 'locked') && <Btn kind="danger" disabled={!!busy} onClick={() => run('revoke')}>⛔ Revoke</Btn>}
-            {s === 'revoked' && <Btn kind="primary" disabled={!!busy} onClick={() => run('restore')}>✅ Restore</Btn>}
+            {s === 'never_set' && <IconAction kind="reset" tone="pri" text label="Generate PIN" disabled={!!busy || !st.hasPassport} onClick={() => run('generate')} />}
+            {(s === 'active' || s === 'locked') && <IconAction kind="reset" text label="Reset PIN" disabled={!!busy} onClick={() => run('reset')} />}
+            {s === 'locked' && <IconAction kind="unlock" text label="Unlock login" disabled={!!busy} onClick={() => run('unlock')} />}
+            {(s === 'active' || s === 'locked') && <IconAction kind="revoke" text label="Revoke app access" disabled={!!busy} onClick={() => run('revoke')} />}
+            {s === 'revoked' && <IconAction kind="resume" text label="Restore app access" disabled={!!busy} onClick={() => run('restore')} />}
           </div>
         </>
       )}

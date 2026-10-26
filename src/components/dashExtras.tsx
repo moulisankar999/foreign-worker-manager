@@ -13,6 +13,8 @@ import { usePendingUsers } from '../lib/userApprovals'
 import { useOutlets } from '../lib/hooks'
 import { completeness } from '../lib/validate'
 import { Greeting, Priorities, StatusGlance, TipCard, type Extra } from './advice'
+import { DataTable, Details } from './dataTable'
+import { Actions, IconAction } from './iconAction'
 import type { Alert } from '../lib/calc'
 
 /** Requests, flight tickets, emergency-leave proof and passport consent — shared by the HR and Outlet-Manager dashboards. */
@@ -64,16 +66,27 @@ export function WorkflowPanel({ workers }: { workers: Worker[] }) {
       <div id="pending-users"><PendingUsersPanel /></div>
       {tickets.length > 0 && (
         <Card title="✈️ Ticket booked — download">
-          <ul className="rows">{tickets.slice(0, 8).map((r) => (
-            <li key={r.id}><Link className="req-link" to={`/requests/${r.id}`}><span className="req-ic">✈️</span><div className="r-main"><strong>{wName(r.worker_id)}</strong><small>{REQUEST_TYPE[r.type]?.label} · {refNo(r)} · {String(r.data.from || '')}</small></div><Chip tone="purple">Download</Chip></Link></li>
-          ))}</ul>
+          <DataTable label="Tickets booked" dense rows={tickets.slice(0, 8)} rowKey={(r) => r.id}
+            columns={[
+              { key: 'w', label: 'Worker', main: true, render: (r) => <Link className="dt-link" to={`/requests/${r.id}`}>{wName(r.worker_id)}</Link> },
+              { key: 't', label: 'Request', hide: 'phone', render: (r) => <>{REQUEST_TYPE[r.type]?.label} <small className="muted">{refNo(r)}</small></> },
+              { key: 'f', label: 'From', hide: 'tablet', render: (r) => String(r.data.from || '') },
+            ]}
+            actions={(r) => <Actions><IconAction kind="download" label="Open the request to download the ticket" onClick={() => nav(`/requests/${r.id}`)} /></Actions>}
+            expand={(r) => <Details items={[['Request', REQUEST_TYPE[r.type]?.label], ['Reference', refNo(r)], ['From', String(r.data.from || '') || null]]} />} />
         </Card>
       )}
       {mine.length > 0 && (
         <Card title="Waiting for you" actions={<Link className="link" to="/requests">All requests →</Link>}>
-          <ul className="rows">{mine.slice(0, 8).map((r) => (
-            <li key={r.id}><Link className="req-link" to={`/requests/${r.id}`}><span className="req-ic">{REQUEST_TYPE[r.type]?.icon}</span><div className="r-main"><strong>{REQUEST_TYPE[r.type]?.label} — {wName(r.worker_id)}</strong><small>{refNo(r)} · {r.created_by_name}</small></div><Chip tone={STATUS_TONE[r.status]}>{STATUS_LABEL[r.status]}</Chip></Link></li>
-          ))}</ul>
+          <DataTable label="Waiting for you" dense rows={mine.slice(0, 8)} rowKey={(r) => r.id}
+            columns={[
+              { key: 't', label: 'Request', main: true, render: (r) => <span className="dt-person"><span className="req-ic" aria-hidden>{REQUEST_TYPE[r.type]?.icon}</span><span><Link className="dt-link" to={`/requests/${r.id}`}>{REQUEST_TYPE[r.type]?.label}</Link><small>{refNo(r)}</small></span></span> },
+              { key: 'w', label: 'Worker', render: (r) => wName(r.worker_id) },
+              { key: 'by', label: 'Raised by', hide: 'tablet', render: (r) => r.created_by_name },
+              { key: 's', label: 'Status', hide: 'phone', render: (r) => <Chip tone={STATUS_TONE[r.status]}>{STATUS_LABEL[r.status]}</Chip> },
+            ]}
+            actions={(r) => <Actions><IconAction kind="view" label="Open request" onClick={() => nav(`/requests/${r.id}`)} /></Actions>}
+            expand={(r) => <Details items={[['Reference', refNo(r)], ['Worker', wName(r.worker_id)], ['Raised by', r.created_by_name], ['Status', STATUS_LABEL[r.status]]]} />} />
         </Card>
       )}
     </>
@@ -106,10 +119,15 @@ export function OmDashboard({ workers, alerts, extra }: { workers: Worker[]; ale
         {tab === 'workers' && <>
           <div className="dash-3"><StatusGlance workers={workers} /><TipCard /></div>
           <Card title="My workers" actions={<Link className="link" to="/workers">All →</Link>}>
-            <ul className="rows compact">{cur.slice(0, 12).map((w) => (
-              <li key={w.id}><Link className="req-link" to={`/workers/${w.id}`}><div className="r-main"><strong>{w.fullName}</strong><small>{w.workerNo} · {w.jobCategory} · {w.status}</small></div>
-                {consentOf(w) !== 'signed' && <Chip tone={CONSENT_TONE[consentOf(w)]}>🛂 {CONSENT_LABEL[consentOf(w)]}</Chip>}</Link></li>
-            ))}</ul>
+            <DataTable label="My workers" dense rows={cur.slice(0, 12)} rowKey={(w) => w.id}
+              columns={[
+                { key: 'n', label: 'Worker', main: true, sort: (w) => w.fullName, render: (w) => <span><Link className="dt-link" to={`/workers/${w.id}`}>{w.fullName}</Link><small className="muted"> {w.workerNo}</small></span> },
+                { key: 'j', label: 'Job', hide: 'phone', render: (w) => w.jobCategory },
+                { key: 's', label: 'Status', hide: 'tablet', render: (w) => w.status },
+                { key: 'c', label: 'Passport consent', hide: 'phone', render: (w) => (consentOf(w) !== 'signed' ? <Chip tone={CONSENT_TONE[consentOf(w)]}>🛂 {CONSENT_LABEL[consentOf(w)]}</Chip> : <span className="muted small">Signed</span>) },
+              ]}
+              actions={(w) => <Actions><IconAction kind="view" label="Open worker" onClick={() => nav(`/workers/${w.id}`)} /></Actions>}
+              expand={(w) => <Details items={[['Worker no.', w.workerNo], ['Job', w.jobCategory], ['Status', w.status], ['Passport consent', CONSENT_LABEL[consentOf(w)]]]} />} />
           </Card>
         </>}
       </div>

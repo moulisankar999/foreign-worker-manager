@@ -11,6 +11,8 @@ import { CONSENT_LABEL, CONSENT_TONE, CUSTODY_LABEL, consentOf, consentPdf, cust
 import { refNo, useRequests } from '../lib/requests'
 import { OPEN_STATUSES, REQUEST_TYPE, STATUS_LABEL, STATUS_TONE } from '../lib/workflow'
 import type { PassportMove, Remark, Worker } from '../lib/types'
+import { DataTable, Details } from './dataTable'
+import { Actions, IconAction } from './iconAction'
 import { download, fmtDate, todayISO, uid } from '../lib/util'
 
 const fail = (e: unknown) => alert((e as Error).message)
@@ -102,14 +104,15 @@ export function PassportPanel({ w }: { w: Worker }) {
         </div>) : isOM ? <Btn small onClick={() => nav(`/requests/new?type=passport&worker=${w.id}`)}>Request release / return</Btn> : undefined}>
         {custody === 'with_worker' && consent !== 'signed' && canWrite && <p className="muted small">Deposit is possible only after the signed consent is verified.</p>}
         {!(ps?.moves || []).length ? <p className="muted small">No movements recorded.</p> : (
-          <table className="tbl">
-            <thead><tr><th>Date</th><th>Movement</th><th>Reason / expected back</th><th>By</th><th /></tr></thead>
-            <tbody>{[...(ps?.moves || [])].reverse().map((m) => (
-              <tr key={m.id}><td>{fmtDate(m.date)}</td><td>{m.kind === 'release' ? 'Released to worker' : m.kind === 'deposit' ? 'Deposited in safe' : 'Returned to safe'}</td>
-                <td>{m.reason || ''}{m.expectedReturn ? ` · by ${fmtDate(m.expectedReturn)}` : ''}</td><td>{m.by}</td>
-                <td><Btn small kind="ghost" icon="print" title="Slip PDF" onClick={() => slip(m)} /></td></tr>
-            ))}</tbody>
-          </table>
+          <DataTable label="Custody register" rows={[...(ps?.moves || [])].reverse()} rowKey={(m) => m.id}
+            columns={[
+              { key: 'd', label: 'Date', sort: (m) => m.date, render: (m) => fmtDate(m.date) },
+              { key: 'k', label: 'Movement', main: true, render: (m) => (m.kind === 'release' ? 'Released to worker' : m.kind === 'deposit' ? 'Deposited in safe' : 'Returned to safe') },
+              { key: 'r', label: 'Reason / expected back', hide: 'tablet', render: (m) => <span className="small">{m.reason || ''}{m.expectedReturn ? ` · by ${fmtDate(m.expectedReturn)}` : ''}</span> },
+              { key: 'b', label: 'By', hide: 'phone', render: (m) => m.by },
+            ]}
+            actions={(m) => <Actions><IconAction kind="print" label="Slip PDF" onClick={() => slip(m)} /></Actions>}
+            expand={(m) => <Details items={[['Date', fmtDate(m.date)], ['Reason', m.reason], ['Expected back', m.expectedReturn ? fmtDate(m.expectedReturn) : null], ['By', m.by]]} />} />
         )}
       </Card>
       {canWrite && (
@@ -157,7 +160,15 @@ export function RemarksPanel({ w }: { w: Worker }) {
         </div>
       )}
       {rows.length === 0 ? <p className="muted small">No remarks yet.</p> : (
-        <ul className="rows">{rows.map((r) => <li key={r.id}><div className="r-main"><span>{r.text}</span><small>{r.by} · {new Date(r.at).toLocaleString()}</small></div><Chip tone={tone[r.kind || 'remark']}>{r.kind || 'remark'}</Chip></li>)}</ul>
+        <DataTable label="Remarks" rows={rows} rowKey={(r) => r.id} initialSort={{ key: 'at', dir: 'desc' }} search={(r) => `${r.text} ${r.by} ${r.kind || ''}`} searchLabel="Search remarks"
+          filters={[{ key: 'k', label: 'Type', options: ['remark', 'performance', 'incident', 'praise'], match: (r, v) => (r.kind || 'remark') === v }]}
+          columns={[
+            { key: 't', label: 'Remark', main: true, render: (r) => <span className="dt-clip">{r.text}</span> },
+            { key: 'k', label: 'Type', render: (r) => <Chip tone={tone[r.kind || 'remark']}>{r.kind || 'remark'}</Chip> },
+            { key: 'by', label: 'By', hide: 'tablet', sort: (r) => r.by, render: (r) => r.by },
+            { key: 'at', label: 'When', hide: 'phone', sort: (r) => r.at, render: (r) => <span className="small">{new Date(r.at).toLocaleDateString()}</span> },
+          ]}
+          expand={(r) => <><p style={{ whiteSpace: 'pre-wrap', margin: '0 0 8px' }}>{r.text}</p><Details items={[['By', r.by], ['When', new Date(r.at).toLocaleString()], ['Type', r.kind || 'remark']]} /></>} />
       )}
     </Card>
   )
@@ -171,11 +182,15 @@ export function WorkerRequests({ w }: { w: Worker }) {
   return (
     <Card title={`Requests (${rows.filter((r) => OPEN_STATUSES.includes(r.status)).length} open)`} actions={canRequest && <Btn small kind="primary" icon="plus" onClick={() => nav(`/requests/new?worker=${w.id}`)}>New request</Btn>}>
       {loading && !rows.length ? <p className="muted">Loading…</p> : rows.length === 0 ? <Empty title="No requests for this worker" /> : (
-        <ul className="rows">{rows.map((r) => (
-          <li key={r.id}><Link to={`/requests/${r.id}`} className="req-link"><span className="req-ic">{REQUEST_TYPE[r.type]?.icon}</span>
-            <div className="r-main"><strong>{REQUEST_TYPE[r.type]?.label || r.type}</strong><small>{refNo(r)} · {fmtDate(r.created_at.slice(0, 10))} · {r.created_by_name}</small></div>
-            <Chip tone={STATUS_TONE[r.status]}>{STATUS_LABEL[r.status]}</Chip></Link></li>
-        ))}</ul>
+        <DataTable label="Requests of this worker" rows={rows} rowKey={(r) => r.id} initialSort={{ key: 'at', dir: 'desc' }}
+          columns={[
+            { key: 't', label: 'Request', main: true, sort: (r) => REQUEST_TYPE[r.type]?.label || r.type, render: (r) => <span className="dt-person"><span className="req-ic" aria-hidden>{REQUEST_TYPE[r.type]?.icon}</span><span><Link className="dt-link" to={`/requests/${r.id}`}>{REQUEST_TYPE[r.type]?.label || r.type}</Link><small>{refNo(r)}</small></span></span> },
+            { key: 'at', label: 'Created', hide: 'phone', sort: (r) => r.created_at, render: (r) => fmtDate(r.created_at.slice(0, 10)) },
+            { key: 'by', label: 'By', hide: 'tablet', render: (r) => r.created_by_name },
+            { key: 'st', label: 'Status', sort: (r) => STATUS_LABEL[r.status], render: (r) => <Chip tone={STATUS_TONE[r.status]}>{STATUS_LABEL[r.status]}</Chip> },
+          ]}
+          actions={(r) => <Actions><IconAction kind="view" label="Open request" onClick={() => nav(`/requests/${r.id}`)} /></Actions>}
+          expand={(r) => <Details items={[['Reference', refNo(r)], ['Created', `${fmtDate(r.created_at.slice(0, 10))} by ${r.created_by_name || '—'}`], ['Status', STATUS_LABEL[r.status]], ['Title', r.title]]} />} />
       )}
     </Card>
   )

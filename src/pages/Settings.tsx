@@ -4,6 +4,8 @@ import { Btn, Card, Chip, FormModal, type FieldDef } from '../components/ui'
 import { db, exportBackup, importBackup } from '../lib/db'
 import { SignOutRow } from '../components/userMenu'
 import { Icon } from '../components/Icon'
+import { DataTable, Details } from '../components/dataTable'
+import { Actions, IconAction } from '../components/iconAction'
 import { SetPasswordForm } from './SetPassword'
 import { PendingUsersPanel } from '../components/userApprovals'
 import { usePendingUsers } from '../lib/userApprovals'
@@ -210,15 +212,23 @@ export default function SettingsPage() {
         <Sec id="s-outlets">
       <Card title={`Outlets / business units (${outlets.length})`} actions={canWrite && <Btn kind="primary" small icon="plus" onClick={() => setOutlet({ type: 'Restaurant', companyId: coOptions[0]?.value || DEFAULT_COMPANY_ID })}>Add outlet</Btn>}>
         {outlets.length === 0 ? <p className="muted">No outlets yet. Add your restaurants, shops, hotels…</p> : (
-          <ul className="rows">
-            {outlets.map((o) => (
-              <li key={o.id}>
-                <LogoImg path={outletLogo(o)} size={36} title={o.name} />
-                <div className="r-main"><strong>{o.name}</strong><small>{companies.length > 1 ? `${companyName(companies, outletCompany(o))} · ` : ''}{o.type}{o.manager ? ` · ${o.manager}` : ''}{o.state ? ` · ${o.state}` : ''} · {workers.filter((w) => w.outletId === o.id).length} workers</small></div>
-                <div className="r-act"><LogoEdit kind="outlet" id={o.id} path={o.logo} name={o.name} /><Btn small kind="ghost" icon="edit" title="Edit outlet" onClick={() => setOutlet(o as unknown as V)} /></div>
-              </li>
-            ))}
-          </ul>
+          <DataTable label="Outlets" rows={outlets} rowKey={(o) => o.id} rowTestId={(o) => `outlet-${o.id}`} initialSort={{ key: 'name', dir: 'asc' }}
+            search={(o) => `${o.name} ${o.type} ${o.manager || ''} ${o.state || ''} ${companyName(companies, outletCompany(o))}`} searchLabel="Search outlets"
+            filters={companies.length > 1 ? [{ key: 'co', label: 'Company', options: companies.map((c) => ({ value: c.id, label: c.name })), match: (o, v) => outletCompany(o) === v }] : undefined}
+            columns={[
+              { key: 'name', label: 'Outlet', main: true, sort: (o) => o.name.toLowerCase(), render: (o) => <span className="dt-person"><LogoImg path={outletLogo(o)} size={30} title={o.name} /><span>{o.name}<small>{o.type}</small></span></span> },
+              ...(companies.length > 1 ? [{ key: 'co', label: 'Company', hide: 'phone' as const, sort: (o: typeof outlets[number]) => companyName(companies, outletCompany(o)), render: (o: typeof outlets[number]) => companyName(companies, outletCompany(o)) }] : []),
+              { key: 'mgr', label: 'Manager', hide: 'tablet', sort: (o) => o.manager || '', render: (o) => o.manager || '—' },
+              { key: 'state', label: 'State', hide: 'tablet', sort: (o) => o.state || '', render: (o) => o.state || '—' },
+              { key: 'n', label: 'Workers', align: 'right', sort: (o) => workers.filter((w) => w.outletId === o.id).length, render: (o) => workers.filter((w) => w.outletId === o.id).length },
+            ]}
+            actions={(o) => <Actions><IconAction kind="edit" label="Edit outlet" onClick={() => setOutlet(o as unknown as V)} /></Actions>}
+            expand={(o) => (
+              <>
+                <Details items={[['Company', companyName(companies, outletCompany(o))], ['Type', o.type], ['Manager', o.manager], ['State', o.state], ['Workers', workers.filter((w) => w.outletId === o.id).length]]} />
+                <div className="mt-s"><span className="small muted">Logo: </span><LogoEdit kind="outlet" id={o.id} path={o.logo} name={o.name} /></div>
+              </>
+            )} />
         )}
       </Card>
         </Sec>

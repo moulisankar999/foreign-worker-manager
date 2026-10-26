@@ -6,6 +6,7 @@ import { normRole, useAuth } from '../lib/auth'
 import { useConfig } from '../lib/config'
 import { userAdmin } from '../lib/userAdmin'
 import { toast } from './toast'
+import { IconAction } from './iconAction'
 import { fmtDate } from '../lib/util'
 import type { Profile } from '../lib/supabase'
 
@@ -62,7 +63,7 @@ export function useUserPerms(users: Profile[]) {
   }
 }
 
-export function UserActionButtons({ u, may, onDone }: { u: Profile; may: ReturnType<ReturnType<typeof useUserPerms>>; onDone: () => void }) {
+export function UserActionButtons({ u, may, onDone, text }: { u: Profile; may: ReturnType<ReturnType<typeof useUserPerms>>; onDone: () => void; text?: boolean }) {
   const [busy, setBusy] = useState(false)
   const [dlg, setDlg] = useState<'reset' | 'delete' | null>(null)
   const run = async (fn: () => Promise<unknown>) => {
@@ -76,10 +77,10 @@ export function UserActionButtons({ u, may, onDone }: { u: Profile; may: ReturnT
   }
   return (
     <>
-      {may.pause && <Btn small kind="ghost" icon="pause" disabled={busy} onClick={pause}>Pause</Btn>}
-      {may.resume && <Btn small kind="primary" icon="play" disabled={busy} onClick={() => run(() => userAdmin('resume', u.id))}>Resume</Btn>}
-      {may.reset && <Btn small kind="ghost" icon="lock" disabled={busy} onClick={() => setDlg('reset')}>Reset password</Btn>}
-      {may.del && <Btn small kind="ghost" icon="trash" disabled={busy} onClick={() => setDlg('delete')}>Delete</Btn>}
+      {may.pause && <IconAction kind="pause" label="Pause access" disabled={busy} onClick={pause} text={text} />}
+      {may.resume && <IconAction kind="resume" label="Resume access" disabled={busy} onClick={() => run(() => userAdmin('resume', u.id))} text={text} />}
+      {may.reset && <IconAction kind="reset" label="Reset password" disabled={busy} onClick={() => setDlg('reset')} text={text} />}
+      {may.del && <IconAction kind="delete" label="Delete user" disabled={busy} onClick={() => setDlg('delete')} text={text} />}
       {dlg === 'reset' && <ResetDialog u={u} onClose={() => { setDlg(null); onDone() }} />}
       {dlg === 'delete' && <DeleteDialog u={u} onClose={(ok) => { setDlg(null); if (ok) onDone() }} />}
     </>

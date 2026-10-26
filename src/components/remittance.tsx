@@ -6,6 +6,8 @@ import { useState } from 'react'
 import { Btn, Card, Chip, Empty, FormModal, type FieldDef } from './ui'
 import { RELATIONS, type RemitRec, type Worker } from '../lib/types'
 import { saveWorker } from '../lib/db'
+import { DataTable, Details } from './dataTable'
+import { Actions, IconAction } from './iconAction'
 import { uid } from '../lib/util'
 
 export const REMIT_PROVIDERS: { name: string; url: string; kind: string }[] = [
@@ -55,29 +57,29 @@ export function RemitList({ list, onEdit }: { list: RemitRec[]; onEdit?: (r: Rem
   const [show, setShow] = useState<Record<string, boolean>>({})
   if (!list.length) return <Empty title="No remittance account recorded" />
   return (
-    <ul className="remit-list">
-      {list.map((r, i) => (
-        <li key={r.id} className="remit-item">
-          <div className="remit-h">
-            <span className="doc-no">{i + 1}.</span>
-            <strong>{providerName(r)}</strong>
-            {r.isPrimary && <Chip tone="green">Main</Chip>}
-            <span className="spacer" />
-            <OpenProvider r={r} />
-            {onEdit && <Btn small kind="ghost" icon="edit" title="Edit" onClick={() => onEdit(r)} />}
-          </div>
-          <dl className="doc-dl">
-            <div><dt>Member / account ID</dt><dd>{r.memberId || '—'}</dd></div>
-            <div><dt>Beneficiary</dt><dd>{r.beneficiaryName || '—'}{r.relationship ? ` (${r.relationship})` : ''}</dd></div>
-            <div><dt>Country</dt><dd>{r.country || '—'}</dd></div>
-            <div><dt>Bank / wallet</dt><dd>{r.bankOrWallet || '—'}</dd></div>
-            <div><dt>Account no.</dt><dd className="mono">{show[r.id] ? r.accountNo || '—' : maskAcct(r.accountNo)}
-              {!!r.accountNo && <button type="button" className="link small ml-s" onClick={() => setShow({ ...show, [r.id]: !show[r.id] })}>{show[r.id] ? 'Hide' : 'Show'}</button>}</dd></div>
-          </dl>
-          {r.notes && <small className="muted">{r.notes}</small>}
-        </li>
-      ))}
-    </ul>
+    <DataTable label="Remittance accounts" className="remit-t" rows={list} rowKey={(r) => r.id} rowTestId={() => 'remit-row'}
+      columns={[
+        { key: 'p', label: 'Provider', main: true, render: (r) => <>{providerName(r)} {r.isPrimary && <Chip tone="green">Main</Chip>}<small>{r.memberId || ''}</small></> },
+        { key: 'b', label: 'Beneficiary', hide: 'phone', render: (r) => <>{r.beneficiaryName || '—'}{r.relationship ? <small>{r.relationship}</small> : null}</> },
+        { key: 'c', label: 'Country', hide: 'tablet', render: (r) => r.country || '—' },
+        { key: 'a', label: 'Account no.', hide: 'tablet', render: (r) => <span className="mono">{maskAcct(r.accountNo)}</span> },
+      ]}
+      actions={(r) => (
+        <Actions>
+          {providerUrl(r.provider) && <IconAction kind="view" label={`Open ${r.provider} official site`} href={providerUrl(r.provider)!} />}
+          {onEdit && <IconAction kind="edit" label="Edit account" onClick={() => onEdit(r)} />}
+        </Actions>
+      )}
+      expand={(r) => (
+        <>
+          <Details items={[
+            ['Member / account ID', r.memberId || '—'], ['Beneficiary', `${r.beneficiaryName || '—'}${r.relationship ? ` (${r.relationship})` : ''}`], ['Country', r.country || '—'], ['Bank / wallet', r.bankOrWallet || '—'],
+            ['Account no.', <span key="a" className="mono">{show[r.id] ? r.accountNo || '—' : maskAcct(r.accountNo)}{!!r.accountNo && <button type="button" className="link small ml-s" onClick={() => setShow({ ...show, [r.id]: !show[r.id] })}>{show[r.id] ? 'Hide' : 'Show'}</button>}</span>],
+            ['Notes', r.notes],
+          ]} />
+          <div className="mt-s"><OpenProvider r={r} /></div>
+        </>
+      )} />
   )
 }
 

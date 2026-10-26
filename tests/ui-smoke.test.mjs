@@ -77,6 +77,7 @@ const go = async (p, h) => { await p.goto(process.env.UI_URL + '#' + h); await p
   await go(p, '/'); const dash = await body(p)
   check('pending sign-up is on the super dashboard (Needs my action)', dash.includes('UI Pending ' + stamp) && /new user/i.test(dash), dash.slice(0, 600))
   await go(p, '/settings/org')
+  await p.locator('tr.dt-click', { hasText: 'Main company' }).first().locator('td').first().click(); await p.waitForTimeout(400) // logo upload sits in the expanded row
   await p.locator('label[aria-label="Upload logo of Main company"] input[type=file]').setInputFiles('/tmp/ui-logo.svg')
   await p.waitForTimeout(5000)
   const logo = (await admin.from('app_config').select('value').eq('key', 'companies').single()).data.value.items.find((c) => c.id === 'main')?.logo

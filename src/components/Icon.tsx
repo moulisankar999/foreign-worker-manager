@@ -29,6 +29,21 @@ const P: Record<string, string> = {
   pause: 'M6 4h4v16H6zM14 4h4v16h-4z',
   play: 'M5 3l14 9-14 9z',
   help: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3M12 17h.01',
+  // v1.4 action icons (one icon per meaning — see components/iconAction.tsx)
+  eye: 'M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8zM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z',
+  xcircle: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM15 9l-6 6M9 9l6 6',
+  key: 'M21 2l-2 2M15.5 7.5l3 3L22 7l-3-3M11.39 11.61a5.5 5.5 0 1 1-7.78 7.78 5.5 5.5 0 0 1 7.78-7.78zM11.39 11.61L15.5 7.5',
+  ban: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM4.93 4.93l14.14 14.14',
+  userplus: 'M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M8.5 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM20 8v6M23 11h-6',
+  arrowup: 'M12 19V5M5 12l7-7 7 7',
+  undo: 'M3 7v6h6M21 17a9 9 0 0 0-15-6.7L3 13',
+  chev: 'M6 9l6 6 6-6',
+  sort: 'M7 15l5 5 5-5M7 9l5-5 5 5',
+  sortup: 'M7 14l5-5 5 5',
+  sortdown: 'M7 10l5 5 5-5',
+  refresh: 'M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15',
+  send: 'M22 2L11 13M22 2l-7 20-4-9-9-4z',
+  copy: 'M20 9h-9a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2v-9a2 2 0 0 0-2-2zM5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1',
   more: 'M12 13a1 1 0 1 0 0-2 1 1 0 0 0 0 2zM19 13a1 1 0 1 0 0-2 1 1 0 0 0 0 2zM5 13a1 1 0 1 0 0-2 1 1 0 0 0 0 2z',
 }
 export function Icon({ name, size = 20, className }: { name: keyof typeof P | string; size?: number; className?: string }) {

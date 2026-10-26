@@ -13,6 +13,8 @@ import { defaultChecklist } from '../lib/memo'
 import { dateIssues, passportIssue } from '../lib/validate'
 import { APPROVAL, DEDUCTION_TYPES, DOC_SHORT, DOC_STAGES, DOC_TYPES, REQUIRED_DOCS, EXIT_TYPES, LEAVE_TYPES, LOAN_TYPES, RELATIONS, TICKET_PAYERS, type DocRec, type LeaveRec, type MemoRec, type Settings, type Worker, type WorkerStatus } from '../lib/types'
 import { daysBetweenInclusive, daysUntil, download, fmtDate, readFileAsDataURL, rm, todayISO, uid } from '../lib/util'
+import { DataTable, Details } from './dataTable'
+import { Actions, IconAction } from './iconAction'
 import { LeaveEntitlementCard, WorkerPayCompliance } from './pay'
 
 type V = Record<string, unknown>
@@ -155,21 +157,15 @@ export function FamilyTab({ w }: P) {
       </Card>
       <Card title="Next of kin & family" actions={<Btn kind="primary" small icon="plus" onClick={() => setEdit({})}>Add</Btn>}>
         {w.family.length === 0 ? <Empty title="No family members recorded" /> : (
-          <div className="tbl-wrap">
-            <table className="tbl">
-              <thead><tr><th>Relation</th><th>Name</th><th>DOB</th><th>Phone</th><th>Address</th><th>Flags</th><th /></tr></thead>
-              <tbody>
-                {w.family.map((f) => (
-                  <tr key={f.id}>
-                    <td>{f.relation}</td><td>{f.name}</td><td><D d={f.dob} /></td>
-                    <td>{f.phone ? <a href={`tel:${f.phone}`}>{f.phone}</a> : '—'}</td><td>{f.address || '—'}</td>
-                    <td>{f.isNextOfKin && <Chip tone="teal">Next of kin</Chip>} {f.isEmergency && <Chip tone="red">Emergency</Chip>}</td>
-                    <td><Btn small kind="ghost" icon="edit" title="Edit" onClick={() => setEdit(f as unknown as V)} /></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <DataTable label="Family members" rows={w.family} rowKey={(f) => f.id}
+            columns={[
+              { key: 'n', label: 'Name', main: true, sort: (f) => f.name || '', render: (f) => f.name },
+              { key: 'r', label: 'Relation', sort: (f) => f.relation || '', render: (f) => f.relation },
+              { key: 'p', label: 'Phone', hide: 'phone', render: (f) => (f.phone ? <a href={`tel:${f.phone}`} onClick={(e) => e.stopPropagation()}>{f.phone}</a> : '—') },
+              { key: 'f', label: 'Flags', hide: 'tablet', render: (f) => <>{f.isNextOfKin && <Chip tone="teal">Next of kin</Chip>} {f.isEmergency && <Chip tone="red">Emergency</Chip>}</> },
+            ]}
+            actions={(f) => <Actions><IconAction kind="edit" label="Edit family member" onClick={() => setEdit(f as unknown as V)} /></Actions>}
+            expand={(f) => <Details items={[['Relation', f.relation], ['Name', f.name], ['Date of birth', <D key="d" d={f.dob} />], ['Phone', f.phone ? <a key="p" href={`tel:${f.phone}`}>{f.phone}</a> : null], ['Address', f.address], ['Flags', (f.isNextOfKin || f.isEmergency) ? <>{f.isNextOfKin && <Chip tone="teal">Next of kin</Chip>} {f.isEmergency && <Chip tone="red">Emergency</Chip>}</> : null]]} />} />
         )}
       </Card>
       {edit && (
@@ -292,19 +288,26 @@ export function PayTab({ w }: P) {
       </Card>
       <Card title="Increment history" actions={<Btn kind="primary" small icon="plus" onClick={() => setInc({ date: todayISO(), oldPay: basic })}>Add increment</Btn>}>
         {incs.length === 0 ? <Empty title="No increments yet" /> : (
-          <div className="tbl-wrap"><table className="tbl">
-            <thead><tr><th>Effective</th><th className="num">Old</th><th className="num">New</th><th className="num">Change</th><th>Reason</th><th /></tr></thead>
-            <tbody>{incs.map((i) => (
-              <tr key={i.id}><td><D d={i.date} /></td><td className="num">{rm(i.oldPay)}</td><td className="num">{rm(i.newPay)}</td>
-                <td className="num">{rm(i.newPay - i.oldPay)} ({i.oldPay ? (((i.newPay - i.oldPay) / i.oldPay) * 100).toFixed(1) : '—'}%)</td><td>{i.reason || '—'}</td>
-                <td><Btn small kind="ghost" icon="edit" title="Edit" onClick={() => setInc(i as unknown as V)} /></td></tr>
-            ))}</tbody>
-          </table></div>
+          <DataTable label="Increment history" rows={incs} rowKey={(i) => i.id} initialSort={{ key: 'd', dir: 'desc' }}
+            columns={[
+              { key: 'd', label: 'Effective', sort: (i) => i.date, render: (i) => <D d={i.date} /> },
+              { key: 'o', label: 'Old', align: 'right', hide: 'phone', render: (i) => rm(i.oldPay) },
+              { key: 'n', label: 'New', align: 'right', sort: (i) => i.newPay, render: (i) => rm(i.newPay) },
+              { key: 'c', label: 'Change', align: 'right', sort: (i) => i.newPay - i.oldPay, render: (i) => <>{rm(i.newPay - i.oldPay)} <small className="muted">({i.oldPay ? (((i.newPay - i.oldPay) / i.oldPay) * 100).toFixed(1) : '—'}%)</small></> },
+              { key: 'r', label: 'Reason', hide: 'tablet', render: (i) => i.reason || '—' },
+            ]}
+            actions={(i) => <Actions><IconAction kind="edit" label="Edit increment" onClick={() => setInc(i as unknown as V)} /></Actions>}
+            expand={(i) => <Details items={[['Effective', <D key="d" d={i.date} />], ['Old basic', rm(i.oldPay)], ['New basic', rm(i.newPay)], ['Reason', i.reason]]} />} />
         )}
       </Card>
       <Card title="Allowances" actions={<Btn small icon="plus" onClick={() => setAl({})}>Add</Btn>}>
         {w.allowances.length === 0 ? <p className="muted">None</p> : (
-          <ul className="rows">{w.allowances.map((a) => <li key={a.id}><div className="r-main"><strong>{a.name}</strong></div><div className="r-act">{rm(a.amount)}<Btn small kind="ghost" icon="edit" title="Edit" onClick={() => setAl(a as unknown as V)} /></div></li>)}</ul>
+          <DataTable label="Allowances" dense rows={w.allowances} rowKey={(a) => a.id} canExpand={() => false}
+            columns={[
+              { key: 'n', label: 'Allowance', main: true, sort: (a) => a.name || '', render: (a) => a.name },
+              { key: 'a', label: 'Per month', align: 'right', sort: (a) => Number(a.amount) || 0, render: (a) => rm(a.amount) },
+            ]}
+            actions={(a) => <Actions><IconAction kind="edit" label="Edit allowance" onClick={() => setAl(a as unknown as V)} /></Actions>} />
         )}
       </Card>
       {inc && (
@@ -346,38 +349,47 @@ export function LoansTab({ w }: P) {
           <div className="hl"><span>Outstanding</span><strong>{rm(outstanding(w))}</strong></div>
         </div>
         {w.loans.length === 0 ? <Empty title="No loans or advances" /> : (
-          <ul className="rows">
-            {w.loans.map((l) => {
-              const b = loanBalance(w, l.id)
-              return (
-                <li key={l.id}>
-                  <div className="r-main"><strong>{l.type}: {rm(l.amount)}</strong><small><D d={l.date} /> · {l.purpose || '—'} · {l.monthlyDeduction ? `${rm(l.monthlyDeduction)}/month` : 'no schedule'}{b > 0 && l.monthlyDeduction ? ` · ~${Math.ceil(b / l.monthlyDeduction)} months left` : ''}</small></div>
-                  <div className="r-act"><Chip tone={b > 0 ? 'amber' : 'green'}>{b > 0 ? `Bal ${rm(b)}` : 'Settled'}</Chip>
-                    {b > 0 && <Btn small onClick={() => setDed({ date: todayISO(), type: 'Loan repayment', loanId: l.id, amount: Math.min(b, l.monthlyDeduction || b) })}>Deduct</Btn>}
-                    <Btn small kind="ghost" icon="edit" title="Edit" onClick={() => setLoan(l as unknown as V)} /></div>
-                </li>
-              )
-            })}
-          </ul>
+          <DataTable label="Advances and loans" rows={w.loans} rowKey={(l) => l.id} initialSort={{ key: 'd', dir: 'desc' }}
+            rowClass={(l) => (loanBalance(w, l.id) > 0 ? '' : 'dt-muted')}
+            columns={[
+              { key: 't', label: 'Loan', main: true, sort: (l) => l.type, render: (l) => <><strong>{l.type}</strong><small className="muted"> · {l.purpose || '—'}</small></> },
+              { key: 'd', label: 'Date', hide: 'phone', sort: (l) => l.date, render: (l) => <D d={l.date} /> },
+              { key: 'a', label: 'Amount', align: 'right', sort: (l) => Number(l.amount) || 0, render: (l) => rm(l.amount) },
+              { key: 'm', label: 'Monthly', align: 'right', hide: 'tablet', render: (l) => (l.monthlyDeduction ? rm(l.monthlyDeduction) : '—') },
+              { key: 'b', label: 'Balance', sort: (l) => loanBalance(w, l.id), render: (l) => { const b = loanBalance(w, l.id); return <Chip tone={b > 0 ? 'amber' : 'green'}>{b > 0 ? `Bal ${rm(b)}` : 'Settled'}</Chip> } },
+            ]}
+            actions={(l) => { const b = loanBalance(w, l.id); return <Actions>
+              {b > 0 && <IconAction kind="add" tone="plain" label="Record a deduction against this loan" onClick={() => setDed({ date: todayISO(), type: 'Loan repayment', loanId: l.id, amount: Math.min(b, l.monthlyDeduction || b) })} />}
+              <IconAction kind="edit" label="Edit loan / advance" onClick={() => setLoan(l as unknown as V)} />
+            </Actions> }}
+            expand={(l) => { const b = loanBalance(w, l.id); return <Details items={[['Type', l.type], ['Date', <D key="d" d={l.date} />], ['Amount', rm(l.amount)], ['Purpose', l.purpose], ['Monthly deduction', l.monthlyDeduction ? `${rm(l.monthlyDeduction)}/month` : 'No schedule'], ['Balance', b > 0 ? rm(b) : 'Settled'], ['Months left', b > 0 && l.monthlyDeduction ? `about ${Math.ceil(b / l.monthlyDeduction)}` : null]]} /> }} />
         )}
       </Card>
       <Card title="Ledger (running balance)">
         {ledger.length === 0 ? <p className="muted">No entries</p> : (
-          <div className="tbl-wrap"><table className="tbl">
-            <thead><tr><th>Date</th><th>Type</th><th>Description</th><th className="num">Given</th><th className="num">Deducted</th><th className="num">Balance</th></tr></thead>
-            <tbody>{ledger.map((r, i) => <tr key={i}><td><D d={r.date} /></td><td>{r.kind}</td><td>{r.desc}</td><td className="num">{r.debit ? rm(r.debit) : ''}</td><td className="num">{r.credit ? rm(r.credit) : ''}</td><td className="num"><strong>{rm(r.balance)}</strong></td></tr>)}</tbody>
-          </table></div>
+          <DataTable label="Loan ledger" dense rows={ledger.map((r, i) => ({ ...r, i }))} rowKey={(r) => String(r.i)} canExpand={() => false}
+            columns={[
+              { key: 'd', label: 'Date', render: (r) => <D d={r.date} /> },
+              { key: 'k', label: 'Type', hide: 'phone', render: (r) => r.kind },
+              { key: 's', label: 'Description', main: true, render: (r) => r.desc },
+              { key: 'g', label: 'Given', align: 'right', hide: 'tablet', render: (r) => (r.debit ? rm(r.debit) : '') },
+              { key: 'x', label: 'Deducted', align: 'right', hide: 'tablet', render: (r) => (r.credit ? rm(r.credit) : '') },
+              { key: 'b', label: 'Balance', align: 'right', render: (r) => <strong>{rm(r.balance)}</strong> },
+            ]} />
         )}
       </Card>
       <Card title="All deductions">
         {w.deductions.length === 0 ? <p className="muted">No deductions</p> : (
-          <div className="tbl-wrap"><table className="tbl">
-            <thead><tr><th>Date</th><th>Type</th><th className="num">Amount</th><th>Against</th><th>Remarks</th><th /></tr></thead>
-            <tbody>{[...w.deductions].sort((a, b) => b.date.localeCompare(a.date)).map((d) => (
-              <tr key={d.id}><td><D d={d.date} /></td><td>{d.type}</td><td className="num">{rm(d.amount)}</td><td>{d.loanId ? (w.loans.find((l) => l.id === d.loanId)?.type || 'Loan') + ' ' + fmtDate(w.loans.find((l) => l.id === d.loanId)?.date) : '—'}</td><td>{d.remarks || '—'}</td>
-                <td><Btn small kind="ghost" icon="edit" title="Edit" onClick={() => setDed(d as unknown as V)} /></td></tr>
-            ))}</tbody>
-          </table></div>
+          <DataTable label="All deductions" rows={w.deductions} rowKey={(d) => d.id} initialSort={{ key: 'd', dir: 'desc' }} search={(d) => `${d.type} ${d.remarks || ''}`} searchLabel="Search deductions"
+            columns={[
+              { key: 'd', label: 'Date', sort: (d) => d.date, render: (d) => <D d={d.date} /> },
+              { key: 't', label: 'Type', main: true, sort: (d) => d.type, render: (d) => d.type },
+              { key: 'a', label: 'Amount', align: 'right', sort: (d) => Number(d.amount) || 0, render: (d) => rm(d.amount) },
+              { key: 'l', label: 'Against', hide: 'phone', render: (d) => (d.loanId ? (w.loans.find((l) => l.id === d.loanId)?.type || 'Loan') + ' ' + fmtDate(w.loans.find((l) => l.id === d.loanId)?.date) : '—') },
+              { key: 'r', label: 'Remarks', hide: 'tablet', render: (d) => <span className="dt-clip">{d.remarks || '—'}</span> },
+            ]}
+            actions={(d) => <Actions><IconAction kind="edit" label="Edit deduction" onClick={() => setDed(d as unknown as V)} /></Actions>}
+            expand={(d) => <Details items={[['Date', <D key="d" d={d.date} />], ['Type', d.type], ['Amount', rm(d.amount)], ['Against', d.loanId ? (w.loans.find((l) => l.id === d.loanId)?.type || 'Loan') + ' ' + fmtDate(w.loans.find((l) => l.id === d.loanId)?.date) : null], ['Remarks', d.remarks]]} />} />
         )}
       </Card>
       {loan && (
@@ -449,38 +461,41 @@ export function LeaveTab({ w, s, openMemo }: P & { openMemo: (m: Partial<MemoRec
           <p className="muted small">If the worker doesn’t go home, entitlement keeps accumulating.</p>
         </Card>
         <Card title="Annual leave balance (with carry-forward)">
-          <div className="tbl-wrap"><table className="tbl">
-            <thead><tr><th>Year</th><th className="num">B/F</th><th className="num">Entitled</th><th className="num">Taken</th><th className="num">Balance</th></tr></thead>
-            <tbody>{years.map((y) => <tr key={y.year}><td>{y.year}</td><td className="num">{y.carryIn}</td><td className="num">{y.entitled}</td><td className="num">{y.used}</td><td className="num"><strong>{y.balance}</strong></td></tr>)}</tbody>
-          </table></div>
+          <DataTable label="Annual leave balance" dense rows={years} rowKey={(y) => String(y.year)} canExpand={() => false}
+            columns={[
+              { key: 'y', label: 'Year', main: true, render: (y) => y.year },
+              { key: 'bf', label: 'B/F', align: 'right', render: (y) => y.carryIn },
+              { key: 'e', label: 'Entitled', align: 'right', render: (y) => y.entitled },
+              { key: 't', label: 'Taken', align: 'right', render: (y) => y.used },
+              { key: 'b', label: 'Balance', align: 'right', render: (y) => <strong>{y.balance}</strong> },
+            ]} />
           <p className="muted small">{w.annualLeaveDays ?? s.annualLeaveDays} days/year{s.maxCarryForward ? `, carry-forward capped at ${s.maxCarryForward}` : ', unused leave carries forward (no cap)'}. Joining year prorated.</p>
         </Card>
       </div>
       <Card title="Leave applications" actions={<Btn kind="primary" small icon="plus" onClick={() => setEdit({ type: 'Annual', status: 'Pending', appliedOn: todayISO(), from: todayISO(), to: todayISO(), days: 1 })}>Apply leave</Btn>}>
         {w.leaves.length === 0 ? <Empty title="No leave records" /> : (
-          <ul className="rows">
-            {[...w.leaves].sort((a, b) => b.from.localeCompare(a.from)).map((l) => {
+          <DataTable label="Leave applications" rows={w.leaves} rowKey={(l) => l.id} initialSort={{ key: 'f', dir: 'desc' }}
+            filters={[{ key: 's', label: 'Status', options: ['Pending', 'Approved', 'Rejected'], match: (l, v) => l.status === v }]}
+            rowClass={(l) => (l.status === 'Pending' ? 'dt-warn' : '')}
+            columns={[
+              { key: 't', label: 'Leave', main: true, sort: (l) => l.type, render: (l) => <>{l.type} <small className="muted">· {l.days} day(s)</small></> },
+              { key: 'f', label: 'Dates', sort: (l) => l.from, render: (l) => <span className="small"><D d={l.from} /> → <D d={l.to} /></span> },
+              { key: 'b', label: 'Approved by', hide: 'tablet', render: (l) => l.approvedBy || '—' },
+              { key: 's', label: 'Status', hide: 'phone', sort: (l) => l.status, render: (l) => <Chip tone={l.status === 'Approved' ? 'green' : l.status === 'Rejected' ? 'red' : 'amber'}>{l.status}</Chip> },
+            ]}
+            actions={(l) => {
               const ongoing = l.status === 'Approved' && !l.returned && l.from <= todayISO()
               const future = l.status === 'Approved' && l.from > todayISO()
-              return (
-                <li key={l.id}>
-                  <div className="r-main">
-                    <strong>{l.type} · {l.days} day(s)</strong>
-                    <small><D d={l.from} /> → <D d={l.to} />{l.approvedBy ? ` · by ${l.approvedBy}` : ''}{l.returned ? ` · returned ${fmtDate(l.returnedOn)}` : ''}</small>
-                    {l.ticketProvided && <small>✈ {l.ticketDetails || 'Ticket'} · {rm(l.ticketCost)} · paid by {l.ticketPaidBy || 'Company'}</small>}
-                    {l.remarks && <small className="muted">{l.remarks}</small>}
-                  </div>
-                  <div className="r-act">
-                    <Chip tone={l.status === 'Approved' ? 'green' : l.status === 'Rejected' ? 'red' : 'amber'}>{l.status}</Chip>
-                    {l.status === 'Pending' && <><Btn small onClick={() => upd(w, (x) => { x.leaves = x.leaves.map((y) => (y.id === l.id ? { ...y, status: 'Approved' } : y)) })}>Approve</Btn><Btn small kind="ghost" onClick={() => upd(w, (x) => { x.leaves = x.leaves.map((y) => (y.id === l.id ? { ...y, status: 'Rejected' } : y)) })}>Reject</Btn></>}
-                    {(future || (ongoing && w.status === 'Active-Working')) && <Btn small icon="plane" onClick={() => startLeave(l)}>Check out</Btn>}
-                    {ongoing && w.status !== 'Active-Working' && <Btn small kind="primary" icon="check" onClick={() => returned(l)}>Returned</Btn>}
-                    <Btn small kind="ghost" icon="edit" title="Edit" onClick={() => setEdit(l as unknown as V)} />
-                  </div>
-                </li>
-              )
-            })}
-          </ul>
+              return <Actions>
+                {l.status === 'Pending' && <><IconAction kind="approve" label="Approve leave" onClick={() => upd(w, (x) => { x.leaves = x.leaves.map((y) => (y.id === l.id ? { ...y, status: 'Approved' } : y)) })} />
+                  <IconAction kind="reject" label="Reject leave" confirm="Reject this leave application?" onClick={() => upd(w, (x) => { x.leaves = x.leaves.map((y) => (y.id === l.id ? { ...y, status: 'Rejected' } : y)) })} /></>}
+                {(future || (ongoing && w.status === 'Active-Working')) && <IconAction kind="depart" label="Check out for leave" onClick={() => startLeave(l)} />}
+                {ongoing && w.status !== 'Active-Working' && <IconAction kind="resume" tone="pri" label="Returned from leave" onClick={() => returned(l)} />}
+                <IconAction kind="edit" label="Edit leave" onClick={() => setEdit(l as unknown as V)} />
+              </Actions>
+            }}
+            expand={(l) => <Details items={[['Type', l.type], ['Days', l.days], ['From', <D key="f" d={l.from} />], ['To', <D key="t" d={l.to} />], ['Status', l.status], ['Approved by', l.approvedBy], ['Returned', l.returned ? fmtDate(l.returnedOn) : null],
+              ['Ticket', l.ticketProvided ? `${l.ticketDetails || 'Ticket'} · ${rm(l.ticketCost)} · paid by ${l.ticketPaidBy || 'Company'}` : null], ['Remarks', l.remarks]]} />} />
         )}
       </Card>
       {edit && (
@@ -586,22 +601,18 @@ export function MemosTab({ w, openMemo }: P & { openMemo: (m: Partial<MemoRec>) 
       <Btn small icon="plus" onClick={() => openMemo({ kind: 'Exit Clearance', penalty: proratedPenalty(w, todayISO()).penalty })}>Exit clearance</Btn>
     </>}>
       {w.memos.length === 0 ? <Empty title="No memos yet"><p className="muted small">Memos are created automatically when you check out a leave or process an exit.</p></Empty> : (
-        <ul className="rows">
-          {[...w.memos].sort((a, b) => b.date.localeCompare(a.date)).map((m) => {
-            const done = m.checklist.filter((c) => c.done).length
-            return (
-              <li key={m.id}>
-                <div className="r-main"><strong>{m.kind}</strong><small><D d={m.date} />{m.exitType ? ` · ${m.exitType}` : ''} · {done}/{m.checklist.length} items cleared</small></div>
-                <div className="r-act">
-                  <Chip tone={done === m.checklist.length ? 'green' : 'amber'}>{done === m.checklist.length ? 'Cleared' : 'Pending'}</Chip>
-                  <Btn small kind="ghost" icon="edit" title="Edit" onClick={() => openMemo(m)} />
-                  <Btn small icon="print" onClick={() => nav(`/print/memo/${w.id}/${m.id}`)}>Print</Btn>
-                  <Btn small kind="ghost" icon="trash" title="Delete" onClick={() => confirm('Delete memo?') && upd(w, (x) => { x.memos = x.memos.filter((y) => y.id !== m.id) })} />
-                </div>
-              </li>
-            )
-          })}
-        </ul>
+        <DataTable label="Memos" rows={w.memos} rowKey={(m) => m.id} initialSort={{ key: 'd', dir: 'desc' }}
+          columns={[
+            { key: 'k', label: 'Memo', main: true, sort: (m) => m.kind, render: (m) => <>{m.kind}{m.exitType ? <small className="muted"> · {m.exitType}</small> : null}</> },
+            { key: 'd', label: 'Date', hide: 'phone', sort: (m) => m.date, render: (m) => <D d={m.date} /> },
+            { key: 'c', label: 'Cleared', render: (m) => { const done = m.checklist.filter((c) => c.done).length; return <Chip tone={done === m.checklist.length ? 'green' : 'amber'}>{done === m.checklist.length ? 'Cleared' : `${done}/${m.checklist.length}`}</Chip> } },
+          ]}
+          actions={(m) => <Actions>
+            <IconAction kind="edit" label="Edit memo" onClick={() => openMemo(m)} />
+            <IconAction kind="print" label="Print memo" onClick={() => nav(`/print/memo/${w.id}/${m.id}`)} />
+            <IconAction kind="delete" label="Delete memo" confirm="Delete memo?" onClick={() => upd(w, (x) => { x.memos = x.memos.filter((y) => y.id !== m.id) })} />
+          </Actions>}
+          expand={(m) => <Details items={[['Memo', m.kind], ['Date', <D key="d" d={m.date} />], ['Exit type', m.exitType], ['Checklist', `${m.checklist.filter((c) => c.done).length} of ${m.checklist.length} items cleared`]]} />} />
       )}
     </Card>
   )

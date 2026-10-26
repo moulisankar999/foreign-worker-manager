@@ -140,7 +140,7 @@ function Sheet({ title, onClose, children, full, t }: { title: string; onClose: 
   return (
     <div className="sheet" role="dialog" aria-label={title} onClick={(e) => { if (e.target === e.currentTarget) onClose() }}>
       <div className={'panel' + (full ? ' full' : '')}>
-        <div className="ph"><h2 className="ell">{title}</h2><button type="button" className="btn" style={{ minHeight: 44 }} onClick={onClose} aria-label={t('close')}>✕</button></div>
+        <div className="ph"><h2 className="ell">{title}</h2><button type="button" className="btn" style={{ minHeight: 44 }} onClick={onClose} aria-label={t('close')} title={t('close')}>✕</button></div>
         {children}
       </div>
     </div>
@@ -221,8 +221,8 @@ function Home({ t, lang, setLang, onEnded }: { t: T; lang: Lang; setLang: (l: La
       <header className="top">
         <img src={ICON} width={30} height={30} style={{ borderRadius: 8 }} alt="" />
         <h1>{title}</h1>
-        <button className="iconbtn" onClick={() => setHelpOpen(true)} aria-label={helpFor(lang).ui.help} data-testid="help">?</button>
-        <button className="iconbtn" onClick={() => { load(); setToast(t('refresh') + ' ✓') }} aria-label={t('refresh')} data-testid="refresh">⟳</button>
+        <button className="iconbtn" onClick={() => setHelpOpen(true)} aria-label={helpFor(lang).ui.help} title={helpFor(lang).ui.help} data-testid="help">?</button>
+        <button className="iconbtn" onClick={() => { load(); setToast(t('refresh') + ' ✓') }} aria-label={t('refresh')} title={t('refresh')} data-testid="refresh">⟳</button>
       </header>
       <main className="main" data-testid={'tab-' + tab}>
         {offline && <div className="offline-bar">{t('offline')}</div>}
@@ -290,15 +290,15 @@ function HelpSheet({ t, lang, signedIn, onClose }: { t: T; lang: Lang; signedIn:
       </div>
       {open === null ? (pages > 1 && (
         <div className="pager">
-          <button className="btn" disabled={p === 0} onClick={() => setPage(p - 1)} aria-label={t('back')} data-testid="help-prev">‹</button>
+          <button className="btn" disabled={p === 0} onClick={() => setPage(p - 1)} aria-label={t('back')} title={t('back')} data-testid="help-prev">‹</button>
           <span className="muted small">{p + 1} / {pages}</span>
-          <button className="btn" disabled={p >= pages - 1} onClick={() => setPage(p + 1)} aria-label={t('next')} data-testid="help-next">›</button>
+          <button className="btn" disabled={p >= pages - 1} onClick={() => setPage(p + 1)} aria-label={t('next')} title={t('next')} data-testid="help-next">›</button>
         </div>
       )) : (
         <div className="pager">
-          <button className="btn" disabled={open === 0} onClick={() => setOpen(open - 1)} aria-label={t('back')}>‹</button>
+          <button className="btn" disabled={open === 0} onClick={() => setOpen(open - 1)} aria-label={t('back')} title={t('back')}>‹</button>
           <button className="btn" onClick={() => { setPage(Math.floor(open / per)); setOpen(null) }} data-testid="help-back">☰ {h.ui.list}</button>
-          <button className="btn" disabled={open >= titles.length - 1} onClick={() => setOpen(open + 1)} aria-label={t('next')}>›</button>
+          <button className="btn" disabled={open >= titles.length - 1} onClick={() => setOpen(open + 1)} aria-label={t('next')} title={t('next')}>›</button>
         </div>
       )}
       {msg && <div className="note">{msg}</div>}
@@ -390,9 +390,9 @@ function ReqTab({ t, lang, reqs, reload, onEnded, toast }: { t: T; lang: Lang; r
       </div>
       {pages > 1 && (
         <div className="pager">
-          <button className="btn" disabled={p === 0} onClick={() => setPage(p - 1)} aria-label={t('back')}>‹</button>
+          <button className="btn" disabled={p === 0} onClick={() => setPage(p - 1)} aria-label={t('back')} title={t('back')}>‹</button>
           <span className="muted small">{p + 1} / {pages}</span>
-          <button className="btn" disabled={p >= pages - 1} onClick={() => setPage(p + 1)} aria-label={t('next')}>›</button>
+          <button className="btn" disabled={p >= pages - 1} onClick={() => setPage(p + 1)} aria-label={t('next')} title={t('next')}>›</button>
         </div>
       )}
       {open && <ReqSheet t={t} lang={lang} r={open} onClose={() => setOpenId(null)} reload={reload} onEnded={onEnded} toast={toast} />}
@@ -455,7 +455,7 @@ function ReqSheet({ t, lang, r, onClose, reload, onEnded, toast }: { t: T; lang:
         </div>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: returned && canCancel ? '1fr 2fr' : '1fr', gap: 10 }}>
-          {canCancel && <button className="btn danger" onClick={() => setConfirmCancel(true)} data-testid="req-cancel">{t('cancelReq')}</button>}
+          {canCancel && <button className="btn danger" onClick={() => setConfirmCancel(true)} data-testid="req-cancel">✕ {t('cancelReq')}</button>}
           {returned && <button className="btn primary" disabled={busy || !answer.trim()} onClick={() => run(() => resubmitRequest(r.id, answer))}>{t('sendAnswer')}</button>}
         </div>
       )}

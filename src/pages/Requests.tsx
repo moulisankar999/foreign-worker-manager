@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { Btn, Card, Chip, Empty, KV, Modal, SelectFilter, Tabs, Toolbar } from '../components/ui'
 import { FilePick } from '../components/filePick'
-import { DocRowItem, UploadDoc } from '../components/vault'
+import { DocTable, UploadDoc } from '../components/vault'
 import { useAuth } from '../lib/auth'
 import { useConfig } from '../lib/config'
 import { db, updateWorker } from '../lib/db'
@@ -20,6 +20,8 @@ import { isExited } from '../lib/calc'
 import { hrTaskDone, useHrTasks, type HrTask } from '../lib/ceoReview'
 import { OverruleDialog, decidedLine } from './CeoReview'
 import { toast } from '../components/toast'
+import { DataTable, Details } from '../components/dataTable'
+import { Actions, IconAction } from '../components/iconAction'
 
 const LEVEL_PATH: Record<string, string> = { hr_manager: 'HR Manager', hr_admin: 'HR Manager → HR Admin', super_admin: 'HR Manager → HR Admin → General Manager (final; CEO if no GM)' }
 const ago = (iso: string) => {
@@ -93,31 +95,35 @@ export default function RequestsPage() {
       {error && <p className="warn small">{error}</p>}
       {tab === 'tasks' ? <HrTasksCard tasks={tasks} /> : <Card>
         {loading && !rows.length ? <p className="muted">Loading…</p> : shown.length === 0 ? <Empty icon="check" title={tab === 'mine_action' ? 'Nothing waiting for you 🎉' : 'No requests'} /> : (
-          <ul className="rows req-list">
-            {shown.map((r) => {
-              const t = REQUEST_TYPE[r.type]
-              return (
-                <li key={r.id}>
-                  <Link to={`/requests/${r.id}`} className="req-link">
-                    <span className="req-ic" aria-hidden>{t?.icon || '📝'}</span>
-                    <div className="r-main">
-                      <strong>{t?.label || r.type}{r.amount ? ` · ${rm(r.amount)}` : ''}</strong>
-                      <small>{refNo(r)} · {wName(r.worker_id)} · {outletName(outlets, r.outlet_id || undefined)} · {r.created_by_name} · {ago(r.updated_at)}</small>
-                    </div>
-                    <div className="r-act col-end">
-                      <Chip tone={STATUS_TONE[r.status]}>{STATUS_LABEL[r.status]}</Chip>
-                      {(r.priority === 'urgent' || r.priority === 'high') && <Chip tone="red">{r.priority}</Chip>}
-                      {r.source === 'worker' && <Chip tone="blue">📱 worker</Chip>}
-                      {r.manager_overdue && <Chip tone="orange">OM overdue</Chip>}
-                      {r.confidential && <Chip tone="purple">🔒 confidential</Chip>}
-                      {r.type === 'emergency_leave' && r.data.proofReceived !== true && !r.data.proofWaived && OPEN_STATUSES.concat('completed').includes(r.status) && <Chip tone="orange">proof pending</Chip>}
-                      {r.data.ticketBooked === true && <Chip tone="purple">✈ ticket</Chip>}
-                    </div>
-                  </Link>
-                </li>
-              )
-            })}
-          </ul>
+          <DataTable label="Requests" rows={shown} rowKey={(r) => r.id} rowTestId={() => 'req-row'} initialSort={{ key: 'updated', dir: 'desc' }}
+            search={(r) => `${REQUEST_TYPE[r.type]?.label || r.type} ${refNo(r)} ${wName(r.worker_id)} ${outletName(outlets, r.outlet_id || undefined)} ${r.created_by_name} ${STATUS_LABEL[r.status]}`} searchLabel="Search requests"
+            rowClass={(r) => (r.priority === 'urgent' || r.priority === 'high' ? 'dt-bad' : r.manager_overdue ? 'dt-warn' : '')}
+            columns={[
+              { key: 'type', label: 'Request', main: true, sort: (r) => REQUEST_TYPE[r.type]?.label || r.type,
+                render: (r) => <span className="dt-person"><span className="req-ic" aria-hidden>{REQUEST_TYPE[r.type]?.icon || '📝'}</span><span><Link to={`/requests/${r.id}`} className="dt-link">{REQUEST_TYPE[r.type]?.label || r.type}{r.amount ? ` · ${rm(r.amount)}` : ''}</Link><small>{refNo(r)}</small></span></span> },
+              { key: 'worker', label: 'Worker', sort: (r) => wName(r.worker_id), render: (r) => wName(r.worker_id) },
+              { key: 'outlet', label: 'Outlet', hide: 'tablet', sort: (r) => outletName(outlets, r.outlet_id || undefined), render: (r) => outletName(outlets, r.outlet_id || undefined) },
+              { key: 'status', label: 'Status', hide: 'phone', sort: (r) => STATUS_LABEL[r.status], render: (r) => <span className="chips"><Chip tone={STATUS_TONE[r.status]}>{STATUS_LABEL[r.status]}</Chip>{(r.priority === 'urgent' || r.priority === 'high') && <Chip tone="red">{r.priority}</Chip>}</span> },
+              { key: 'updated', label: 'Updated', hide: 'tablet', sort: (r) => r.updated_at, render: (r) => <span className="small">{ago(r.updated_at)}</span> },
+            ]}
+            actions={(r) => <Actions><IconAction kind="view" label="Open request" onClick={() => nav(`/requests/${r.id}`)} /></Actions>}
+            expand={(r) => (
+              <>
+                <Details items={[
+                  ['Reference', refNo(r)], ['Worker', wName(r.worker_id)], ['Outlet', outletName(outlets, r.outlet_id || undefined)], ['Raised by', r.created_by_name],
+                  ['Status', <Chip tone={STATUS_TONE[r.status]}>{STATUS_LABEL[r.status]}</Chip>], ['Updated', `${new Date(r.updated_at).toLocaleString()} (${ago(r.updated_at)})`],
+                ]} />
+                <div className="chips">
+                  {(r.priority === 'urgent' || r.priority === 'high') && <Chip tone="red">{r.priority}</Chip>}
+                  {r.source === 'worker' && <Chip tone="blue">📱 worker</Chip>}
+                  {r.manager_overdue && <Chip tone="orange">OM overdue</Chip>}
+                  {r.confidential && <Chip tone="purple">🔒 confidential</Chip>}
+                  {r.type === 'emergency_leave' && r.data.proofReceived !== true && !r.data.proofWaived && OPEN_STATUSES.concat('completed').includes(r.status) && <Chip tone="orange">proof pending</Chip>}
+                  {r.data.ticketBooked === true && <Chip tone="purple">✈ ticket</Chip>}
+                </div>
+                <p className="mt-s"><Btn small kind="primary" icon="eye" onClick={() => nav(`/requests/${r.id}`)}>Open request — decide, comment, documents</Btn></p>
+              </>
+            )} />
         )}
       </Card>}
     </div>
@@ -135,18 +141,23 @@ export function HrTasksCard({ tasks, title = 'HR follow-up tasks' }: { tasks: Hr
   return (
     <Card title={title}>
       {tasks.length === 0 ? <p className="muted small">No follow-up tasks.</p> : (
-        <ul className="rows">
-          {tasks.map((t) => (
-            <li key={t.id}>
-              <div className="r-main">
-                <strong>{t.status === 'done' ? '✅ ' : '🟠 '}{t.title}</strong>
-                <small>{t.details} · created by {t.created_by_name} · {new Date(t.created_at).toLocaleString()}{t.request_id && <> · <Link to={`/requests/${t.request_id}`}>open request</Link></>}</small>
-                {t.status === 'done' && <small className="muted">Done by {t.done_by_name} · {t.done_at ? new Date(t.done_at).toLocaleString() : ''}{t.done_note ? ` — ${t.done_note}` : ''}</small>}
-              </div>
-              {t.status === 'open' && <div className="r-act"><Btn small kind="primary" icon="check" disabled={busy === t.id} onClick={() => done(t)}>Mark done</Btn></div>}
-            </li>
-          ))}
-        </ul>
+        <DataTable label={title} rows={tasks} rowKey={(t) => t.id} initialSort={{ key: 'created', dir: 'desc' }} search={(t) => `${t.title} ${t.details} ${t.created_by_name}`}
+          rowClass={(t) => (t.status === 'done' ? 'dt-muted' : 'dt-warn')}
+          filters={[{ key: 'st', label: 'Status', options: [{ value: 'open', label: 'Open' }, { value: 'done', label: 'Done' }], match: (t, v) => t.status === v }]}
+          columns={[
+            { key: 'title', label: 'Follow-up', main: true, sort: (t) => t.title, render: (t) => <>{t.status === 'done' ? '✅ ' : '🟠 '}{t.title}<small>{t.details}</small></> },
+            { key: 'st', label: 'Status', hide: 'phone', sort: (t) => t.status, render: (t) => <Chip tone={t.status === 'done' ? 'green' : 'orange'}>{t.status === 'done' ? 'Done' : 'Open'}</Chip> },
+            { key: 'created', label: 'Created', hide: 'tablet', sort: (t) => t.created_at, render: (t) => <span className="small">{new Date(t.created_at).toLocaleString()}</span> },
+          ]}
+          actions={(t) => (
+            <Actions>
+              {t.request_id && <IconAction kind="view" label="Open request" href={`#/requests/${t.request_id}`} />}
+              {t.status === 'open' && <IconAction kind="approve" label="Mark done" disabled={busy === t.id} onClick={() => done(t)} />}
+            </Actions>
+          )}
+          expand={(t) => <Details items={[['Details', t.details], ['Created by', `${t.created_by_name} · ${new Date(t.created_at).toLocaleString()}`],
+            ['Done', t.status === 'done' ? `${t.done_by_name} · ${t.done_at ? new Date(t.done_at).toLocaleString() : ''}${t.done_note ? ` — ${t.done_note}` : ''}` : ''],
+            ['Request', t.request_id ? <Link to={`/requests/${t.request_id}`}>Open request</Link> : '']]} />} />
       )}
     </Card>
   )
@@ -384,7 +395,7 @@ export function RequestDetail() {
           {ticketBooked ? (
             <>
               <p><strong>Ticket booked — download</strong></p>
-              <ul className="rows">{tickets.map((d) => <DocRowItem key={d.id} d={d} />)}</ul>
+              <DocTable docs={tickets} label="Tickets" />
             </>
           ) : r.type === 'home_leave' ? (
             <p className="muted">{r.data.ticketNeeded ? (r.status === 'approved' || r.status === 'completed' ? 'Approved — HR to book the ticket and attach it here.' : 'HR books the ticket after approval.') : 'No company ticket requested.'}</p>
@@ -399,7 +410,7 @@ export function RequestDetail() {
         <Card title="📎 Proof">
           <p>Status: <Chip tone={pState === 'received' ? 'green' : pState === 'waived' ? 'gray' : pState === 'overdue' ? 'red' : 'orange'}>{pState === 'pending' ? `proof pending (due ${fmtDate(proofDue(r, pDays))})` : pState === 'overdue' ? `proof overdue (was due ${fmtDate(proofDue(r, pDays))})` : pState}</Chip></p>
           {(reason || !!r.data.proofExpected) && <p className="muted small">Expected: {String(r.data.proofExpected || reason?.proof)}</p>}
-          {proofs.length > 0 && <ul className="rows">{proofs.map((d) => <DocRowItem key={d.id} d={d} />)}</ul>}
+          {proofs.length > 0 && <DocTable docs={proofs} label="Proof" />}
           <div className="row gap-s wrap">
             {canUpload && w && <Btn small icon="upload" onClick={() => setUp({ category: EMERGENCY_PROOF_CATEGORY, title: `Proof ${refNo(r)}` })}>Upload proof</Btn>}
             {isHr && pState !== 'received' && <Btn small kind="ghost" onClick={() => noteRequest(r.id, { proofReceived: true }, 'HR marked proof as received').catch(err)}>Mark received</Btn>}
@@ -409,7 +420,7 @@ export function RequestDetail() {
       )}
 
       <Card title={`Attachments (${others.length})`} actions={canUpload && w && <Btn small icon="plus" onClick={() => setUp({ category: t?.mcCategory || 'Other', title: `${t?.label || ''} ${refNo(r)}` })}>Add</Btn>}>
-        {others.length === 0 ? <p className="muted small">None</p> : <ul className="rows">{others.map((d) => <DocRowItem key={d.id} d={d} />)}</ul>}
+        {others.length === 0 ? <p className="muted small">None</p> : <DocTable docs={others} label="Documents on this request" />}
       </Card>
 
       {(actions.length > 0 || assignable) && (

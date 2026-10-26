@@ -14,6 +14,8 @@ import { zeroCostLanguage } from '../lib/zeroCostText'
 import { companyName, outletCompany } from '../lib/companies'
 import type { Worker } from '../lib/types'
 import { download, fmtDate, rm, todayISO, uid } from '../lib/util'
+import { DataTable, Details } from './dataTable'
+import { Actions, IconAction } from './iconAction'
 import { toast } from './toast'
 
 type V = Record<string, unknown>
@@ -107,7 +109,7 @@ function FlowCard({ w }: { w: Worker }) {
         <p className="small">{f.kind === 'abscond' ? `Last seen ${fmtDate(f.lastSeen)} · ` : ''}Started {fmtDate(f.started)} · {done} of {steps.length} done {f.closed && <Chip tone="gray">closed</Chip>}</p>
         <ul className="rows compact">{steps.map((x) => {
           const r = f.steps[x.key] || {}
-          return <li key={x.key}><div className="r-main"><strong>{r.done ? '✅' : '⬜'} {x.label}</strong><small>{r.done ? `${fmtDate(r.date)}${r.ref ? ` · ref ${r.ref}` : ''}${r.note ? ` · ${r.note}` : ''}` : x.hint}</small></div><Btn small onClick={() => setStep(x.key)}>{r.done ? 'Edit' : 'Mark done'}</Btn></li>
+          return <li key={x.key}><div className="r-main"><strong>{r.done ? '✅' : '⬜'} {x.label}</strong><small>{r.done ? `${fmtDate(r.date)}${r.ref ? ` · ref ${r.ref}` : ''}${r.note ? ` · ${r.note}` : ''}` : x.hint}</small></div><IconAction kind={r.done ? 'edit' : 'approve'} label={r.done ? `Edit: ${x.label}` : `Mark done: ${x.label}`} onClick={() => setStep(x.key)} /></li>
         })}</ul>
         {f.kind === 'abscond' && <p className="muted small">The days for the police and Immigration reports are company targets (Settings in Compliance → Rules), not legal deadlines. Report in FWCMS (eRUNAWAY) or in person; Immigration keeps the security bond — {CHECK}.</p>}
         {f.kind === 'exit' && <p className="muted small">Apply for the Check Out Memo (COM) before the worker flies home; it is also needed to claim back the security bond — {CHECK}.</p>}
@@ -153,8 +155,15 @@ function CostsCard({ w }: { w: Worker }) {
       <KV items={[['Paid by the company (recorded)', rm(company)], [`Employer EPF + PERKESO (from ${stat.n} payslip${stat.n === 1 ? '' : 's'})`, `${rm(stat.epf)} + ${rm(stat.socso)}`], ['Total cost of this worker', rm(company + stat.epf + stat.socso)]]} />
       {workerPaid.length > 0 && <div className="banner red small">The worker paid {workerPaid.map((c) => c.type.toLowerCase()).join(', ')} ({rm(workerPaid.reduce((t, c) => t + c.amount, 0))}). These are employer costs — refund them and record the refund ({CHECK}).</div>}
       {costs.length ? (
-        <div className="tbl-wrap"><table className="tbl"><thead><tr><th>Date</th><th>Cost</th><th>Paid by</th><th className="num">Amount</th><th /></tr></thead>
-          <tbody>{costs.map((c) => <tr key={c.id}><td className="nowrap">{fmtDate(c.date)}</td><td>{c.type}{c.notes ? <small className="muted"> · {c.notes}</small> : null}</td><td>{c.paidBy}{c.refunded ? ' (refunded)' : ''}</td><td className="num">{rm(c.amount)}</td><td><Btn small kind="ghost" icon="edit" title="Edit" onClick={() => setEdit(c)} /></td></tr>)}</tbody></table></div>
+        <DataTable label="Costs" rows={costs} rowKey={(c) => c.id} initialSort={{ key: 'd', dir: 'desc' }} rowClass={(c) => (c.paidBy === 'Worker' && !c.refunded ? 'dt-bad' : '')}
+          columns={[
+            { key: 'd', label: 'Date', sort: (c) => c.date, render: (c) => <span className="nowrap">{fmtDate(c.date)}</span> },
+            { key: 't', label: 'Cost', main: true, sort: (c) => c.type, render: (c) => c.type },
+            { key: 'p', label: 'Paid by', hide: 'phone', sort: (c) => c.paidBy, render: (c) => `${c.paidBy}${c.refunded ? ' (refunded)' : ''}` },
+            { key: 'a', label: 'Amount', align: 'right', sort: (c) => c.amount, render: (c) => rm(c.amount) },
+          ]}
+          actions={(c) => <Actions><IconAction kind="edit" label="Edit cost" onClick={() => setEdit(c)} /></Actions>}
+          expand={(c) => <Details items={[['Date', fmtDate(c.date)], ['Cost', c.type], ['Paid by', `${c.paidBy}${c.refunded ? ' (refunded)' : ''}`], ['Amount', rm(c.amount)], ['Notes', c.notes]]} />} />
       ) : <p className="muted small">No costs recorded. Levy default is {rm(lv)} a year (Peninsular Malaysia; Sabah and Sarawak differ) — editable in Compliance → Rules.</p>}
       {edit && <FormModal title={edit.id ? 'Edit cost' : 'Add cost'} fields={fields} initial={edit as unknown as V} onClose={() => setEdit(null)}
         onDelete={edit.id ? () => void updateWorker(w.id, (x) => { x.costs = (x.costs || []).filter((c) => c.id !== edit.id) }) : undefined}

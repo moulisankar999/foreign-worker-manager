@@ -20,6 +20,7 @@ import { useOutlets, useSettings } from '../lib/hooks'
 import { buildICS } from '../lib/ics'
 import { STATUSES, type MemoRec, type WorkerStatus } from '../lib/types'
 import { missingLanguage, otherLanguagesText, primaryLangName } from '../lib/languages'
+import { DataTable } from '../components/dataTable'
 import { age, download, fmtDate, rm, serviceText, todayISO } from '../lib/util'
 
 type Tab = 'access' | 'overview' | 'checks' | 'vault' | 'requests' | 'passport' | 'remarks' | 'docs' | 'remit' | 'family' | 'contract' | 'pay' | 'loans' | 'leave' | 'memos' | 'notes' | 'trackers'
@@ -107,7 +108,13 @@ export default function WorkerDetail() {
           <div className="grid2">
             <Card title="Documents" actions={canWrite && <button className="link" onClick={() => setTab('docs')}>Manage →</button>}>
               {docs.length === 0 ? <p className="muted">No documents</p> : (
-                <ul className="rows compact">{docs.map((d) => <li key={d.id}><div className="r-main"><strong>{d.type === 'Other' ? d.label : d.type}</strong><small>{d.number || ''} · exp {fmtDate(d.expiryDate)}{d.stage ? ` · ${d.stage}` : ''}</small></div><Chip tone={docTone(docStatus(d, s))}>{docStatus(d, s)}</Chip></li>)}</ul>
+                <DataTable label="Documents" dense rows={docs} rowKey={(d) => d.id} canExpand={() => false}
+                  rowClass={(d) => { const st = docTone(docStatus(d, s)); return st === 'red' ? 'dt-bad' : st === 'amber' || st === 'orange' ? 'dt-warn' : '' }}
+                  columns={[
+                    { key: 't', label: 'Document', main: true, render: (d) => <>{d.type === 'Other' ? d.label : d.type}{d.number ? <small className="muted"> {d.number}</small> : null}</> },
+                    { key: 'e', label: 'Expiry', sort: (d) => d.expiryDate || '', render: (d) => fmtDate(d.expiryDate) },
+                    { key: 's', label: 'Status', render: (d) => <Chip tone={docTone(docStatus(d, s))}>{docStatus(d, s)}</Chip> },
+                  ]} />
               )}
             </Card>
             <Card title="Summary">

@@ -9,6 +9,8 @@ import { useOutlets, useWorkers } from '../lib/hooks'
 import { refNo, useRequests } from '../lib/requests'
 import { REQUEST_TYPE, REQUEST_TYPES, ROLE_LABEL, STATUS_LABEL, STATUS_TONE, type RequestRow } from '../lib/workflow'
 import { rm } from '../lib/util'
+import { DataTable, Details } from '../components/dataTable'
+import { Actions, IconAction } from '../components/iconAction'
 
 /** number of decisions waiting for the CEO's review (badge) */
 export function useCeoBadge() {
@@ -70,32 +72,29 @@ export default function CeoReviewPage() {
       </Toolbar>
       <Card>
         {list.length === 0 ? <Empty icon="check" title={view === 'todo' ? 'Nothing to review 🎉' : 'Nothing here'} /> : (
-          <ul className="rows req-list">
-            {list.map(({ r, rv }) => {
-              const t = REQUEST_TYPE[r.type]
-              return (
-                <li key={r.id} className="ceo-row">
-                  <Link to={`/requests/${r.id}`} className="req-link">
-                    <span className="req-ic" aria-hidden>{t?.icon || '📝'}</span>
-                    <div className="r-main">
-                      <strong>{t?.label || r.type}{r.amount ? ` · ${rm(r.amount)}` : ''} — {wName(r.worker_id)}</strong>
-                      <small>{refNo(r)} · {outletName(outlets, r.outlet_id || undefined)} · {rv ? (REVIEW_REASON[rv.reason] || rv.reason) : ''} {decidedLine(r) || (rv?.decided_by_name ? `· ${rv.decided_by_name}` : '')}</small>
-                      {rv?.reviewed_at && <small className="muted">You: {rv.outcome === 'kept' ? 'kept the decision' : rv.outcome} · {when(rv.reviewed_at)}</small>}
-                    </div>
-                    <div className="r-act col-end">
-                      <Chip tone={STATUS_TONE[r.status]}>{STATUS_LABEL[r.status]}</Chip>
-                      {r.ceo_locked && <Chip tone="purple">🔒 CEO final</Chip>}
-                    </div>
-                  </Link>
-                  <div className="row gap-s wrap ceo-btns">
-                    {view !== 'any' && !rv?.reviewed_at && <Btn small icon="check" onClick={() => setOpen({ r, d: 'reviewed' })}>Mark reviewed</Btn>}
-                    <Btn small kind="primary" onClick={() => setOpen({ r })}>Overrule…</Btn>
-                    {!(r.status === 'escalated' && r.ceo_locked) && <Btn small kind="ghost" onClick={() => setOpen({ r, d: 'recall' })}>Recall</Btn>}
-                  </div>
-                </li>
-              )
-            })}
-          </ul>
+          <DataTable label="Decisions for CEO review" className="ceo-t" rows={list} rowKey={({ r }) => r.id} rowTestId={() => 'ceo-row'} initialSort={{ key: 'at', dir: 'desc' }}
+            columns={[
+              { key: 'req', label: 'Request', main: true, sort: ({ r }) => REQUEST_TYPE[r.type]?.label || r.type, render: ({ r }) => <span className="dt-person"><span className="req-ic" aria-hidden>{REQUEST_TYPE[r.type]?.icon || '📝'}</span><span><Link className="dt-link" to={`/requests/${r.id}`}>{REQUEST_TYPE[r.type]?.label || r.type}{r.amount ? ` · ${rm(r.amount)}` : ''}</Link><small>{refNo(r)}</small></span></span> },
+              { key: 'w', label: 'Worker', sort: ({ r }) => wName(r.worker_id), render: ({ r }) => wName(r.worker_id) },
+              { key: 'why', label: 'Why', hide: 'tablet', render: ({ rv }) => <span className="small">{rv ? (REVIEW_REASON[rv.reason] || rv.reason) : '—'}</span> },
+              { key: 'by', label: 'Decided by', hide: 'tablet', sort: ({ r, rv }) => r.decided_by_name || rv?.decided_by_name || '', render: ({ r, rv }) => <span className="small">{r.decided_by_name || rv?.decided_by_name || '—'}</span> },
+              { key: 'st', label: 'Status', hide: 'phone', sort: ({ r }) => STATUS_LABEL[r.status], render: ({ r }) => <span className="row gap-s wrap"><Chip tone={STATUS_TONE[r.status]}>{STATUS_LABEL[r.status]}</Chip>{r.ceo_locked && <Chip tone="purple">🔒 CEO final</Chip>}</span> },
+              { key: 'at', label: 'When', hide: 'tablet', sort: ({ r, rv }) => rv?.decided_at || r.decided_at || r.updated_at, render: ({ r, rv }) => <span className="small">{when(rv?.decided_at || r.decided_at || r.updated_at)}</span> },
+            ]}
+            actions={({ r, rv }) => (
+              <Actions>
+                {view !== 'any' && !rv?.reviewed_at && <IconAction kind="approve" label="Mark reviewed — keep the decision" onClick={() => setOpen({ r, d: 'reviewed' })} />}
+                <IconAction kind="edit" tone="pri" label="Overrule — approve, amend, reject or cancel" onClick={() => setOpen({ r })} />
+                {!(r.status === 'escalated' && r.ceo_locked) && <IconAction kind="recall" label="Recall to me" onClick={() => setOpen({ r, d: 'recall' })} />}
+              </Actions>
+            )}
+            expand={({ r, rv }) => (
+              <>
+                <Details items={[['Worker', wName(r.worker_id)], ['Outlet', outletName(outlets, r.outlet_id || undefined)], ['Why it is here', rv ? (REVIEW_REASON[rv.reason] || rv.reason) : null],
+                  ['Decision', decidedLine(r) || rv?.decided_by_name], ['Your review', rv?.reviewed_at ? `${rv.outcome === 'kept' ? 'Kept the decision' : rv.outcome} · ${when(rv.reviewed_at)}` : null]]} />
+                <div className="mt-s"><Btn small icon="eye" onClick={() => nav(`/requests/${r.id}`)}>Open request</Btn></div>
+              </>
+            )} />
         )}
       </Card>
       {open && <OverruleDialog r={open.r} initial={open.d} workerName={wName(open.r.worker_id)} onClose={() => setOpen(null)} />}

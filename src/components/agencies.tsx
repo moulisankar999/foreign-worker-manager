@@ -11,6 +11,8 @@ import { PERMIT } from '../lib/compliance'
 import { prepareFiles, uploadDoc } from '../lib/vault'
 import { fmtDate, todayISO, uid } from '../lib/util'
 import type { Worker } from '../lib/types'
+import { DataTable, Details } from './dataTable'
+import { Actions, IconAction } from './iconAction'
 import { toast } from './toast'
 
 export function AgenciesCard() {
@@ -82,36 +84,31 @@ export function CheckStatusPanel({ w }: { w: Worker }) {
             <button key={k} type="button" className="copy-chip" onClick={() => copy(COPY_LABEL[k], vals[k])} title={`Copy ${COPY_LABEL[k]}`}>📋 {COPY_LABEL[k]}: <code>{vals[k]}</code></button>
           ) : <span key={k} className="copy-chip muted" aria-disabled>{COPY_LABEL[k]}: —</span>)}
         </div>
-        <ul className="rows">
-          {agencies.map((a) => {
-            const lc = lastCheck(w, a.id)
-            const days = daysSinceCheck(w, a.id)
-            const late = a.remindDays > 0 && (days === null || days > a.remindDays)
-            return (
-              <li key={a.id}>
-                <div className="r-main">
-                  <strong><span aria-hidden>{a.icon}</span> {a.short}</strong>
-                  <small className="muted">{a.notes}</small>
-                  <small>{lc ? <><Chip tone={checkTone(lc.status)}>{lc.status}</Chip> {fmtDate(lc.date)} · {lc.by}{lc.ref ? ` · ref ${lc.ref}` : ''}{lc.note ? ` — ${lc.note}` : ''}</> : <span className="muted">Never checked</span>}
-                    {late && <> <Chip tone="amber">{days === null ? 'Not checked yet' : `Not checked in ${days} days`}</Chip></>}</small>
-                </div>
-                <div className="r-act">
-                  <a className="btn btn-secondary btn-s" href={a.url} target="_blank" rel="noopener noreferrer">Open site ↗</a>
-                  {canWrite && <Btn small kind="primary" icon="check" onClick={() => setRec(a)}>Record result</Btn>}
-                </div>
-              </li>
-            )
-          })}
-        </ul>
+        <DataTable label="Official sites to check" rows={agencies} rowKey={(a) => a.id}
+          rowClass={(a) => (a.remindDays > 0 && (daysSinceCheck(w, a.id) === null || (daysSinceCheck(w, a.id) as number) > a.remindDays) ? 'dt-warn' : '')}
+          columns={[
+            { key: 'a', label: 'Agency', main: true, render: (a) => <><span aria-hidden>{a.icon}</span> {a.short}</> },
+            { key: 'last', label: 'Last check', render: (a) => { const lc = lastCheck(w, a.id); return lc ? <span className="row gap-s wrap"><Chip tone={checkTone(lc.status)}>{lc.status}</Chip><span className="small">{fmtDate(lc.date)}</span></span> : <span className="muted small">Never checked</span> } },
+            { key: 'due', label: 'Reminder', hide: 'phone', render: (a) => { const days = daysSinceCheck(w, a.id); const late = a.remindDays > 0 && (days === null || days > a.remindDays); return late ? <Chip tone="amber">{days === null ? 'Not checked yet' : `Not checked in ${days} days`}</Chip> : <span className="muted small">—</span> } },
+          ]}
+          actions={(a) => <Actions><IconAction kind="view" label={`Open ${a.short} official site`} href={a.url} />{canWrite && <IconAction kind="approve" tone="pri" label="Record result" onClick={() => setRec(a)} />}</Actions>}
+          expand={(a) => { const lc = lastCheck(w, a.id)
+            return <>
+              <Details items={[['About', a.notes], ['Last check', lc ? `${lc.status} · ${fmtDate(lc.date)} · ${lc.by}` : 'Never checked'], ['Reference', lc?.ref], ['Note', lc?.note], ['Remind every', a.remindDays ? `${a.remindDays} days` : null]]} />
+              <div className="row gap-s wrap mt-s"><a className="btn btn-secondary btn-s" href={a.url} target="_blank" rel="noopener noreferrer">Open site ↗</a>{canWrite && <Btn small kind="primary" icon="check" onClick={() => setRec(a)}>Record result</Btn>}</div>
+            </> }} />
         {!agencies.length && <p className="muted small">No agencies switched on (Settings → Agencies & Integrations).</p>}
       </Card>
       <Card title={`Check history (${checks.length})`}>
         {!checks.length ? <p className="muted small">No checks recorded yet.</p> : (
-          <ul className="rows compact">{checks.map((c) => {
-            const a = agencies.find((x) => x.id === c.agency)
-            return <li key={c.id}><div className="r-main"><strong>{a?.short || c.agency} · <Chip tone={checkTone(c.status)}>{c.status}</Chip></strong>
-              <small className="muted">{fmtDate(c.date)} · by {c.by}{c.ref ? ` · ref ${c.ref}` : ''}{c.note ? ` — ${c.note}` : ''}{c.docId ? ' · 📎 screenshot in vault' : ''}</small></div></li>
-          })}</ul>
+          <DataTable label="Check history" dense rows={checks} rowKey={(c) => c.id}
+            columns={[
+              { key: 'a', label: 'Agency', main: true, render: (c) => agencies.find((x) => x.id === c.agency)?.short || c.agency },
+              { key: 's', label: 'Result', render: (c) => <Chip tone={checkTone(c.status)}>{c.status}</Chip> },
+              { key: 'd', label: 'Date', hide: 'phone', sort: (c) => c.date, render: (c) => fmtDate(c.date) },
+              { key: 'by', label: 'By', hide: 'tablet', render: (c) => c.by },
+            ]}
+            expand={(c) => <Details items={[['Date', fmtDate(c.date)], ['By', c.by], ['Reference', c.ref], ['Note', c.note], ['Screenshot', c.docId ? 'Saved in the vault' : null]]} />} />
         )}
       </Card>
       {rec && <RecordCheck w={w} a={rec} by={profile?.full_name || profile?.email || 'me'} onClose={() => setRec(null)} />}

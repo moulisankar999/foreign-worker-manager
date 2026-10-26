@@ -5,6 +5,8 @@ import { Btn, Card, Chip, Modal } from './ui'
 import { useAuth } from '../lib/auth'
 import { saveConsentTranslation, useConfig } from '../lib/config'
 import { CONSENT_EN, CONSENT_KEYS, CONSENT_KEY_LABEL, CONSENT_TR, type ConsentText } from '../lib/consentText'
+import { DataTable, Details } from './dataTable'
+import { Actions, IconAction } from './iconAction'
 import { LANGUAGES, langDef } from '../lib/languages'
 
 const EDITABLE = LANGUAGES.filter((l) => l.code !== 'en' && l.code !== 'other')
@@ -18,20 +20,17 @@ export function ConsentTranslationsCard() {
     <Card title="Consent form translations">
       <p className="muted small">The passport-safekeeping consent form prints in <b>English + the worker’s primary language</b> (English + Bahasa Malaysia when the language is not recorded or has no translation).
         The built-in translations have <b>not yet been checked by native speakers</b> — please have a fluent speaker read each one and correct it here. Keep the legal meaning: voluntary, the passport is the worker’s property, returned on request within the turnaround time, no fee, consent can be withdrawn, Passports Act 1966 s.12(1)(f).</p>
-      <ul className="rows">
-        {EDITABLE.map((l) => {
-          const ov = items[l.code]
-          const n = ov ? Object.values(ov.text || {}).filter((v) => (v || '').trim()).length : 0
-          return (
-            <li key={l.code}>
-              <div className="r-main"><strong>{l.name}{l.native && l.native !== l.name ? ` — ${l.native}` : ''}</strong>
-                <small>{CONSENT_TR[l.code] ? 'Built-in translation' : 'No built-in translation — type every field to enable it'}{n ? ` · ${n} field${n > 1 ? 's' : ''} corrected` : ''}{ov?.updatedBy ? ` · by ${ov.updatedBy}` : ''}</small></div>
-              {ov?.checked ? <Chip tone="green">Checked{ov.checkedBy ? ` · ${ov.checkedBy}` : ''}</Chip> : <Chip tone="amber">Not native-checked</Chip>}
-              <Btn small icon="edit" onClick={() => setEdit(l.code)}>Edit</Btn>
-            </li>
-          )
-        })}
-      </ul>
+      <DataTable label="Consent form translations" rows={EDITABLE} rowKey={(l) => l.code} search={(l) => `${l.name} ${l.native || ''}`} searchLabel="Search languages"
+        rowClass={(l) => (items[l.code]?.checked ? '' : 'dt-warn')}
+        columns={[
+          { key: 'n', label: 'Language', main: true, sort: (l) => l.name, render: (l) => <>{l.name}{l.native && l.native !== l.name ? <small className="muted"> — {l.native}</small> : null}</> },
+          { key: 'b', label: 'Source', hide: 'tablet', render: (l) => <span className="small">{CONSENT_TR[l.code] ? 'Built-in' : 'No built-in translation'}</span> },
+          { key: 'c', label: 'Corrected', hide: 'phone', align: 'right', render: (l) => { const ov = items[l.code]; return ov ? Object.values(ov.text || {}).filter((v) => (v || '').trim()).length : 0 } },
+          { key: 's', label: 'Native check', render: (l) => { const ov = items[l.code]; return ov?.checked ? <Chip tone="green">Checked</Chip> : <Chip tone="amber">Not native-checked</Chip> } },
+        ]}
+        actions={(l) => <Actions><IconAction kind="edit" label={`Edit the ${l.name} translation`} onClick={() => setEdit(l.code)} /></Actions>}
+        expand={(l) => { const ov = items[l.code]; const n = ov ? Object.values(ov.text || {}).filter((v) => (v || '').trim()).length : 0
+          return <Details items={[['Source', CONSENT_TR[l.code] ? 'Built-in translation' : 'No built-in translation — type every field to enable it'], ['Fields corrected', n || null], ['Last edited by', ov?.updatedBy], ['Native check', ov?.checked ? `Checked${ov.checkedBy ? ` by ${ov.checkedBy}` : ''}` : 'Not native-checked']]} /> }} />
       {edit && <EditModal code={edit} me={profile?.full_name || profile?.email || ''} onClose={() => setEdit(null)} />}
     </Card>
   )

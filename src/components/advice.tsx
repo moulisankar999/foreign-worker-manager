@@ -16,6 +16,7 @@ import { headerLogo, companyLogo } from '../lib/logos'
 import { overdueDays } from '../lib/passport'
 import { ROLE_LABEL } from '../lib/workflow'
 import { fmtDate } from '../lib/util'
+import { DataTable, Details } from './dataTable'
 import type { Outlet, Worker } from '../lib/types'
 
 const hello = () => { const h = new Date().getHours(); return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening' }
@@ -198,11 +199,14 @@ export function LatestChecks({ workers }: { workers: Worker[] }) {
   const ag = (id: string) => cfg.agencies.items.find((a) => a.id === id)
   return (
     <Card title={<>🔎 Latest status checks</>}>
-      <ul className="rows compact">{list.map(({ w, c }) => (
-        <li key={c.id}><Link className="req-link" to={`/workers/${w.id}?tab=checks`}><span className="req-ic">{ag(c.agency)?.icon || '🔎'}</span>
-          <div className="r-main"><strong>{w.fullName}</strong><small>{ag(c.agency)?.short || c.agency} · {fmtDate(c.date)} · by {c.by}{c.ref ? ` · ref ${c.ref}` : ''}{outlets.length > 1 ? ` · ${outletName(outlets, w.outletId)}` : ''}</small></div>
-          <Chip tone={checkTone(c.status)}>{c.status}</Chip></Link></li>
-      ))}</ul>
+      <DataTable label="Latest status checks" dense rows={list} rowKey={({ c }) => c.id}
+        columns={[
+          { key: 'w', label: 'Worker', main: true, render: ({ w }) => <Link className="dt-link" to={`/workers/${w.id}?tab=checks`}>{w.fullName}</Link> },
+          { key: 'a', label: 'Agency', render: ({ c }) => <><span aria-hidden>{ag(c.agency)?.icon || '🔎'}</span> {ag(c.agency)?.short || c.agency}</> },
+          { key: 's', label: 'Result', hide: 'phone', render: ({ c }) => <Chip tone={checkTone(c.status)}>{c.status}</Chip> },
+          { key: 'd', label: 'Date', hide: 'tablet', render: ({ c }) => fmtDate(c.date) },
+        ]}
+        expand={({ w, c }) => <Details items={[['Result', c.status], ['Date', fmtDate(c.date)], ['By', c.by], ['Reference', c.ref], ['Outlet', outlets.length > 1 ? outletName(outlets, w.outletId) : null]]} />} />
     </Card>
   )
 }

@@ -10,6 +10,8 @@ import { compressImage } from '../lib/vault'
 import { REQUEST_TYPES, ROLE_LABEL, VAULT_CATEGORIES, type ApprovalRules, type EmergencyReason, type HrAdminFlags, type Level } from '../lib/workflow'
 import { CHANNELS, CHANNEL_LABEL, checkSms, type Channel, type NotifyConfig } from '../lib/notifyEvents'
 import { fmtDate } from '../lib/util'
+import { DataTable, Details } from './dataTable'
+import { Actions, IconAction } from './iconAction'
 
 type V = Record<string, unknown>
 const LEVELS: Level[] = ['hr_manager', 'hr_admin', 'super_admin']
@@ -252,12 +254,18 @@ export function NotificationsCard() {
         })}
       </div>
 
-      <h3 className="h3">Delivery log <Btn small kind="ghost" onClick={loadLog}>Refresh</Btn></h3>
+      <h3 className="h3 row gap-s">Delivery log <IconAction kind="refresh" label="Refresh the delivery log" onClick={() => void loadLog()} /></h3>
       {!log ? <p className="muted small">Loading…</p> : !log.length ? <p className="muted small">No outbound messages yet.</p> : (
-        <div className="tbl-wrap"><table className="tbl"><thead><tr><th>When</th><th>Event</th><th>Channel</th><th>To</th><th>Status</th><th></th></tr></thead>
-          <tbody>{log.map((d) => <tr key={d.id}><td>{fmtDate(d.created_at.slice(0, 10))} {d.created_at.slice(11, 16)}</td><td>{n.events[d.event]?.label || d.event}</td><td>{CHANNEL_LABEL[d.channel]}</td><td>{d.recipient || d.address || '—'}</td>
-            <td><Chip tone={d.status === 'sent' || d.status === 'delivered' || d.status === 'read' ? 'green' : d.status === 'failed' ? 'red' : 'gray'}>{d.status}</Chip>{d.last_error && <div className="muted small">{d.last_error}</div>}</td>
-            <td>{(d.status === 'failed' || d.status === 'skipped') && <Btn small kind="ghost" onClick={() => supabase.rpc('notify_retry', { p_id: d.id }).then(({ error }) => (error ? err(error) : setTimeout(loadLog, 3000)))}>Retry</Btn>}</td></tr>)}</tbody></table></div>
+        <DataTable label="Delivery log" rows={log} rowKey={(d) => String(d.id)} initialSort={{ key: 'at', dir: 'desc' }} search={(d) => `${n.events[d.event]?.label || d.event} ${d.recipient || ''} ${d.address || ''} ${d.status}`} searchLabel="Search deliveries"
+          filters={[{ key: 'st', label: 'Status', options: [...new Set(log.map((d) => d.status))], match: (d, v) => d.status === v }, { key: 'ch', label: 'Channel', options: [...new Set(log.map((d) => d.channel))].map((c) => ({ value: c, label: CHANNEL_LABEL[c] })), match: (d, v) => d.channel === v }]}
+          columns={[
+            { key: 'at', label: 'When', sort: (d) => d.created_at, render: (d) => <span className="small">{fmtDate(d.created_at.slice(0, 10))} {d.created_at.slice(11, 16)}</span> },
+            { key: 'ev', label: 'Event', main: true, sort: (d) => n.events[d.event]?.label || d.event, render: (d) => <>{n.events[d.event]?.label || d.event}<small>{CHANNEL_LABEL[d.channel]}</small></> },
+            { key: 'to', label: 'To', hide: 'tablet', render: (d) => d.recipient || d.address || '—' },
+            { key: 'st', label: 'Status', hide: 'phone', sort: (d) => d.status, render: (d) => <Chip tone={d.status === 'sent' || d.status === 'delivered' || d.status === 'read' ? 'green' : d.status === 'failed' ? 'red' : 'gray'}>{d.status}</Chip> },
+          ]}
+          actions={(d) => (d.status === 'failed' || d.status === 'skipped') ? <Actions><IconAction kind="send" label="Retry sending" onClick={() => supabase.rpc('notify_retry', { p_id: d.id }).then(({ error }) => (error ? err(error) : setTimeout(loadLog, 3000)))} /></Actions> : null}
+          expand={(d) => <Details items={[['When', new Date(d.created_at).toLocaleString()], ['Event', n.events[d.event]?.label || d.event], ['Channel', CHANNEL_LABEL[d.channel]], ['To', d.recipient || d.address || '—'], ['Status', d.status], ['Error', d.last_error]]} />} />
       )}
 
       {guide && <Modal title={GUIDE[guide].title} onClose={() => setGuide(null)} footer={<Btn kind="primary" onClick={() => setGuide(null)}>Close</Btn>}>
@@ -329,22 +337,28 @@ interface Audit { id: number; at: string; user_name: string | null; user_role: s
 export function AuditCard() {
   const { canSeeAudit } = useAuth()
   const [rows, setRows] = useState<Audit[] | null>(null)
-  const [q, setQ] = useState('')
   const load = async () => {
     const { data, error } = await supabase.from('audit_log').select('id,at,user_name,user_role,action,entity,summary').order('id', { ascending: false }).limit(200)
     if (error) return err(error)
     setRows(data as Audit[])
   }
   if (!canSeeAudit) return null
-  const f = (rows || []).filter((r) => !q || `${r.user_name} ${r.action} ${r.summary}`.toLowerCase().includes(q.toLowerCase()))
   return (
-    <Card title="Audit log" actions={<Btn small onClick={load}>{rows ? 'Refresh' : 'Show'}</Btn>}>
+    <Card title="Audit log" actions={rows ? <IconAction kind="refresh" label="Refresh the audit log" onClick={() => void load()} /> : <Btn small icon="eye" onClick={load}>Show</Btn>}>
       <p className="muted small">Every approval, role change, document and settings change is recorded by the database and cannot be edited.</p>
-      {rows && <>
-        <div className="search"><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filter…" aria-label="Filter audit log" /></div>
-        <div className="tbl-wrap"><table className="tbl"><thead><tr><th>When</th><th>Who</th><th>Action</th><th>Details</th></tr></thead>
-          <tbody>{f.map((r) => <tr key={r.id}><td>{fmtDate(r.at.slice(0, 10))} {new Date(r.at).toLocaleTimeString('en-MY', { hour: '2-digit', minute: '2-digit' })}</td><td>{r.user_name || '—'}<div className="muted small">{ROLE_LABEL[r.user_role || ''] || r.user_role}</div></td><td>{r.action}</td><td>{r.summary}</td></tr>)}</tbody></table></div>
-      </>}
+      {rows && (
+        <DataTable label="Audit log" className="audit-t" rows={rows} rowKey={(r) => String(r.id)} searchFrom={1} pageSize={50} initialSort={{ key: 'at', dir: 'desc' }}
+          search={(r) => `${r.user_name} ${ROLE_LABEL[r.user_role || ''] || r.user_role} ${r.action} ${r.entity} ${r.summary}`} searchLabel="Filter audit log"
+          filters={[{ key: 'action', label: 'Action', options: [...new Set(rows.map((r) => r.action))].sort(), match: (r, v) => r.action === v },
+            { key: 'who', label: 'Who', options: [...new Set(rows.map((r) => r.user_name || '—'))].sort(), match: (r, v) => (r.user_name || '—') === v }]}
+          columns={[
+            { key: 'at', label: 'When', width: '9.5rem', sort: (r) => r.at, render: (r) => <span className="small">{fmtDate(r.at.slice(0, 10))} {new Date(r.at).toLocaleTimeString('en-MY', { hour: '2-digit', minute: '2-digit' })}</span> },
+            { key: 'who', label: 'Who', sort: (r) => r.user_name || '', render: (r) => <>{r.user_name || '—'}<small>{ROLE_LABEL[r.user_role || ''] || r.user_role}</small></> },
+            { key: 'action', label: 'Action', hide: 'phone', sort: (r) => r.action, render: (r) => <code className="small">{r.action}</code> },
+            { key: 'sum', label: 'Details', hide: 'tablet', main: true, render: (r) => <span className="small dt-clip">{r.summary}</span> },
+          ]}
+          expand={(r) => <Details items={[['When', new Date(r.at).toLocaleString()], ['Who', `${r.user_name || '—'} (${ROLE_LABEL[r.user_role || ''] || r.user_role || '?'})`], ['Action', r.action], ['Record', r.entity], ['Details', r.summary]]} />} />
+      )}
     </Card>
   )
 }

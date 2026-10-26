@@ -14,6 +14,8 @@ import { CHECK, HIRING_STEPS, RISK_WEIGHTS, hiringIssues, hiringProgress, hostel
 import { ZC_EN, ZC_KEYS, ZC_KEY_LABEL, ZC_TR, type ZcText } from '../lib/zeroCostText'
 import { LANGUAGES, langDef } from '../lib/languages'
 import { download, fmtDate, todayISO, uid } from '../lib/util'
+import { DataTable, Details } from '../components/dataTable'
+import { Actions, IconAction } from '../components/iconAction'
 import { toast } from '../components/toast'
 
 type TabId = 'risk' | 'hostels' | 'hiring' | 'grievances' | 'pdpa' | 'rules'
@@ -63,12 +65,21 @@ export function RiskTable({ limit }: { limit?: number }) {
   const rows = limit ? risks.slice(0, limit) : risks
   if (!rows.length) return <p className="muted">No outlets with active workers.</p>
   return (
-    <div className="tbl-wrap"><table className="tbl"><thead><tr><th>Outlet</th><th className="num">Workers</th><th className="num">Score</th><th>Level</th><th>Main reasons</th></tr></thead>
-      <tbody>{rows.map((r) => {
-        const top = r.parts.filter((p) => p.points > 0).sort((a, b) => b.points - a.points).slice(0, 3)
-        return <tr key={r.outletId}><td><Link to={`/workers?outlet=${encodeURIComponent(r.outletId)}`}>{r.name}</Link></td><td className="num">{r.workers}</td><td className="num"><strong>{r.score}</strong></td><td><Chip tone={levelTone(r.level)}>{r.level}</Chip></td>
-          <td className="small">{top.length ? top.map((p) => `${p.label} (${p.count})`).join(' · ') : <span className="muted">Nothing found</span>}</td></tr>
-      })}</tbody></table></div>
+    <DataTable label="Outlet risk score" rows={rows} rowKey={(r) => r.outletId} initialSort={{ key: 'score', dir: 'desc' }}
+      rowClass={(r) => (r.level === 'High' ? 'dt-bad' : r.level === 'Medium' ? 'dt-warn' : '')}
+      columns={[
+        { key: 'name', label: 'Outlet', main: true, sort: (r) => r.name, render: (r) => <Link className="dt-link" to={`/workers?outlet=${encodeURIComponent(r.outletId)}`}>{r.name}</Link> },
+        { key: 'w', label: 'Workers', align: 'right', hide: 'phone', sort: (r) => r.workers, render: (r) => r.workers },
+        { key: 'score', label: 'Score', align: 'right', sort: (r) => r.score, render: (r) => <strong>{r.score}</strong> },
+        { key: 'lvl', label: 'Level', render: (r) => <Chip tone={levelTone(r.level)}>{r.level}</Chip> },
+        { key: 'why', label: 'Main reasons', hide: 'tablet', render: (r) => { const top = r.parts.filter((p) => p.points > 0).sort((a, b) => b.points - a.points).slice(0, 3); return <span className="small">{top.length ? top.map((p) => `${p.label} (${p.count})`).join(' · ') : <span className="muted">Nothing found</span>}</span> } },
+      ]}
+      expand={(r) => { const parts = r.parts.filter((p) => p.points > 0).sort((a, b) => b.points - a.points)
+        return <>
+          <Details items={[['Workers', r.workers], ['Score', `${r.score} / 100`], ['Level', r.level]]} />
+          {parts.length ? <ul className="small mt-s">{parts.map((p) => <li key={p.label}>{p.label}: {p.count} worker{p.count === 1 ? '' : 's'} · +{p.points}</li>)}</ul> : <p className="muted small">Nothing found.</p>}
+          <Link className="link small" to={`/workers?outlet=${encodeURIComponent(r.outletId)}`}>See this outlet’s workers →</Link>
+        </> }} />
   )
 }
 function RiskTab() {
@@ -163,7 +174,7 @@ function HiringTab() {
         return (
           <Card key={c.id} title={<>🧳 {c.title} {c.closed && <Chip>finished</Chip>}</>} actions={<><Btn small icon="edit" onClick={() => setEdit(c)}>Edit</Btn><Btn small kind="ghost" onClick={() => void save(items.map((x) => (x.id === c.id ? { ...x, closed: !x.closed } : x)))}>{c.closed ? 'Reopen' : 'Finish'}</Btn></>}>
             <p className="small muted">{[c.count && `${c.count} worker(s)`, c.job, c.nationality, c.agent && `agent ${c.agent}`, outlets.find((o) => o.id === c.outletId)?.name].filter(Boolean).join(' · ')} · {hiringProgress(c)} of {HIRING_STEPS.length} steps</p>
-            <ul className="rows compact">{HIRING_STEPS.map((st) => { const r = c.steps?.[st.key] || {}; return <li key={st.key}><div className="r-main"><strong>{r.done ? '✅' : '⬜'} {st.label}</strong><small>{r.date || r.ref ? `${fmtDate(r.date)}${r.ref ? ` · ref ${r.ref}` : ''}${r.note ? ` · ${r.note}` : ''}` : st.hint}</small></div><Btn small onClick={() => setStep({ c, key: st.key })}>{r.done ? 'Edit' : 'Update'}</Btn></li> })}</ul>
+            <ul className="rows compact">{HIRING_STEPS.map((st) => { const r = c.steps?.[st.key] || {}; return <li key={st.key}><div className="r-main"><strong>{r.done ? '✅' : '⬜'} {st.label}</strong><small>{r.date || r.ref ? `${fmtDate(r.date)}${r.ref ? ` · ref ${r.ref}` : ''}${r.note ? ` · ${r.note}` : ''}` : st.hint}</small></div><IconAction kind={r.done ? 'edit' : 'approve'} label={r.done ? `Edit: ${st.label}` : `Update: ${st.label}`} onClick={() => setStep({ c, key: st.key })} /></li> })}</ul>
             {iss.map((i) => <p key={i.text} className={i.level === 'red' ? 'err small' : 'small'}>{i.level === 'info' ? 'ℹ️' : '⚠️'} {i.text}</p>)}
           </Card>
         )
@@ -231,12 +242,21 @@ function GrievancesTab({ rows }: { rows: Grievance[] | null }) {
       <GrievanceLinkCard />
       <Card title="Complaints received" actions={<select value={f} onChange={(e) => setF(e.target.value as 'open')} aria-label="Filter"><option value="open">Open</option><option value="all">All</option>{Object.entries(G_STATUS).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>}>
         {rows === null ? <p className="muted">Loading…</p> : !list.length ? <p className="muted">No complaints{f !== 'all' ? ' in this view' : ''}.</p> : (
-          <ul className="rows">{list.map((g) => <li key={g.id}>
-            <div className="r-main"><strong>{g.ref_no} · {G_CATEGORY[g.category] || g.category}</strong>
-              <small>{fmtDate(g.created_at.slice(0, 10))} · {g.anonymous ? 'Anonymous' : g.name || 'Named'}{g.outlet_id ? ` · ${outlets.find((o) => o.id === g.outlet_id)?.name || g.outlet_id}` : ''}{cfg.companies.items.length > 1 ? ` · ${cfg.companies.items.find((c) => c.id === g.company_id)?.name || ''}` : ''}</small>
-              <small style={{ color: 'inherit' }}>{g.message.length > 140 ? `${g.message.slice(0, 140)}…` : g.message}</small></div>
-            <Chip tone={g.status === 'new' ? 'red' : g.status === 'in_review' ? 'amber' : g.status === 'action_taken' ? 'blue' : 'green'}>{G_STATUS[g.status]}</Chip>
-            <Btn small onClick={() => setOpen(g)}>Open</Btn></li>)}</ul>)}
+          <DataTable label="Complaints received" rows={list} rowKey={(g) => g.id} initialSort={{ key: 'at', dir: 'desc' }} search={(g) => `${g.ref_no} ${G_CATEGORY[g.category] || g.category} ${g.message} ${g.anonymous ? '' : g.name || ''}`} searchLabel="Search complaints"
+            rowClass={(g) => (g.status === 'new' ? 'dt-bad' : '')}
+            columns={[
+              { key: 'ref', label: 'Complaint', main: true, sort: (g) => g.ref_no, render: (g) => <>{g.ref_no} · {G_CATEGORY[g.category] || g.category}<small className="dt-clip">{g.message}</small></> },
+              { key: 'at', label: 'Received', hide: 'phone', sort: (g) => g.created_at, render: (g) => fmtDate(g.created_at.slice(0, 10)) },
+              { key: 'from', label: 'From', hide: 'tablet', render: (g) => (g.anonymous ? 'Anonymous' : g.name || 'Named') },
+              { key: 'o', label: 'Outlet', hide: 'tablet', render: (g) => (g.outlet_id ? outlets.find((o) => o.id === g.outlet_id)?.name || g.outlet_id : '—') },
+              { key: 'st', label: 'Status', sort: (g) => g.status, render: (g) => <Chip tone={g.status === 'new' ? 'red' : g.status === 'in_review' ? 'amber' : g.status === 'action_taken' ? 'blue' : 'green'}>{G_STATUS[g.status]}</Chip> },
+            ]}
+            actions={(g) => <Actions><IconAction kind="edit" label="Open — reply and update status" onClick={() => setOpen(g)} /></Actions>}
+            expand={(g) => <>
+              <Details items={[['Received', new Date(g.created_at).toLocaleString()], ['From', g.anonymous ? 'Anonymous' : g.name || 'Named'], ['Outlet', g.outlet_id ? outlets.find((o) => o.id === g.outlet_id)?.name || g.outlet_id : null], ['Company', cfg.companies.items.length > 1 ? cfg.companies.items.find((c) => c.id === g.company_id)?.name : null]]} />
+              <div className="banner small" style={{ whiteSpace: 'pre-wrap', margin: '8px 0' }}>{g.message}</div>
+              <Btn small icon="edit" onClick={() => setOpen(g)}>Open — reply and update status</Btn>
+            </>} />)}
         <p className="muted small">Retaliating against a worker for complaining is not allowed. Keep the worker’s identity confidential.</p>
       </Card>
       {open && <GrievanceModal g={open} onClose={() => setOpen(null)} />}
@@ -301,12 +321,18 @@ function PdpaTab() {
         <Card title="Data breach log" actions={<Btn small icon="plus" onClick={() => setEdit({ found_at: todayISO(), severity: 'medium', status: 'open' })}>Log a breach</Btn>}>
           <div className="callout warn small">If personal data is lost, stolen or seen by the wrong people: contain it, then notify the Personal Data Protection Commissioner as soon as practicable — the guideline is within <b>72 hours</b> — and tell the affected people without undue delay if they could suffer significant harm. Check with the PDP Commissioner (JPDP) or your adviser.</div>
           {rows === null ? <p className="muted">Loading…</p> : !rows.length ? <p className="muted">No breaches logged.</p> : (
-            <ul className="rows">{rows.map((b) => {
-              const hrs = Math.floor((Date.now() - new Date(b.found_at).getTime()) / 3600000)
-              return <li key={b.id}><div className="r-main"><strong>{b.title}</strong><small>Found {fmtDate(b.found_at)} · {b.severity}{b.people_affected ? ` · ${b.people_affected} people` : ''} · Commissioner {b.commissioner_notified ? `notified ${fmtDate(b.commissioner_notified_at || '')}` : hrs > 72 ? 'NOT notified (over 72 h)' : 'not notified yet'}</small></div>
-                <Chip tone={b.status === 'closed' ? 'green' : b.status === 'contained' ? 'amber' : 'red'}>{b.status}</Chip><Btn small icon="edit" onClick={() => setEdit(b)}>Edit</Btn></li>
-            })}</ul>)}
-          <Btn small icon="download" onClick={() => download(`pdpa-breach-log-${todayISO()}.json`, JSON.stringify(rows || [], null, 2), 'application/json')}>Export</Btn>
+            <DataTable label="Data breach log" rows={rows} rowKey={(b) => b.id} initialSort={{ key: 'f', dir: 'desc' }}
+              rowClass={(b) => (b.status === 'open' ? 'dt-bad' : b.status === 'contained' ? 'dt-warn' : '')}
+              columns={[
+                { key: 't', label: 'Breach', main: true, sort: (b) => b.title, render: (b) => <>{b.title}<small>{b.severity}{b.people_affected ? ` · ${b.people_affected} people` : ''}</small></> },
+                { key: 'f', label: 'Found', hide: 'phone', sort: (b) => b.found_at, render: (b) => fmtDate(b.found_at) },
+                { key: 'c', label: 'Commissioner', hide: 'tablet', render: (b) => { const hrs = Math.floor((Date.now() - new Date(b.found_at).getTime()) / 3600000); return <span className={'small' + (!b.commissioner_notified && hrs > 72 ? ' neg' : '')}>{b.commissioner_notified ? `Notified ${fmtDate(b.commissioner_notified_at || '')}` : hrs > 72 ? 'NOT notified (over 72 h)' : 'Not notified yet'}</span> } },
+                { key: 's', label: 'Status', sort: (b) => b.status, render: (b) => <Chip tone={b.status === 'closed' ? 'green' : b.status === 'contained' ? 'amber' : 'red'}>{b.status}</Chip> },
+              ]}
+              actions={(b) => <Actions><IconAction kind="edit" label="Edit breach" onClick={() => setEdit(b)} /></Actions>}
+              expand={(b) => <Details items={[['Found', fmtDate(b.found_at)], ['Happened', b.occurred_at ? fmtDate(b.occurred_at) : null], ['Details', b.description], ['Data involved', b.data_types], ['People affected', b.people_affected], ['Seriousness', b.severity], ['Actions taken', b.actions],
+                ['Commissioner', b.commissioner_notified ? `Notified ${fmtDate(b.commissioner_notified_at || '')}` : 'Not notified'], ['Affected people', b.people_notified ? `Told ${fmtDate(b.people_notified_at || '')}` : 'Not told yet'], ['Status', b.status]]} />} />)}
+          <IconAction kind="download" text label="Export" onClick={() => download(`pdpa-breach-log-${todayISO()}.json`, JSON.stringify(rows || [], null, 2), 'application/json')} />
         </Card>
       ) : <p className="muted small">The data breach log is kept by the CEO, HR Admin or a General Manager with compliance settings.</p>}
       {edit && <FormModal title={edit.id ? 'Edit breach' : 'Log a data breach'} fields={fields} initial={edit as V} onClose={() => setEdit(null)}
@@ -362,11 +388,16 @@ function ZeroCostTranslationsCard() {
   return (
     <Card title="Zero-cost declaration translations">
       <p className="muted small">The zero-cost recruitment declaration prints in <b>English + the worker’s language</b> (English + Bahasa Malaysia when there is no translation). The built-in translations have <b>not been checked by native speakers</b> — please have each one checked and corrected here.</p>
-      <ul className="rows">{EDITABLE.map((l) => {
-        const ov = items[l.code]; const n = ov ? Object.values(ov.text || {}).filter((v) => (v || '').trim()).length : 0
-        return <li key={l.code}><div className="r-main"><strong>{l.name}{l.native && l.native !== l.name ? ` — ${l.native}` : ''}</strong><small>{ZC_TR[l.code] ? 'Built-in translation' : 'No built-in translation — type every field to enable it'}{n ? ` · ${n} field(s) corrected` : ''}</small></div>
-          {ov?.checked ? <Chip tone="green">Checked{ov.checkedBy ? ` · ${ov.checkedBy}` : ''}</Chip> : <Chip tone="amber">Not native-checked</Chip>}<Btn small icon="edit" onClick={() => setEdit(l.code)}>Edit</Btn></li>
-      })}</ul>
+      <DataTable label="Zero-cost declaration translations" rows={EDITABLE} rowKey={(l) => l.code} search={(l) => `${l.name} ${l.native || ''}`} searchLabel="Search languages"
+        rowClass={(l) => (items[l.code]?.checked ? '' : 'dt-warn')}
+        columns={[
+          { key: 'n', label: 'Language', main: true, sort: (l) => l.name, render: (l) => <>{l.name}{l.native && l.native !== l.name ? <small className="muted"> — {l.native}</small> : null}</> },
+          { key: 'b', label: 'Source', hide: 'tablet', render: (l) => <span className="small">{ZC_TR[l.code] ? 'Built-in' : 'No built-in translation'}</span> },
+          { key: 's', label: 'Native check', render: (l) => (items[l.code]?.checked ? <Chip tone="green">Checked</Chip> : <Chip tone="amber">Not native-checked</Chip>) },
+        ]}
+        actions={(l) => <Actions><IconAction kind="edit" label={`Edit the ${l.name} translation`} onClick={() => setEdit(l.code)} /></Actions>}
+        expand={(l) => { const ov = items[l.code]; const n = ov ? Object.values(ov.text || {}).filter((v) => (v || '').trim()).length : 0
+          return <Details items={[['Source', ZC_TR[l.code] ? 'Built-in translation' : 'No built-in translation — type every field to enable it'], ['Fields corrected', n || null], ['Native check', ov?.checked ? `Checked${ov.checkedBy ? ` by ${ov.checkedBy}` : ''}` : 'Not native-checked']]} /> }} />
       {edit && <ZcEditModal code={edit} me={profile?.full_name || profile?.email || ''} onClose={() => setEdit(null)} />}
     </Card>
   )

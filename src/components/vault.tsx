@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useMemo, useRef, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { Btn, Card, Chip, Empty, Modal, Toolbar, SelectFilter } from './ui'
 import { useAuth } from '../lib/auth'
@@ -7,6 +7,8 @@ import { VAULT_CATEGORIES } from '../lib/workflow'
 import { docVersions, downloadDoc, fmtSize, openDoc, prepareFiles, shareDoc, updateDoc, uploadDoc, useDocs, type DocRow, type NewDoc } from '../lib/vault'
 import { useWorkers } from '../lib/hooks'
 import { fmtDate, todayISO } from '../lib/util'
+import { DataTable, Details } from './dataTable'
+import { Actions, IconAction } from './iconAction'
 
 const daysTo = (d?: string | null) => (d ? Math.round((new Date(d).getTime() - new Date(todayISO()).getTime()) / 86400000) : null)
 export function expiryChip(d?: string | null) {
@@ -26,36 +28,64 @@ export function useCategories() {
   return isOM || role === 'viewer' ? all.filter((c) => !v.restricted.includes(c)) : all
 }
 
-export function DocRowItem({ d, showWorker }: { d: DocRow; showWorker?: string }) {
+const docKind = (d: DocRow) => (d.mime === 'application/pdf' ? `PDF${d.pages && d.pages > 1 ? `, ${d.pages} pages` : ''}` : 'Photo')
+
+/** Icon actions for one document: preview, download, share, older versions, edit details (remove lives inside Edit, with its confirm). */
+export function DocActions({ d }: { d: DocRow }) {
   const { canWrite } = useAuth()
   const [vers, setVers] = useState<DocRow[] | null>(null)
   const [edit, setEdit] = useState(false)
   const [busy, setBusy] = useState(false)
-  const act = (f: () => Promise<unknown>) => async () => { setBusy(true); await run(f); setBusy(false) }
+  const act = (f: () => Promise<unknown>) => () => { setBusy(true); void run(f).finally(() => setBusy(false)) }
   return (
-    <li className="doc-row">
-      <div className="r-main">
-        <strong>{d.title || d.file_name}</strong>
-        <small>{showWorker ? `${showWorker} · ` : ''}{d.category}{d.doc_no ? ` · ${d.doc_no}` : ''} · {d.mime === 'application/pdf' ? `PDF${d.pages && d.pages > 1 ? `, ${d.pages} pages` : ''}` : 'Photo'} · {fmtSize(d.size_bytes)} · v{d.version} · {d.uploaded_by_name || ''} {fmtDate(d.uploaded_at.slice(0, 10))}</small>
-        <div className="row gap-s wrap">{expiryChip(d.expiry_date)}{d.source === 'memo' && <Chip tone="purple">Auto-saved memo</Chip>}{d.request_id && <Chip tone="blue">On a request</Chip>}</div>
-      </div>
-      <div className="r-act">
-        <Btn small kind="ghost" icon="doc" title="Preview" disabled={busy} onClick={act(() => openDoc(d))} />
-        <Btn small kind="ghost" icon="download" title="Download" disabled={busy} onClick={act(() => downloadDoc(d))} />
-        <Btn small kind="ghost" icon="upload" title="Share" disabled={busy} onClick={act(() => shareDoc(d))} />
-        {d.version > 1 && <Btn small kind="ghost" icon="more" title="Older versions" onClick={async () => setVers(await docVersions(d.group_id))} />}
-        {canWrite && <Btn small kind="ghost" icon="edit" title="Edit details" onClick={() => setEdit(true)} />}
-      </div>
+    <Actions>
+      <IconAction kind="view" label="Preview" disabled={busy} onClick={act(() => openDoc(d))} />
+      <IconAction kind="download" label="Download" disabled={busy} onClick={act(() => downloadDoc(d))} />
+      <IconAction kind="send" label="Share" disabled={busy} onClick={act(() => shareDoc(d))} />
+      {d.version > 1 && <IconAction kind="more" label="Older versions" onClick={() => void docVersions(d.group_id).then(setVers)} />}
+      {canWrite && <IconAction kind="edit" label="Edit details or remove" onClick={() => setEdit(true)} />}
       {vers && (
         <Modal title={`Versions — ${d.title}`} onClose={() => setVers(null)}>
-          <ul className="rows">{vers.map((v) => (
-            <li key={v.id}><div className="r-main"><strong>v{v.version}{v.is_current ? ' (current)' : ''}</strong><small>{v.uploaded_by_name} · {fmtDate(v.uploaded_at.slice(0, 10))} · {fmtSize(v.size_bytes)}{v.expiry_date ? ` · exp ${fmtDate(v.expiry_date)}` : ''}</small></div>
-              <div className="r-act"><Btn small kind="ghost" icon="doc" onClick={() => run(() => openDoc(v))} /><Btn small kind="ghost" icon="download" onClick={() => run(() => downloadDoc(v))} /></div></li>
-          ))}</ul>
+          <DataTable label="Versions" dense rows={vers} rowKey={(v) => v.id}
+            columns={[
+              { key: 'v', label: 'Version', main: true, render: (v) => <>v{v.version}{v.is_current ? ' (current)' : ''}<small>{v.uploaded_by_name}</small></> },
+              { key: 'at', label: 'Uploaded', render: (v) => fmtDate(v.uploaded_at.slice(0, 10)) },
+              { key: 'size', label: 'Size', hide: 'phone', render: (v) => fmtSize(v.size_bytes) },
+            ]}
+            actions={(v) => <Actions><IconAction kind="view" label="Preview" onClick={() => void run(() => openDoc(v))} /><IconAction kind="download" label="Download" onClick={() => void run(() => downloadDoc(v))} /></Actions>} />
         </Modal>
       )}
       {edit && <EditDoc d={d} onClose={() => setEdit(false)} />}
-    </li>
+    </Actions>
+  )
+}
+
+/** Clean table of documents: compact rows, tap to see all details. */
+export function DocTable({ docs, workerName, label = 'Documents' }: { docs: DocRow[]; workerName?: (id: string) => string; label?: string }) {
+  const cats = [...new Set(docs.map((d) => d.category))].sort()
+  return (
+    <DataTable label={label} className="doc-table" rows={docs} rowKey={(d) => d.id} rowTestId={() => 'doc-row'} initialSort={{ key: 'up', dir: 'desc' }}
+      search={(d) => `${workerName ? workerName(d.worker_id) : ''} ${d.title} ${d.file_name} ${d.category} ${d.doc_no || ''}`} searchLabel="Search documents"
+      filters={!workerName && cats.length > 1 ? [{ key: 'cat', label: 'Category', options: cats, match: (d, v) => d.category === v }] : undefined}
+      rowClass={(d) => { const n = daysTo(d.expiry_date); return n === null ? '' : n < 0 ? 'dt-bad' : n <= 60 ? 'dt-warn' : '' }}
+      columns={[
+        { key: 'title', label: 'Document', main: true, sort: (d) => (d.title || d.file_name || '').toLowerCase(), render: (d) => <>{d.title || d.file_name}<small>{d.category}{d.doc_no ? ` · ${d.doc_no}` : ''}</small></> },
+        ...(workerName ? [{ key: 'w', label: 'Worker', hide: 'phone' as const, sort: (d: DocRow) => workerName(d.worker_id), render: (d: DocRow) => <Link className="dt-link" to={`/workers/${d.worker_id}?tab=vault`}>{workerName(d.worker_id)}</Link> }] : []),
+        { key: 'exp', label: 'Expiry', sort: (d) => d.expiry_date || '9999', render: (d) => expiryChip(d.expiry_date) || <span className="muted">—</span> },
+        { key: 'up', label: 'Uploaded', hide: 'tablet', sort: (d) => d.uploaded_at, render: (d) => <span className="small">{fmtDate(d.uploaded_at.slice(0, 10))}<small>{d.uploaded_by_name || ''}</small></span> },
+        { key: 'ver', label: 'Ver.', hide: 'tablet', align: 'center', sort: (d) => d.version, render: (d) => `v${d.version}` },
+      ]}
+      actions={(d) => <DocActions d={d} />}
+      expand={(d) => (
+        <>
+          <Details items={[
+            ...(workerName ? [['Worker', <Link key="w" className="link" to={`/workers/${d.worker_id}?tab=vault`}>{workerName(d.worker_id)} →</Link>] as [string, ReactNode]] : []),
+            ['Category', d.category], ['Document no.', d.doc_no], ['Issued', d.issue_date ? fmtDate(d.issue_date) : null], ['Expiry', d.expiry_date ? fmtDate(d.expiry_date) : null],
+            ['File', `${docKind(d)} · ${fmtSize(d.size_bytes)}`], ['Version', `v${d.version}`], ['Uploaded', `${d.uploaded_by_name || ''} ${fmtDate(d.uploaded_at.slice(0, 10))}`], ['Notes', d.notes],
+          ]} />
+          <div className="row gap-s wrap mt-s">{expiryChip(d.expiry_date)}{d.source === 'memo' && <Chip tone="purple">Auto-saved memo</Chip>}{d.request_id && <Chip tone="blue">On a request</Chip>}</div>
+        </>
+      )} />
   )
 }
 
@@ -165,7 +195,7 @@ export function VaultPanel({ workerId }: { workerId: string }) {
       {cats.length > 1 && <Toolbar><SelectFilter label="Category" value={cat} onChange={setCat} options={[{ value: '', label: 'All categories' }, ...cats]} /></Toolbar>}
       {error && <p className="warn small">{error}</p>}
       {loading ? <p className="muted">Loading…</p> : shown.length === 0 ? <Empty title="No documents in the vault yet"><p className="muted small">Scan passport, permit, FOMEMA, contract, tickets… with the phone camera.</p></Empty> : (
-        <ul className="rows">{shown.map((d) => <DocRowItem key={d.id} d={d} />)}</ul>
+        <DocTable docs={shown} label="Document vault" />
       )}
       {canWrite && shown.length > 0 && <p className="muted small">To replace a document with a newer copy, open the document's details or use “Add / scan” with the same category — older versions stay available.</p>}
       {up && <UploadDoc workerId={workerId} {...up} onClose={() => setUp(null)} />}
@@ -195,9 +225,7 @@ export function DocumentLibrary() {
       {error && <p className="warn small">{error}</p>}
       <Card>
         {loading ? <p className="muted">Loading…</p> : shown.length === 0 ? <Empty title="No documents match" /> : (
-          <ul className="rows">{shown.map((d) => (
-            <div key={d.id}><DocRowItem d={d} showWorker={name(d.worker_id)} /><Link className="link small" to={`/workers/${d.worker_id}?tab=vault`}>Open worker →</Link></div>
-          ))}</ul>
+          <DocTable docs={shown} workerName={name} label="Document library" />
         )}
       </Card>
     </div>

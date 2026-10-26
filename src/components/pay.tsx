@@ -13,6 +13,8 @@ import {
 } from '../lib/pay'
 import type { Outlet, Worker } from '../lib/types'
 import { addDays, fmtDate, parseISO, rm, todayISO, uid } from '../lib/util'
+import { DataTable, Details } from './dataTable'
+import { Actions, IconAction } from './iconAction'
 
 type V = Record<string, unknown>
 const n = (v: unknown) => (Number.isFinite(Number(v)) ? Number(v) : 0)
@@ -100,19 +102,21 @@ export function WorkerPayCompliance({ w, outlets }: { w: Worker; outlets: Outlet
       </Card>
       <Card title="Payslips" actions={<Btn kind="primary" small icon="plus" onClick={newSlip}>New payslip</Btn>}>
         {slips.length === 0 ? <Empty title="No payslips yet">Use the payslip helper to work out overtime, EPF, PERKESO and LINDUNG, and to check the pay rules.</Empty> : (
-          <div className="tbl-wrap"><table className="tbl">
-            <thead><tr><th>Month</th><th className="num">Gross</th><th className="num">Net</th><th>Paid on</th><th>Checks</th><th /></tr></thead>
-            <tbody>{slips.map((p) => {
-              const r = computePayslip(p, rates, w, today)
-              const red = r.warnings.filter((x) => x.level === 'red').length
-              const amber = r.warnings.filter((x) => x.level === 'amber').length
-              return (
-                <tr key={p.id}><td>{monthLabel(p.month)}</td><td className="num">{rm(r.gross)}</td><td className="num">{rm(r.net)}</td><td>{p.payDate ? fmtDate(p.payDate) : <span className="muted">not paid</span>}</td>
-                  <td>{red ? <Chip tone="red">{red} problem{red > 1 ? 's' : ''}</Chip> : amber ? <Chip tone="amber">{amber} to check</Chip> : <Chip tone="green">OK</Chip>}</td>
-                  <td className="nowrap"><Btn small kind="ghost" icon="edit" title="Open" onClick={() => setSlip(p)} /><Btn small kind="ghost" icon="print" title="Print" onClick={() => nav(`/print/payslip/${w.id}/${p.id}`)} /></td></tr>
-              )
-            })}</tbody>
-          </table></div>
+          <DataTable label="Payslips" rows={slips} rowKey={(p) => p.id} rowTestId={() => 'payslip-row'} initialSort={{ key: 'm', dir: 'desc' }}
+            columns={[
+              { key: 'm', label: 'Month', main: true, sort: (p) => p.month, render: (p) => monthLabel(p.month) },
+              { key: 'g', label: 'Gross', align: 'right', hide: 'phone', sort: (p) => computePayslip(p, rates, w, today).gross, render: (p) => rm(computePayslip(p, rates, w, today).gross) },
+              { key: 'n', label: 'Net', align: 'right', sort: (p) => computePayslip(p, rates, w, today).net, render: (p) => rm(computePayslip(p, rates, w, today).net) },
+              { key: 'pd', label: 'Paid on', hide: 'tablet', sort: (p) => p.payDate || '', render: (p) => (p.payDate ? fmtDate(p.payDate) : <span className="muted">not paid</span>) },
+              { key: 'c', label: 'Checks', hide: 'phone', render: (p) => { const r = computePayslip(p, rates, w, today); const red = r.warnings.filter((x) => x.level === 'red').length; const amber = r.warnings.filter((x) => x.level === 'amber').length
+                return red ? <Chip tone="red">{red} problem{red > 1 ? 's' : ''}</Chip> : amber ? <Chip tone="amber">{amber} to check</Chip> : <Chip tone="green">OK</Chip> } },
+            ]}
+            actions={(p) => <Actions><IconAction kind="edit" label="Open payslip" onClick={() => setSlip(p)} /><IconAction kind="print" label="Print payslip" onClick={() => nav(`/print/payslip/${w.id}/${p.id}`)} /></Actions>}
+            expand={(p) => { const r = computePayslip(p, rates, w, today)
+              return <>
+                <Details items={[['Month', monthLabel(p.month)], ['Gross', rm(r.gross)], ['Net', rm(r.net)], ['Paid on', p.payDate ? fmtDate(p.payDate) : 'Not paid yet']]} />
+                {r.warnings.length > 0 && <ul className="small mt-s">{r.warnings.map((x, i) => <li key={i} className={x.level === 'red' ? 'neg' : 'warn'}>{x.text}</li>)}</ul>}
+              </> }} />
         )}
       </Card>
       {exempt && (
@@ -259,20 +263,14 @@ function DatedTable<T extends Dated>({ title, help, rows, cols, canEdit, onSave 
   return (
     <Card title={title} actions={canEdit ? <Btn small icon="plus" onClick={() => setEdit({ v: { ...(sorted[sorted.length - 1] || {}), from: todayISO() } as unknown as V, idx: -1 })}>New rate from a date</Btn> : undefined}>
       {help && <p className="muted small">{help}</p>}
-      <div className="tbl-wrap"><table className="tbl">
-        <thead><tr><th>From</th>{cols.map((c) => <th key={c.key} className="num">{c.label}</th>)}<th>Note</th>{canEdit && <th />}</tr></thead>
-        <tbody>{sorted.map((r) => {
-          const idx = rows.indexOf(r)
-          return (
-            <tr key={r.from + idx} className={r === now ? 'pay-now' : ''}>
-              <td className="nowrap">{fmtDate(r.from)} {r === now ? <Chip tone="green">now</Chip> : r.from > todayISO() ? <Chip tone="blue">future</Chip> : null}</td>
-              {cols.map((c) => <td key={c.key} className="num">{String((r as unknown as V)[c.key] ?? '—')}{c.suffix && (r as unknown as V)[c.key] !== undefined ? c.suffix.startsWith('%') ? '%' : '' : ''}</td>)}
-              <td className="small muted">{r.note || ''}</td>
-              {canEdit && <td><Btn small kind="ghost" icon="edit" title="Edit" onClick={() => setEdit({ v: { ...r } as unknown as V, idx })} /></td>}
-            </tr>
-          )
-        })}</tbody>
-      </table></div>
+      <DataTable label={title} dense rows={sorted} rowKey={(r) => r.from + rows.indexOf(r)} rowClass={(r) => (r === now ? 'pay-now' : '')}
+        columns={[
+          { key: 'from', label: 'From', main: true, render: (r) => <span className="nowrap">{fmtDate(r.from)} {r === now ? <Chip tone="green">now</Chip> : r.from > todayISO() ? <Chip tone="blue">future</Chip> : null}</span> },
+          ...cols.map((c, i) => ({ key: c.key, label: c.label, align: 'right' as const, hide: i >= 2 ? ('phone' as const) : undefined, render: (r: T) => <>{String((r as unknown as V)[c.key] ?? '—')}{c.suffix && (r as unknown as V)[c.key] !== undefined ? c.suffix.startsWith('%') ? '%' : '' : ''}</> })),
+          { key: 'note', label: 'Note', hide: 'wide', render: (r) => <span className="small muted dt-clip dt-note" title={r.note || undefined}>{r.note || ''}</span> },
+        ]}
+        actions={canEdit ? (r) => <Actions><IconAction kind="edit" label="Edit this rate" onClick={() => setEdit({ v: { ...r } as unknown as V, idx: rows.indexOf(r) })} /></Actions> : undefined}
+        expand={(r) => <Details items={[['From', fmtDate(r.from)], ...cols.map((c) => [c.label + (c.suffix ? ` (${c.suffix})` : ''), String((r as unknown as V)[c.key] ?? '—')] as [string, string]), ['Note / source', r.note]]} />} />
       {edit && (
         <FormModal title={edit.idx < 0 ? `${title} — new rate` : `${title} — edit`} initial={edit.v} fields={fields} onClose={() => setEdit(null)}
           onDelete={edit.idx >= 0 && rows.length > 1 ? () => void onSave(rows.filter((_, i) => i !== edit.idx)) : undefined}
@@ -366,6 +364,12 @@ export function HolidaysEditor({ canEdit }: { canEdit: boolean }) {
   }
   const dates = list.map((x) => x.date)
   const nationwide = list.filter((x) => x.states.includes('*')).length
+  const holRep = (x: Holiday) => {
+    const rep = replacementDay(x.date, rest, dates)
+    const base = x.name.replace(/\s*\((second day|holiday)\)$/i, '').toLowerCase()
+    const gaz = rep ? list.find((y) => y.date > x.date && y.date <= addDays(x.date, 3) && /\(holiday\)$/i.test(y.name) && y.name.toLowerCase().startsWith(base)) : undefined
+    return gaz ? `Gazetted replacement: ${fmtDate(gaz.date)}` : rep ? `Replace on ${fmtDate(rep)}` : '—'
+  }
   return (
     <Card title="🎉 Public holidays" actions={canEdit ? <Btn small icon="plus" onClick={() => setEdit({ date: `${year}-01-01`, nationwide: false, states: state ? [state] : [] })}>Add holiday</Btn> : undefined}>
       <div className="row gap-s wrap pay-filters">
@@ -376,20 +380,15 @@ export function HolidaysEditor({ canEdit }: { canEdit: boolean }) {
       <p className="muted small">Give at least 11 paid public holidays a year. Five are compulsory: National Day, the Agong’s Birthday, the Ruler’s Birthday (or Federal Territory Day), Labour Day and Malaysia Day. If a holiday falls on the rest day, the next working day is the replacement (Employment Act s.60D — {CHECK}). {state ? `${list.length} holidays listed for ${state} (${nationwide} nationwide).` : ''}</p>
       {msg && <p className={msg.startsWith('Saved') ? 'ok-msg' : 'err'} role="status">{msg}</p>}
       {all.length === 0 ? <Empty title={`No holidays for ${year} yet`}>{canEdit ? 'Add them from the official gazette when they are announced.' : 'HR will add them when they are announced.'}</Empty> : (
-        <div className="tbl-wrap"><table className="tbl">
-          <thead><tr><th>Date</th><th>Day</th><th>Holiday</th><th>Where</th><th>If rest day is {rest}</th>{canEdit && <th />}</tr></thead>
-          <tbody>{list.map((x) => {
-            const rep = replacementDay(x.date, rest, dates)
-            const base = x.name.replace(/\s*\((second day|holiday)\)$/i, '').toLowerCase()
-            const gaz = rep ? list.find((y) => y.date > x.date && y.date <= addDays(x.date, 3) && /\(holiday\)$/i.test(y.name) && y.name.toLowerCase().startsWith(base)) : undefined
-            return (
-              <tr key={x.id}><td className="nowrap">{fmtDate(x.date)}</td><td>{parseISO(x.date)?.toLocaleDateString('en-GB', { weekday: 'short' })}</td><td>{x.name}</td>
-                <td className="small">{x.states.includes('*') ? <Chip tone="teal">Nationwide</Chip> : x.states.length > 4 ? `${x.states.length} states` : x.states.join(', ')}</td>
-                <td className="small">{gaz ? `Gazetted replacement: ${fmtDate(gaz.date)}` : rep ? `Replace on ${fmtDate(rep)}` : '—'}</td>
-                {canEdit && <td><Btn small kind="ghost" icon="edit" title="Edit" onClick={() => setEdit({ ...x, nationwide: x.states.includes('*') })} /></td>}</tr>
-            )
-          })}</tbody>
-        </table></div>
+        <DataTable label="Public holidays" rows={list} rowKey={(x) => x.id} initialSort={{ key: 'date', dir: 'asc' }} search={(x) => `${x.name} ${x.states.join(' ')}`} searchLabel="Search holidays" searchFrom={12} pageSize={100}
+          columns={[
+            { key: 'date', label: 'Date', sort: (x) => x.date, render: (x) => <span className="nowrap">{fmtDate(x.date)}<small>{parseISO(x.date)?.toLocaleDateString('en-GB', { weekday: 'short' })}</small></span> },
+            { key: 'name', label: 'Holiday', main: true, sort: (x) => x.name, render: (x) => x.name },
+            { key: 'where', label: 'Where', hide: 'phone', render: (x) => <span className="small">{x.states.includes('*') ? <Chip tone="teal">Nationwide</Chip> : x.states.length > 4 ? `${x.states.length} states` : x.states.join(', ')}</span> },
+            { key: 'rep', label: `If rest day is ${rest}`, hide: 'tablet', render: (x) => <span className="small">{holRep(x)}</span> },
+          ]}
+          actions={canEdit ? (x) => <Actions><IconAction kind="edit" label="Edit holiday" onClick={() => setEdit({ ...x, nationwide: x.states.includes('*') })} /></Actions> : undefined}
+          expand={(x) => <Details items={[['Date', `${fmtDate(x.date)} (${parseISO(x.date)?.toLocaleDateString('en-GB', { weekday: 'long' })})`], ['Where', x.states.includes('*') ? 'Nationwide' : x.states.join(', ')], [`If rest day is ${rest}`, holRep(x)]]} />} />
       )}
       {canEdit && BUILTIN_HOLIDAYS[year] && <p><Btn small kind="ghost" onClick={() => { if (confirm(`Replace the ${year} list with the built-in list?`)) void save(BUILTIN_HOLIDAYS[year]).catch(() => undefined) }}>Reset {year} to the built-in list</Btn></p>}
       <p className="muted small">{h.source || ''}</p>
