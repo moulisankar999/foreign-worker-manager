@@ -37,6 +37,8 @@ import CompliancePage from './pages/Compliance'
 import GrievancePublic from './pages/GrievancePublic'
 import ControlPage, { useControlBadge } from './pages/Control'
 import HelpPage from './pages/Help'
+import QuotaPage from './pages/quota/QuotaPage'
+import { qRank } from './lib/quota'
 
 const NAV = [
   { to: '/', label: 'Home', icon: 'home', end: true },
@@ -46,6 +48,7 @@ const NAV = [
   { to: '/alerts', label: 'Alerts', icon: 'alert' },
   { to: '/reports', label: 'Reports', icon: 'chart', desk: true },
   { to: '/compliance', label: 'Compliance', icon: 'shield', desk: true, hr: true },
+  { to: '/quota', label: 'Quota & Recruitment', icon: 'plane', desk: true, quota: true },
   { to: '/ceo-review', label: 'CEO review', icon: 'lock', desk: true, ceo: true },
   { to: '/control', label: 'Software Control', icon: 'shield', desk: true, ceo: true },
   { to: '/settings', label: 'Settings', icon: 'gear', desk: true },
@@ -103,7 +106,7 @@ function MainApp() {
           </div>
         </div>
         <nav aria-label="Main">
-          {NAV.filter((n) => !n.mobile && (!n.ceo || isSuper) && (!n.hr || (canWrite && !isOM))).map((n) => (
+          {NAV.filter((n) => !n.mobile && (!n.ceo || isSuper) && (!n.hr || (canWrite && !isOM)) && (!n.quota || qRank(role) > 0)).map((n) => (
             <NavLink key={n.to} to={n.to} end={n.end} className={({ isActive }) => (isActive || (n.to === '/' && loc.pathname.startsWith('/dashboard')) ? 'on' : '')}>
               <Icon name={n.icon} />
               <span>{n.label === 'Home' ? 'Dashboard' : n.label}</span>
@@ -150,6 +153,8 @@ function MainApp() {
             <Route path="/requests/:id" element={<RequestDetail />} />
             <Route path="/ceo-review" element={<CeoReviewPage />} />
             <Route path="/compliance" element={<CompliancePage />} />
+            {qRank(role) > 0 && <Route path="/quota" element={<QuotaPage />} />}
+            {qRank(role) > 0 && <Route path="/quota/recruit/:id" element={<QuotaPage />} />}
             {isSuper && <Route path="/control" element={<ControlPage />} />}
             {isSuper && <Route path="/control/:tab" element={<ControlPage />} />}
             <Route path="/documents" element={<DocumentLibrary />} />

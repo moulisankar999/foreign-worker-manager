@@ -122,6 +122,9 @@ export interface Worker {
   permitSector?: string
   /** hostel from the hostel register (Act 446) */
   hostelId?: string
+  /** v1.4 Quota & Recruitment: approval letter this worker uses, and the recruit record he came from */
+  quotaId?: string
+  recruitId?: string
   /** exit or absconding checklist */
   exitFlow?: import('./trackers').ExitFlow
   /** cost tracker (pay data: hidden from roles that may not see pay) */

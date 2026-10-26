@@ -91,6 +91,14 @@ try {
   r = await U.ceo.c.rpc('qr_decide_use', { p_id: UR2, p_action: 'approve' }); ur = (await admin.from('qr_use_requests').select('*').eq('id', UR2).single()).data
   check('CEO alone approves → approved, GM step skipped', ur.status === 'approved' && ur.gm_skipped && ur.timeline.some((x) => /GM step skipped/.test(x.action)), JSON.stringify([ur.status, ur.gm_skipped]))
   r = await U.gm.c.rpc('qr_decide_use', { p_id: UR2, p_action: 'approve' }); check('GM cannot act on a closed request', !!r.error)
+  // 035: link a recruit to an existing request
+  const btN = (await U.hrm.c.rpc('qr_save_batch', { p: { company_id: A, quota_id: QA, country: 'Nepal', title: 'Nepal batch 1', target_count: 2 } })).data
+  const RN1 = (await U.hrm.c.rpc('qr_save_recruit', { p: { batch_id: btN, full_name: 'Bikash Gurung', passport_no: 'pa1111111' } })).data
+  const RN2 = (await U.hrm.c.rpc('qr_save_recruit', { p: { batch_id: btN, full_name: 'Suman Rai', passport_no: 'pa2222222' } })).data
+  r = await U.hrm.c.rpc('qr_link_recruit', { p_recruit: RN1, p_request: UR2 }); check('recruit linked to an approved request', !r.error, err(r))
+  r = await U.hrm.c.rpc('qr_link_recruit', { p_recruit: RN2, p_request: UR2 }); check('link refused once all slots are covered', !!r.error && /all its slots/.test(err(r)), err(r))
+  r = await U.hrm.c.rpc('qr_link_recruit', { p_recruit: R2, p_request: UR2 }); check('link refused for another country', !!r.error && /another company or country/.test(err(r)), err(r))
+  r = await U.om?.c.rpc('qr_link_recruit', { p_recruit: RN2, p_request: UR2 }) ?? { error: { message: 'no om' } }; check('Outlet Manager cannot link recruits', !!r.error)
 
   // self-approval
   r = await U.gm.c.rpc('qr_request_use', { p: { quota_id: QA, country: 'Nepal', slots: 1, purpose: 'GM raised' } }); const UR3 = r.data

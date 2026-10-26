@@ -39,7 +39,7 @@ export function Btn({ children, onClick, kind = 'secondary', icon, type = 'butto
   )
 }
 
-export type FieldType = 'text' | 'date' | 'number' | 'select' | 'textarea' | 'checkbox' | 'tel' | 'email' | 'money' | 'phone' | 'upper'
+export type FieldType = 'text' | 'date' | 'number' | 'select' | 'textarea' | 'checkbox' | 'tel' | 'email' | 'money' | 'phone' | 'upper' | 'datetime-local'
 export interface FieldDef { key: string; label: string; type?: FieldType; options?: string[] | { value: string; label: string }[]; required?: boolean; placeholder?: string; full?: boolean; hint?: string; show?: (v: Record<string, unknown>) => boolean; defaultCc?: string; max?: string }
 
 function MoneyInput({ id, value, onChange, required, placeholder }: { id: string; value: unknown; onChange: (v: unknown) => void; required?: boolean; placeholder?: string }) {

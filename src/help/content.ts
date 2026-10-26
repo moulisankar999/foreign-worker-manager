@@ -112,7 +112,7 @@ export interface Guide {
   important?: string
 }
 
-export const GROUPS = ['Getting started', 'Workers', 'Documents', 'Requests', 'Alerts & compliance', 'Reports & submissions', 'Users & access', 'Worker app access', 'Settings & system']
+export const GROUPS = ['Getting started', 'Workers', 'Documents', 'Requests', 'Alerts & compliance', 'Reports & submissions', 'Quota & Recruitment', 'Users & access', 'Worker app access', 'Settings & system']
 
 export const GUIDES: Guide[] = [
   /* ---------------- Getting started ---------------- */
@@ -272,6 +272,18 @@ export const GUIDES: Guide[] = [
   { id: 'control', group: 'Settings & system', title: 'Control Center (health, errors, system map)', roles: ['ceo'],
     steps: ['Open Software Control (left menu or More).', 'Control Center shows the health checks (sync, backups, storage, renewals). Red needs action.', 'Errors lists app errors from all devices with how often they happened.', 'Know-how / System Map explains how the parts fit together.'],
     shots: ['control'] },
+  /* ---------------- Quota & Recruitment ---------------- */
+  { id: 'quota-letter', group: 'Quota & Recruitment', title: 'Record a quota approval letter', roles: ['ceo', 'gm', 'hra', 'hrm'],
+    intro: 'Quota & Recruitment (menu) keeps every approval letter as a ledger with a running balance, like a bank account.',
+    steps: ['Open Quota & Recruitment → Letters & ledger → Add letter.', 'Enter the reference, dates and the approved slots per country, and attach the scanned letter.', 'A GM or the CEO — not the person who entered it — opens the letter. Only then do its slots count.', 'Every later change (extension, adjustment, transfer, expiry) is a ledger movement with a note; mistakes are reversed, never deleted.'] },
+  { id: 'quota-use', group: 'Quota & Recruitment', title: 'Use quota slots (approval before the calling visa)', roles: ['ceo', 'gm', 'hra', 'hrm'],
+    steps: ['Approvals → Request quota use: pick the letter, country and number of slots, and the recruits. The slots are reserved at once.', 'The GM approves, then the CEO. The CEO alone is final; the GM alone is never enough. Nobody approves their own request.', 'Only after approval can the calling visa (VDR) be applied for — the step is locked until then.', 'A rejected or cancelled request gives the reserved slots back.'] },
+  { id: 'quota-recruit', group: 'Quota & Recruitment', title: 'Take a recruit from selection to arrival', roles: ['ceo', 'gm', 'hra', 'hrm'],
+    steps: ['Pipeline → add a batch, then add recruits (for India, choose ECR or ECNR — it decides the steps).', 'Open a recruit and tick each checklist step with its date and reference.', 'Set the flight: HR is told to prepare the hostel. Print the airport authorisation letter.', 'After arrival, record FOMEMA (within 30 days) and PLKS, then Convert to worker.'] },
+  { id: 'quota-cmo', group: 'Quota & Recruitment', title: 'Record a Check Out Memo (CMO) or a runaway', roles: ['ceo', 'gm', 'hra', 'hrm'],
+    steps: ['CMO & runaways → Record CMO: pick the worker, enter the CMO reference and attach the scan. The copy is kept for good with a fingerprint.', 'A worker who left without a CMO is a runaway: open a runaway case, report to the police and Immigration (eRUNAWAY), and attach the copies.', 'Reconciliation shows any letter whose numbers do not add up, in red.'] },
+  { id: 'quota-claim', group: 'Quota & Recruitment', title: 'Claim replacement quota (gantian)', roles: ['ceo', 'gm', 'hra', 'hrm'],
+    steps: ['When the government opens a replacement window, go to Replacement claims → New claim and pick the eligible CMOs.', 'Print the merged claim pack (cover + every CMO copy) and submit it.', 'Record the result: approved CMOs become a new replacement letter in the ledger. A CMO cannot be claimed twice.'] },
 ]
 
 export interface Faq { q: string; a: string; roles: HelpRole[] }
@@ -324,6 +336,11 @@ export const FAQS: Faq[] = [
   { roles: ['ceo'], q: 'Someone left the company. Pause or delete?', a: 'Pause first. Delete only when you are sure; their history stays in the audit log either way.' },
   { roles: ['ceo'], q: 'Can I see what a worker sees in FW Worker?', a: 'Workers see their own documents, requests and simple status only (e.g. "With HR Admin") — never internal notes or managers\' names.' },
   { roles: ['viewer'], q: 'What is the Viewer role for?', a: 'Viewer is a read-only role for looking things up and printing reports.' },
+  { roles: ['ceo', 'gm', 'hra', 'hrm'], q: 'Who sees Quota & Recruitment?', a: 'Only the CEO, General Manager, HR Admin and HR Manager. Outlet Managers, Viewers and workers have no access — the database enforces it.' },
+  { roles: ['ceo', 'gm', 'hra', 'hrm'], q: 'Can the GM approve quota use alone?', a: 'No. GM approval moves the request to the CEO. The CEO can approve with or without the GM; the timeline then shows "Approved by CEO (GM step skipped)".' },
+  { roles: ['ceo', 'gm', 'hra', 'hrm'], q: 'Why can I not apply for the calling visa?', a: 'The quota use request for that recruit is not approved by the CEO yet. Approvals shows where it is waiting.' },
+  { roles: ['ceo', 'gm', 'hra', 'hrm'], q: 'What is a runaway in this app?', a: 'A worker who left without a Check Out Memo. His status stays Absconded; the runaway case tracks the police and Immigration reports, the permit, bond and follow-ups.' },
+  { roles: ['ceo', 'gm', 'hra', 'hrm'], q: 'Can a ledger entry be deleted?', a: 'No. Like a bank, a wrong entry is reversed by a GM or the CEO with a note, and both lines stay on the record.' },
 ]
 
 export const guidesFor = (r: HelpRole) => GUIDES.filter((g) => g.roles.includes(r))

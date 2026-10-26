@@ -15,6 +15,7 @@ import { inScope } from '../lib/companies'
 import { useJobs, useOutlets, useSettings } from '../lib/hooks'
 import { BUSINESS_TYPES, DOC_SHORT, DOC_STAGES, GENDERS, NATIONALITIES, RELATIONS, RELIGIONS, SKILL_LEVELS, STATUSES, type DocRec, type FamilyRec, type RemitRec, type Worker, type WorkerStatus } from '../lib/types'
 import { languagesSummary } from '../lib/languages'
+import { qRank, useQuotaLetters } from '../lib/quota'
 import { addMonths, fmtDate, resizeImage, rm, todayISO, uid } from '../lib/util'
 import {
   NATIONALITY_CC, PERMIT_HINT, completeness, dateIssues, dobIssue, docNumberIssue, emailIssue, fmtPhone, latestDoc, moneyIssue, passportHint, passportIssue, phoneIssue, type Issues,
@@ -109,6 +110,7 @@ export default function WorkerForm() {
   const bt = (v.businessType as string) || ''
   const jobOptions = useMemo(() => Array.from(new Set(jobs.filter((j) => !bt || j.businessType === bt).map((j) => j.name))).sort(), [jobs, bt])
   const nat = String(v.nationality || '')
+  const letters = useQuotaLetters(qRank(role) > 0)
   const personal: FieldDef[] = [
     { key: 'workerNo', label: 'Worker ID', required: true },
     { key: 'fullName', label: 'Full name (as in passport)', required: true, full: true },
@@ -128,6 +130,7 @@ export default function WorkerForm() {
     { key: 'joinDate', label: 'Start date', type: 'date', required: true },
     ...(editing ? [] : [{ key: 'status', label: 'Employment status', type: 'select' as const, options: [...STATUSES] }]),
     { key: 'agent', label: 'Recruitment agent', full: true },
+    ...(letters.length ? [{ key: 'quotaId', label: 'Quota approval letter', type: 'select' as const, options: letters.map((l) => ({ value: l.id, label: l.ref_no })), hint: 'Counts this worker in the letter\'s tally (Quota & Recruitment)' }] : []),
   ]
   const contract: FieldDef[] = [
     { key: 'contractStart', label: 'Contract start', type: 'date' },
