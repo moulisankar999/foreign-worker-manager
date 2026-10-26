@@ -4,6 +4,7 @@
 import fs from 'node:fs'
 import { createRequire } from 'node:module'
 import { rid, cleanupOwn } from './_own.mjs'
+const LBL = process.env.LABEL || 'v1.3.8'
 const ROOT = new URL('..', import.meta.url).pathname
 const require = createRequire(ROOT + 'package.json')
 const { createClient } = require('@supabase/supabase-js')
@@ -36,16 +37,16 @@ try {
     await p.goto(UI); await p.fill('#em', U[k].email); await p.fill('#pw', pw); await p.locator('form button[type=submit]').first().click()
     await p.waitForTimeout(7000)
     const dash = await p.locator('body').innerText()
-    check(`v1.3.8 ${k}: signs in and sees the dashboard (not locked out)`, !(await p.locator('#em').isVisible().catch(() => false)) && /Good (morning|afternoon|evening)/.test(dash), dash.slice(0, 300))
+    check(`${LBL} ${k}: signs in and sees the dashboard (not locked out)`, !(await p.locator('#em').isVisible().catch(() => false)) && /Good (morning|afternoon|evening)/.test(dash), dash.slice(0, 300))
     for (const path of ['#/requests', '#/workers', '#/settings/users']) { await p.goto(UI + path); await p.waitForTimeout(3000) }
     if (k === 'gm' || k === 'hra') {
       const t = await p.locator('body').innerText()
-      check(`v1.3.8 ${k}: Users list has no superior rows (rows hidden by 034 even on the old app)`, !t.includes('CX Chief') && (k === 'gm' || !t.includes('CX GM')), t.slice(0, 300))
+      check(`${LBL} ${k}: Users list has no superior rows (rows hidden by 034 even on the old app)`, !t.includes('CX Chief') && (k === 'gm' || !t.includes('CX GM')), t.slice(0, 300))
     }
     await p.goto(UI + '#/'); await p.waitForTimeout(2000)
-    if (k === 'om') await p.screenshot({ path: OUT + 'v138-om-dashboard.png' })
-    check(`v1.3.8 ${k}: no REST errors (403 etc.) on dashboard / requests / workers / users`, bad.length === 0, bad.join(', '))
-    check(`v1.3.8 ${k}: no page errors`, errs.length === 0, errs.join(' | '))
+    if (k === 'om') await p.screenshot({ path: OUT + LBL.replace(/[^0-9a-z]/gi, '') + '-om-dashboard.png' })
+    check(`${LBL} ${k}: no REST errors (403 etc.) on dashboard / requests / workers / users`, bad.length === 0, bad.join(', '))
+    check(`${LBL} ${k}: no page errors`, errs.length === 0, errs.join(' | '))
     await ctx.close()
   }
   await browser.close()
