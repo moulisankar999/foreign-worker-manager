@@ -1,5 +1,5 @@
 /* Quota & Recruitment (v1.4 draft): data access, country checklists, cost categories, helpers.
- * Server: migration 036 (tables qr_*, read-only RLS by company scope, every write through audited RPCs). */
+ * Server: migrations 036-038 (tables qr_*, read-only RLS by company scope, every write through audited RPCs). */
 import { useEffect, useState, useSyncExternalStore } from 'react'
 import { supabase } from './supabase'
 import { daysUntil, todayISO } from './util'
@@ -8,7 +8,7 @@ import type { Role } from './supabase'
 /* ---------------- rows ---------------- */
 export interface QFile { id: string; company_id: string; kind: string; path: string; name: string | null; mime: string | null; size: number | null; sha256: string; uploaded_by_name: string | null; uploaded_at: string }
 export interface Quota {
-  id: string; company_id: string; ref_no: string; kind: 'new' | 'replacement' | 'transfer'; approval_date: string; expiry_date: string | null
+  id: string; company_id: string; ref_no: string; kind: 'new' | 'replacement' | 'transfer' | 'additional'; approval_date: string; expiry_date: string | null
   sector: string | null; subsector: string | null; job_title: string | null; breakdown: Record<string, number>; conditions: string | null; levy_note: string | null; notes: string | null
   section60k_ref: string | null; section60k_expiry: string | null; letter_file: string | null; status: 'pending' | 'active' | 'rejected' | 'closed'
   extensions: { from: string; to: string; ref: string; at: string; by: string }[]; claim_id: string | null
@@ -41,6 +41,7 @@ export interface Recruit {
   vdr_no: string | null; vdr_applied: string | null; vdr_approved: string | null; vdr_expiry: string | null; flight_no: string | null; flight_at: string | null; airport: string | null
   pickup_by: string | null; transport: string | null; arrived_at: string | null; hostel_id: string | null; outlet_id: string | null; owner_id: string | null
   status: 'active' | 'dropped' | 'converted'; drop_reason: string | null; worker_id: string | null; created_at: string; updated_at: string
+  vdr_file: string | null; stamped_on: string | null
 }
 export interface QEvent { id: number; at: string; company_id: string; recruit_id: string | null; batch_id: string | null; use_request_id: string | null; exit_id: string | null; runaway_id: string | null; claim_id: string | null; action: string; note: string | null; by_name: string | null; by_role: string | null }
 export interface Payment {
@@ -61,12 +62,31 @@ export interface Runaway {
   followups: { at: string; by: string; note: string }[]; outcome: 'open' | 'found' | 'returned' | 'closed'; outcome_date: string | null; outcome_note: string | null; created_at: string
 }
 export interface Claim {
-  id: string; ref_no: number; company_id: string; title: string; announcement: string | null; notes: string | null; status: 'draft' | 'submitted' | 'approved' | 'partly_approved' | 'rejected'
+  id: string; ref_no: number; company_id: string; title: string; announcement: string | null; notes: string | null; status: 'draft' | 'submitted' | 'approved' | 'partly_approved' | 'rejected' | 'no_outcome'; window_id: string | null; outcome_note: string | null
   submitted_at: string | null; gov_ref: string | null; decided_on: string | null; approved_count: number | null; new_quota_id: string | null; pack_file: string | null
   created_by: string; created_by_name: string | null; created_at: string; decided_by_name: string | null
 }
+export interface QWindow { id: string; title: string; circular_ref: string | null; open_date: string | null; close_date: string | null; rules: string | null; file_id: string | null; status: 'recorded' | 'closed'; created_by_name: string | null; created_at: string }
+export interface Agent {
+  id: string; agency: string; country: string; licence: string | null; contact_name: string | null; phone: string | null; email: string | null; user_id: string | null
+  active: boolean; revoked_at: string | null; revoked_by_name: string | null; revoke_reason: string | null; created_by_name: string | null; created_at: string
+}
+export interface AgentBatch { agent_id: string; batch_id: string; company_id: string; assigned_by_name: string | null; assigned_at: string }
+export interface AgentDoc {
+  id: string; company_id: string; batch_id: string; recruit_id: string; agent_id: string; kind: 'passport' | 'photo' | 'medical' | 'police' | 'other'
+  path: string; name: string | null; mime: string | null; size: number | null; sha256: string; note: string | null; status: 'submitted' | 'accepted' | 'rejected'
+  submitted_at: string; reviewed_by_name: string | null; reviewed_at: string | null; review_note: string | null
+}
+export interface MasterRow {
+  level: 'letter' | 'company' | 'sector' | 'total'; company_id: string | null; sector: string | null; quota_id: string | null; ref_no: string | null; expiry_date: string | null
+  days_left: number | null; letters: number; approved: number; reserved: number; used: number; available: number; lapsed: number; expiring_unused: number; runaways: number; active_workers: number
+}
+export interface ServerAlert { level: 'red' | 'amber'; kind: string; company_id: string | null; ref_id: string; text: string; link: string }
 export interface ClaimItem { claim_id: string; exit_id: string; released: boolean; approved: boolean | null }
-export interface Rules { cmo_missing_days: number; runaway_report_days: number; expiry_amber_days: number; expiry_red_days: number; util_amber_pct: number; payment_check_rm: number; templates: Record<string, unknown> }
+export interface Rules {
+  cmo_missing_days: number; runaway_report_days: number; expiry_amber_days: number; expiry_mid_days: number; expiry_red_days: number; util_amber_pct: number; payment_check_rm: number
+  default_country: string; letter_valid_months: number; stall_days: number; window_warn_days: number; templates: Record<string, unknown>
+}
 export interface Tally {
   company_id: string; quota_id: string; ref_no: string; kind: string; expiry_date: string | null; status: string; country: string
   approved: number; available: number; reserved: number; used: number; lapsed: number; active_workers: number; in_pipeline: number
@@ -76,9 +96,12 @@ export interface QData {
   loaded: boolean; error?: string
   quotas: Quota[]; ledger: Entry[]; requests: UseReq[]; batches: Batch[]; recruits: Recruit[]; events: QEvent[]; payments: Payment[]
   exits: Exit[]; runaways: Runaway[]; claims: Claim[]; claimItems: ClaimItem[]; files: QFile[]; tally: Tally[]; rules: Rules
+  windows: QWindow[]; agents: Agent[]; agentBatches: AgentBatch[]; agentDocs: AgentDoc[]; master: MasterRow[]; alerts: ServerAlert[]
 }
-export const DEFAULT_RULES: Rules = { cmo_missing_days: 14, runaway_report_days: 14, expiry_amber_days: 90, expiry_red_days: 30, util_amber_pct: 80, payment_check_rm: 5000, templates: {} }
-const EMPTY: QData = { loaded: false, quotas: [], ledger: [], requests: [], batches: [], recruits: [], events: [], payments: [], exits: [], runaways: [], claims: [], claimItems: [], files: [], tally: [], rules: DEFAULT_RULES }
+export const DEFAULT_RULES: Rules = { cmo_missing_days: 14, runaway_report_days: 14, expiry_amber_days: 90, expiry_mid_days: 60, expiry_red_days: 30, util_amber_pct: 80, payment_check_rm: 5000,
+  default_country: 'India', letter_valid_months: 12, stall_days: 14, window_warn_days: 14, templates: {} }
+const EMPTY: QData = { loaded: false, quotas: [], ledger: [], requests: [], batches: [], recruits: [], events: [], payments: [], exits: [], runaways: [], claims: [], claimItems: [], files: [], tally: [], rules: DEFAULT_RULES,
+  windows: [], agents: [], agentBatches: [], agentDocs: [], master: [], alerts: [] }
 
 /* ---------------- store ---------------- */
 let state: QData = EMPTY
@@ -104,9 +127,15 @@ export function reloadQuota(): Promise<void> {
         supabase.from('qr_claim_items').select('*').then((r) => { if (r.error) throw r.error; return (r.data || []) as ClaimItem[] }),
         all<QFile>('qr_files', 'uploaded_at'),
         supabase.rpc('qr_tally', { p_company: null }).then((r) => { if (r.error) throw r.error; return (r.data || []) as Tally[] }),
-        supabase.from('qr_rules').select('*').maybeSingle().then((r) => (r.data as Rules) || DEFAULT_RULES),
+        supabase.from('qr_rules').select('*').maybeSingle().then((r) => ({ ...DEFAULT_RULES, ...((r.data as Rules) || {}) })),
       ])
-      state = { loaded: true, quotas, ledger, requests, batches, recruits, events, payments, exits, runaways, claims, claimItems, files, tally, rules }
+      const rows = <T,>(q: PromiseLike<{ data: unknown; error: { message: string } | null }>) => Promise.resolve(q).then((r) => { if (r.error) throw r.error; return (r.data || []) as T[] })
+      const [windows, agents, agentBatches, agentDocs, master, alerts] = await Promise.all([
+        rows<QWindow>(supabase.from('qr_windows').select('*').order('close_date', { ascending: false })), rows<Agent>(supabase.from('qr_agents').select('*').order('agency')),
+        rows<AgentBatch>(supabase.from('qr_agent_batches').select('*')), all<AgentDoc>('qr_agent_docs', 'submitted_at'),
+        rows<MasterRow>(supabase.rpc('qr_master', { p_company: null })), rows<ServerAlert>(supabase.rpc('qr_alerts')),
+      ])
+      state = { loaded: true, quotas, ledger, requests, batches, recruits, events, payments, exits, runaways, claims, claimItems, files, tally, rules, windows, agents, agentBatches, agentDocs, master, alerts }
     } catch (e) {
       state = { ...state, loaded: true, error: (e as Error).message }
     } finally { loading = null; emit() }
@@ -173,16 +202,17 @@ export const UR_STATUS: Record<UseReq['status'], { label: string; tone: string }
 export const ENTRY_LABEL: Record<string, string> = {
   approved: 'Approved (letter)', reserve: 'Reserved (use request)', release: 'Released', use: 'Used (calling visa)', use_existing: 'Used (existing worker)', return: 'Returned to balance',
   expire: 'Expired / lapsed', transfer_out: 'Transferred out', transfer_in: 'Transferred in', adjust_up: 'Adjustment +', adjust_down: 'Adjustment −',
-  exit_cmo: 'Exited via CMO — replacement-eligible', exit_other: 'Exited (death / transfer)', exit_other_elig: 'Death — replacement-eligible', exit_void: 'Exit record voided',
-  runaway: 'Runaway (no CMO)', runaway_void: 'Runaway found / returned', claim_submit: 'Put in replacement claim', claim_release: 'Claim released', claim_approved: 'Replacement approved', reversal: 'Reversal',
+  exit_cmo: 'Exited via CMO (copy on file)', exit_other: 'Exited (death / transfer)', exit_other_elig: 'Exit (earlier record)', exit_void: 'Exit record voided',
+  runaway: 'Runaway (no CMO)', runaway_void: 'Runaway found / returned', claim_submit: 'In an additional quota application', claim_release: 'Back on file', claim_approved: 'Used in an approved application', reversal: 'Reversal',
 }
 export const EXIT_KIND: Record<Exit['kind'], string> = { cmo: 'Check Out Memo (CMO)', death: 'Death', transfer: 'Transfer to another employer' }
 export const EXIT_STATUS: Record<Exit['status'], { label: string; tone: string }> = {
-  eligible: { label: 'Replacement-eligible', tone: 'green' }, claimed: { label: 'In a claim', tone: 'blue' }, replaced: { label: 'Replaced', tone: 'gray' },
-  not_eligible: { label: 'Not replaceable', tone: 'gray' }, void: { label: 'Void', tone: 'red' },
+  eligible: { label: 'CMO on file', tone: 'green' }, claimed: { label: 'In an application', tone: 'blue' }, replaced: { label: 'Used in an application', tone: 'gray' },
+  not_eligible: { label: 'Recorded', tone: 'gray' }, void: { label: 'Void', tone: 'red' },
 }
 export const CLAIM_STATUS: Record<Claim['status'], { label: string; tone: string }> = {
   draft: { label: 'Draft', tone: 'gray' }, submitted: { label: 'Submitted', tone: 'blue' }, approved: { label: 'Approved', tone: 'green' }, partly_approved: { label: 'Partly approved', tone: 'amber' }, rejected: { label: 'Rejected', tone: 'red' },
+  no_outcome: { label: 'No outcome', tone: 'gray' },
 }
 export const RUN_OUTCOME: Record<Runaway['outcome'], { label: string; tone: string }> = { open: { label: 'Open', tone: 'red' }, found: { label: 'Found', tone: 'blue' }, returned: { label: 'Returned to work', tone: 'green' }, closed: { label: 'Closed', tone: 'gray' } }
 
@@ -211,86 +241,10 @@ export const PAY_CATS: { key: string; label: string; workerCost: string; stage: 
 ]
 export const payLabel = (k: string) => PAY_CATS.find((c) => c.key === k)?.label || k
 
-/* ---------------- pipeline: stages + country checklists ---------------- */
-export const STAGES: { key: string; label: string }[] = [
-  { key: 'sourcing', label: 'Sourcing' }, { key: 'interview', label: 'Interview / selection' }, { key: 'offer', label: 'Offer & contract' },
-  { key: 'passport', label: 'Passport & documents' }, { key: 'medical', label: 'Medical' }, { key: 'vdr', label: 'Calling visa (VDR)' },
-  { key: 'clearance', label: 'Home-country clearance' }, { key: 'travel', label: 'Travel' }, { key: 'arrival', label: 'Arrived' },
-  { key: 'onboarding', label: 'FOMEMA / PLKS / onboarding' }, { key: 'ready', label: 'Ready to convert' },
-]
-export const stageLabel = (k: string) => STAGES.find((s) => s.key === k)?.label || (k === 'converted' ? 'Converted to worker' : k)
-export interface CStep { key: string; label: string; stage: string; hint?: string; ecr?: boolean; gate?: boolean }
-const COMMON_PRE: CStep[] = [
-  { key: 'selected', label: 'Candidate selected (agent CV / interview)', stage: 'interview' },
-  { key: 'trade_test', label: 'Trade test / skills check passed', stage: 'interview' },
-  { key: 'offer', label: 'Offer & employment contract signed (worker\'s language)', stage: 'offer', hint: 'Zero-cost: the worker pays no recruitment fee. Keep the signed contract in the documents.' },
-  { key: 'passport_ok', label: 'Passport valid ≥ 18 months, copy on file', stage: 'passport', hint: 'Malaysia needs enough passport validity to cover the PLKS. Renew before applying if short.' },
-  { key: 'pre_medical', label: 'Pre-departure medical at an approved clinic — fit', stage: 'medical' },
-  { key: 'quota_use', label: 'Quota Use Request approved by CEO', stage: 'vdr', gate: true, hint: 'Raised in Approvals. GM then CEO approve; CEO alone is enough. The database blocks the VDR until this is done.' },
-  { key: 'vdr_apply', label: 'Calling visa (VDR) applied in FWCMS', stage: 'vdr', gate: true, hint: 'Uses 1 quota slot. Levy, bond / insurance guarantee and FWCMS fees paid first.' },
-  { key: 'vdr_ok', label: 'Calling visa approved / visa issued', stage: 'vdr' },
-]
-const COMMON_POST: CStep[] = [
-  { key: 'ticket', label: 'Flight booked (company pays)', stage: 'travel' },
-  { key: 'airport_letter', label: 'Airport authorisation letter issued', stage: 'travel', hint: 'A4 letter for the pickup person and the airport desk — print it from the recruit page.' },
-  { key: 'hostel_ready', label: 'Hostel bed confirmed (Act 446 capacity)', stage: 'travel' },
-  { key: 'arrived', label: 'Arrived — passport stamped at the airport', stage: 'arrival' },
-  { key: 'fomema', label: 'FOMEMA medical within 30 days of arrival — fit', stage: 'onboarding', hint: 'If unfit: Check Out Memo and send home within the time Immigration gives; the slot may be replaced.' },
-  { key: 'plks', label: 'PLKS (work permit) endorsed', stage: 'onboarding' },
-  { key: 'spikpa', label: 'SPIKPA hospitalisation insurance active', stage: 'onboarding' },
-  { key: 'socso', label: 'SOCSO registered', stage: 'onboarding' },
-  { key: 'epf', label: 'EPF registered', stage: 'onboarding', hint: 'EPF for non-citizen employees (2% employer + 2% employee) — check the rate in force.' },
-  { key: 'sim', label: 'SIM card given', stage: 'onboarding' },
-  { key: 'bank', label: 'Bank account opened (salary by bank transfer)', stage: 'onboarding' },
-  { key: 'induction', label: 'Induction, rules & grievance channel explained', stage: 'ready' },
-]
-export const COUNTRY_STEPS: Record<string, CStep[]> = {
-  India: [
-    { key: 'ra_check', label: 'Recruiting Agent licensed (MEA eMigrate RA number)', stage: 'sourcing' },
-    ...COMMON_PRE,
-    { key: 'demand_letter', label: 'Demand letter / power of attorney attested by Indian mission in KL', stage: 'clearance', ecr: true, hint: 'ECR only. Needed for the employer registration in eMigrate.' },
-    { key: 'emigrate_reg', label: 'Employer & contract registered in eMigrate', stage: 'clearance', ecr: true },
-    { key: 'pbby', label: 'PBBY insurance (Pravasi Bhartiya Bima Yojana)', stage: 'clearance', hint: 'Compulsory for ECR; recommended for ECNR.' },
-    { key: 'emig_clear', label: 'Emigration clearance (POE) granted in eMigrate', stage: 'clearance', ecr: true, hint: 'ECR passports cannot leave India for work without it. Adds about 1–3 weeks and the attestation / PBBY costs.' },
-    { key: 'pdot', label: 'Pre-departure orientation (PDOT)', stage: 'clearance' },
-    ...COMMON_POST,
-  ],
-  Nepal: [
-    { key: 'ra_check', label: 'Recruiting agency licensed by DoFE', stage: 'sourcing' },
-    ...COMMON_PRE,
-    { key: 'demand_attest', label: 'Demand letter & POA attested by Nepal Embassy KL', stage: 'clearance' },
-    { key: 'dofe_pre', label: 'DoFE pre-approval', stage: 'clearance' },
-    { key: 'orientation', label: 'Pre-departure orientation', stage: 'clearance' },
-    { key: 'insurance_np', label: 'Insurance + Foreign Employment Welfare Fund paid', stage: 'clearance' },
-    { key: 'labour_permit', label: 'DoFE labour permit (final approval / sticker)', stage: 'clearance', hint: 'Nepal–Malaysia MoU: employer pays recruitment fee, visa, ticket, medical and security screening.' },
-    ...COMMON_POST,
-  ],
-  Bangladesh: [
-    { key: 'ra_check', label: 'Recruiting agency on the approved list', stage: 'sourcing', hint: 'Malaysia stopped new Bangladeshi intake under the old approvals on 31 May 2024 — check the current KDN position before starting.' },
-    ...COMMON_PRE,
-    { key: 'attest_bd', label: 'Demand letter attested by Bangladesh High Commission KL', stage: 'clearance' },
-    { key: 'bmet', label: 'BMET registration & emigration clearance (smart card)', stage: 'clearance' },
-    { key: 'welfare_bd', label: 'Welfare fund & insurance (Wage Earners\' Welfare Board)', stage: 'clearance' },
-    ...COMMON_POST,
-  ],
-  Myanmar: [...COMMON_PRE, { key: 'owic', label: 'Overseas Worker Identification Card (OWIC) / labour clearance', stage: 'clearance' }, ...COMMON_POST],
-  Indonesia: [...COMMON_PRE, { key: 'bp2mi', label: 'BP2MI / SISKOP2MI registration & E-KTKLN', stage: 'clearance', hint: 'Recruit through a licensed P3MI agency; check the One Channel System rules for the sector.' }, ...COMMON_POST],
-  'Sri Lanka': [...COMMON_PRE, { key: 'slbfe', label: 'SLBFE registration & insurance', stage: 'clearance' }, ...COMMON_POST],
-  Pakistan: [...COMMON_PRE, { key: 'beoe', label: 'BE&OE Protector of Emigrants stamp + OEC / insurance', stage: 'clearance' }, ...COMMON_POST],
-}
-export const COUNTRIES = Object.keys(COUNTRY_STEPS)
-export const stepsFor = (country: string, ecr?: string | null, templates?: Record<string, unknown>): CStep[] => {
-  const over = templates?.[country] as CStep[] | undefined
-  const base = Array.isArray(over) && over.length ? over : COUNTRY_STEPS[country] || [...COMMON_PRE, ...COMMON_POST]
-  return base.filter((s) => !(s.ecr && country === 'India' && ecr === 'ECNR'))
-}
-export const progress = (r: Recruit, templates?: Record<string, unknown>) => {
-  const st = stepsFor(r.country, r.ecr, templates)
-  const done = st.filter((s) => r.steps?.[s.key]?.done || (s.key === 'quota_use' && false)).length
-  return { done, total: st.length, pct: st.length ? Math.round((done / st.length) * 100) : 0 }
-}
-/** where a recruit stands: the stage of the first open step */
-export const nextStep = (r: Recruit, templates?: Record<string, unknown>) => stepsFor(r.country, r.ecr, templates).find((s) => !r.steps?.[s.key]?.done)
+/* ---------------- pipeline: stages + country checklists (pure module, unit-tested) ---------------- */
+export { STAGES, stageLabel, COUNTRY_STEPS, COUNTRIES, stepsFor, progress, nextStep, daysInStage, slotWhere, DEFAULT_COUNTRY } from './quotaSteps'
+export type { CStep } from './quotaSteps'
+import { stepsFor } from './quotaSteps'
 
 /* ---------------- RAG + alerts ---------------- */
 export type Rag = 'red' | 'amber' | 'green'
@@ -326,10 +280,9 @@ export function quotaAlerts(d: QData, workers: { id: string; fullName: string; w
     if (since >= d.rules.cmo_missing_days) out.push({ level: 'red', text: `${w.fullName} (${w.workerNo}) left ${since >= 999 ? '' : since + ' days ago '}with no CMO in the register`, link: `/workers/${w.id}`, company: '' })
   }
   for (const w of workers.filter((x) => x.status === 'Absconded' && !withRun.has(x.id))) out.push({ level: 'red', text: `${w.fullName} (${w.workerNo}) is Absconded with no runaway case`, link: `/quota?tab=exits&newrun=${w.id}`, company: '' })
-  // CMOs not yet claimed
-  const el = d.exits.filter((x) => x.status === 'eligible')
-  if (el.length) out.push({ level: 'amber', text: `${el.length} CMO(s) replacement-eligible and not yet claimed`, link: '/quota?tab=claims', company: '' })
-  for (const t of d.tally) { const g = quotaRag(t, d.rules); if (g.rag !== 'green' && g.why.some((x) => !/used$|Fully/.test(x))) out.push({ level: g.rag, text: `${t.ref_no} ${t.country}: ${g.why.join('; ')}`, link: `/quota?tab=letters&q=${t.quota_id}`, company: t.company_id }) }
+  // anti-misuse (server, same scope as the user): use without approval, workers beyond recorded use, expiry 90/60/30 with unused balance,
+  // approved requests idle, decisions waiting, and — only when one is recorded and open — a government window closing
+  for (const a of d.alerts) out.push({ level: a.level, text: a.text, link: '/' + a.link, company: a.company_id || '' })
   for (const r of d.recruits.filter((x) => x.status === 'active' && x.vdr_expiry && !x.arrived_at)) {
     const n = (daysUntil(r.vdr_expiry!) ?? 0)
     if (n <= 14) out.push({ level: n < 0 ? 'red' : 'amber', text: `${r.full_name}: calling visa ${n < 0 ? 'expired' : `expires in ${n} days`} before arrival`, link: `/quota/recruit/${r.id}`, company: r.company_id })
