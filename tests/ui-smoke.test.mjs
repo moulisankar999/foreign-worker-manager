@@ -62,7 +62,7 @@ const go = async (p, h) => { await p.goto(process.env.UI_URL + '#' + h); await p
   check('super admin logs in (dashboard shown)', !(await body(p)).includes('Password'), (await body(p)).slice(0, 300))
   // Settings tabs (deep links #/settings/<tab>)
   await go(p, '/settings'); const tabs = await p.locator('.set-tabs [role=tab]').allInnerTexts()
-  check('CEO sees all 11 settings tabs (incl. Agencies & Integrations, Pay & Leave rules)', tabs.length === 11 && /Pay & Leave rules/.test(tabs.join('|')) && /Agencies/.test(tabs.join('|')) && /Users & Access/.test(tabs.join('|')) && /About/.test(tabs.join('|')), tabs.join('|'))
+  check('CEO sees all 12 settings tabs (incl. Agencies & Integrations, Pay & Leave rules, AI Assistant)', tabs.length === 12 && /AI Assistant/.test(tabs.join('|')) && /Pay & Leave rules/.test(tabs.join('|')) && /Agencies/.test(tabs.join('|')) && /Users & Access/.test(tabs.join('|')) && /About/.test(tabs.join('|')), tabs.join('|'))
   check('Users & Access tab has a pending badge', /Users & Access\s*\d+/.test(tabs.join('|')), tabs.join('|'))
   check('default tab is Account (change password + sign out)', /Change password/.test(await body(p)) && /Switch user \/ Sign out/.test(await body(p)))
   await go(p, '/settings/notifications'); const t = await body(p)
