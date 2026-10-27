@@ -27,7 +27,11 @@ async function staff(key, role, outlets = [], name) {
   const { data, error } = await admin.auth.admin.createUser({ email, password: pw, email_confirm: true, user_metadata: { full_name: full } })
   if (error) throw error
   staffIds.push(data.user.id)
-  await admin.from('profiles').update({ role, status: 'active', outlet_ids: outlets, company_ids: [], full_name: full }).eq('id', data.user.id)
+  for (let i = 0; i < 10; i++) { // the profile row is created by a trigger; retry until our role sticks
+    const u = await admin.from('profiles').update({ role, status: 'active', outlet_ids: outlets, company_ids: [], full_name: full }).eq('id', data.user.id).select('role,status')
+    if (!u.error && u.data?.[0]?.role === role && u.data[0].status === 'active') break
+    await new Promise((r) => setTimeout(r, 500))
+  }
   const c = createClient(URL_, ANON, opts); const s = await c.auth.signInWithPassword({ email, password: pw }); if (s.error) throw s.error
   return { c, token: s.data.session.access_token, email, id: data.user.id }
 }
