@@ -180,11 +180,12 @@ export function DataTable<T>({
                   <tr id={rowId?.(r)} data-testid={rowTestId?.(r)} data-key={k}
                     className={`dt-r${ex ? ' dt-click' : ''}${isOpen ? ' dt-open' : ''}${rowClass ? ' ' + rowClass(r) : ''}`}
                     onClick={ex ? (e) => { if (!isInteractive(e.target, e.currentTarget)) toggle(k) } : undefined}>
-                    {columns.map((c) => <td key={c.key} className={`${hideCls(c)}${c.align ? ' dt-' + c.align : ''}${c.main ? ' dt-main' : ''}`.trim() || undefined}>{c.render(r)}{c.main && clip ? <ClipBadge n={clip(r)} /> : null}</td>)}
+                    {columns.map((c) => <td key={c.key} className={`${hideCls(c)}${c.align ? ' dt-' + c.align : ''}${c.main ? ' dt-main' : ''}`.trim() || undefined}>{c.main && clip ? <ClipBadge n={clip(r)} className={`att-float${ex ? ' dt-clip-m' : ''}`} /> : null}{c.render(r)}</td>)}
                     {actions && <td className="dt-h-phone dt-act">{act}</td>}
                     {hasExpand && !ex && <td className="dt-chev" />}
                     {ex && (
                       <td className="dt-chev">
+                        {clip ? <ClipBadge n={clip(r)} className="dt-clip-c" /> : null}
                         <button type="button" className="dt-xbtn" aria-expanded={isOpen} aria-label={isOpen ? 'Hide details' : 'Show details'} title={isOpen ? 'Hide details' : 'Show details'} onClick={() => toggle(k)}>
                           <Icon name="chev" size={18} />
                         </button>

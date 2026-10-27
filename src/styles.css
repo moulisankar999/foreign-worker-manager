@@ -787,9 +787,12 @@ img, video, canvas, svg { max-width: 100%; }
 .dt-r.dt-muted td { color: var(--muted); }
 @container (max-width: 900px) { .dt-h-wide { display: none; } }
 @container (max-width: 760px) { .dt-h-tablet { display: none; } }
+/* 1.6.1: on narrow tables the row's 📎 count sits above the open arrow, so it never adds a line to the row */
+.dt-chev .clip-b.dt-clip-c { display: none; }
 @container (max-width: 520px) {
   .dt-h-phone, .dt-h-tablet { display: none; }
   .dt-x-act.dt-only-phone { display: flex; }
+  .dt-main .clip-b.dt-clip-m { display: none; } .dt-chev .clip-b.dt-clip-c { display: flex; width: max-content; margin: 0 0 4px auto; }
   .dt-t td, .dt-t th { padding-left: 8px; padding-right: 6px; }
 }
 [data-theme=dark] .dt-t th { background: var(--soft); }
