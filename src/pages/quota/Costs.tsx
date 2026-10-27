@@ -8,7 +8,7 @@ import { Preview } from '../../reports/Preview'
 import type { Block } from '../../reports/types'
 import { fmtDate, todayISO } from '../../lib/util'
 import { inCompany, atMyt, COUNTRIES, PAY_CATS, payLabel, qcall, rmFmt, useQuota, type Payment } from '../../lib/quota'
-import { companyOpts, run, FileField, FileLink, NoteAsk, QForm, useQCtx, useSheetMeta, type V } from './shared'
+import { companyOpts, run, FileField, FileLink, NoteAsk, QForm, useQCtx, useSheetMeta, type V, fileCount } from './shared'
 
 const ST = { recorded: { label: 'Recorded', tone: 'blue' }, pending_check: { label: 'To be checked', tone: 'amber' }, verified: { label: 'Checked', tone: 'green' }, void: { label: 'Void', tone: 'gray' } } as const
 const sum = (l: Payment[]) => l.reduce((a, p) => a + Number(p.amount_rm), 0)
@@ -69,7 +69,7 @@ export function CostsTab({ company }: { company: string }) {
           ]} empty={<Empty title="No payments yet" />} />
       </Card>
       <Card title="Payments" actions={<Btn kind="primary" icon="plus" small onClick={() => setForm({ company_id: company || ctx.companies[0]?.id, paid_on: todayISO() })}>Record payment</Btn>}>
-        <DataTable label="Payments" pageSize={8} rows={all} rowKey={(p) => p.id} initialSort={{ key: 'd', dir: 'desc' }} search={(p) => `${p.payee} ${p.ref} ${p.note} ${payLabel(p.category)}`}
+        <DataTable clip={(p) => fileCount(d.files, p.receipt_file)} label="Payments" pageSize={8} rows={all} rowKey={(p) => p.id} initialSort={{ key: 'd', dir: 'desc' }} search={(p) => `${p.payee} ${p.ref} ${p.note} ${payLabel(p.category)}`}
           filters={[{ key: 'c', label: 'Category', options: PAY_CATS.map((c) => ({ value: c.key, label: c.label })), match: (p, v) => p.category === v }, { key: 's', label: 'Status', options: Object.entries(ST).map(([value, x]) => ({ value, label: x.label })), match: (p, v) => p.status === v }]}
           rowClass={(p) => (p.status === 'void' ? 'strike' : '')}
           columns={[

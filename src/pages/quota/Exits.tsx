@@ -10,7 +10,7 @@ import type { Worker } from '../../lib/types'
 import { daysUntil, fmtDate, todayISO } from '../../lib/util'
 import { inCompany, addDaysISO, atMyt, EXIT_KIND, EXIT_STATUS, fileBytes, qcall, rmFmt, RUN_OUTCOME, useQuota, type Exit, type Runaway } from '../../lib/quota'
 import { bondChip, ExitFollowUp, ReplacementsTab, WindowsTab } from './Extras'
-import { FileField, FileLink, NoteAsk, QForm, s, useQCtx, type V } from './shared'
+import { FileField, FileLink, NoteAsk, QForm, s, useQCtx, type V, fileCount } from './shared'
 
 const docNo = (w: Worker, t: string) => [...(w.documents || [])].reverse().find((d) => d.type === t)?.number || ''
 const workerFields = (w: Worker) => ({ worker_id: w.id, worker_no: w.workerNo, worker_name: w.fullName, passport_no: docNo(w, 'Passport'), permit_no: docNo(w, 'Work Permit / PLKS (VP(TE))'), country: w.nationality, quota_id: w.quotaId || '' })
@@ -40,7 +40,7 @@ function CmoRegister({ company }: { company: string }) {
   return (
     <Card title="Check Out Memos (COM)" actions={<Btn kind="primary" icon="plus" small onClick={() => setForm({ kind: 'cmo', company_id: company || ctx.companies[0]?.id, cmo_date: todayISO() })}>Record COM / exit</Btn>}>
       <div className="note-box">Every worker leaving Malaysia is recorded here with the Immigration Check Out Memo (MyPASS eCOM). The scan is kept permanently with a SHA-256 fingerprint: it is the evidence for a replacement (gantian) claim when the government opens one.</div>
-      <DataTable label="COM register" rows={rows} rowKey={(x) => x.id} initialSort={{ key: 'd', dir: 'desc' }} search={(x) => `${x.worker_name} ${x.worker_no} ${x.cmo_ref} ${x.passport_no}`}
+      <DataTable clip={(x) => fileCount(d.files, x.file_id, x.depart_letter_file)} label="COM register" rows={rows} rowKey={(x) => x.id} initialSort={{ key: 'd', dir: 'desc' }} search={(x) => `${x.worker_name} ${x.worker_no} ${x.cmo_ref} ${x.passport_no}`}
         filters={[{ key: 's', label: 'Status', options: Object.entries(EXIT_STATUS).map(([value, v]) => ({ value, label: v.label })), match: (x, v) => x.status === v }, { key: 'k', label: 'Kind', options: Object.entries(EXIT_KIND).map(([value, label]) => ({ value, label })), match: (x, v) => x.kind === v }]}
         rowClass={(x) => (x.status === 'void' ? 'strike' : '')}
         columns={[
@@ -129,7 +129,7 @@ function Runaways({ company }: { company: string }) {
     <Card title="Runaway cases (left without a COM)" actions={<Btn kind="primary" icon="plus" small onClick={() => setForm({ company_id: company || ctx.companies[0]?.id, last_seen: today })}>Open a case</Btn>}>
       <div className="note-box bad">A worker who leaves without a Check Out Memo is a runaway. In the worker record he stays <b>Absconded (runaway)</b>. Report to the police and to Immigration (FWCMS eRUNAWAY) at once — the case turns red after {d.rules.runaway_report_days} days without the Immigration report. The permit is cancelled, the bond may be forfeited, and the slot does not come back.</div>
       {absNoCase.length > 0 && <div className="note-box"><b>{absNoCase.length} Absconded worker(s) with no case:</b> {absNoCase.map((w) => <button key={w.id} className="linkish" onClick={() => setForm({ ...workerFields(w), company_id: company || ctx.companies[0]?.id, last_seen: w.exitDate || today })}>{w.fullName}</button>)}</div>}
-      <DataTable label="Runaway cases" rows={rows} rowKey={(r) => r.id} open={sp.get('run') ? { key: sp.get('run')! } : null} initialSort={{ key: 'seen', dir: 'desc' }}
+      <DataTable clip={(r) => fileCount(d.files, r.police_file, r.imm_file)} label="Runaway cases" rows={rows} rowKey={(r) => r.id} open={sp.get('run') ? { key: sp.get('run')! } : null} initialSort={{ key: 'seen', dir: 'desc' }}
         rowClass={(r) => (r.outcome === 'open' && !r.imm_ref && runDue(r, d.rules.runaway_report_days) < today ? 'row-bad' : '')}
         columns={[
           { key: 'w', label: 'Worker', main: true, render: (r) => <><b>{r.worker_name}</b> <small className="muted">{r.worker_no}</small><br /><small className="muted">{r.country} · {ctx.cName(r.company_id)}</small></>, sort: (r) => r.worker_name },

@@ -1,5 +1,6 @@
 /* v1.4.2 company page: details, SSM copies and directors in three tabs (fits one screen; rows open on tap).
  * What shows depends on the role — the server enforces the same (migration 045). */
+import { AttachButton, companySrc, openAttach, saveAttach } from '../components/attach'
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { Btn, Card, Chip, Empty, KV, Modal, Tabs, Skeleton } from '../components/ui'
@@ -14,12 +15,13 @@ import { useOutlets } from '../lib/hooks'
 import { isSampleCompany, outletCompany } from '../lib/companies'
 import { fmtDate } from '../lib/util'
 import {
-  DESIGNATIONS, SECTOR_OPTIONS, SSM_DOC_TYPES, addDoc, companyFileUrl, deleteCompany, deleteDirector, deleteDoc, designationLabel, directorIssue, docTypeLabel, emailIssue, fmtIc,
+  DESIGNATIONS, SECTOR_OPTIONS, SSM_DOC_TYPES, addDoc, deleteCompany, deleteDirector, deleteDoc, designationLabel, directorIssue, docTypeLabel, emailIssue, fmtIc,
   loadCompany, phoneIssue, saveDetails, saveDirector, ssmIssue, updateBasic, uploadCompanyFile, type CompanyDetails, type CompanyDoc, type Director, type NewDirector,
 } from '../lib/companyRecords'
 
 type Tab = 'details' | 'ssm' | 'directors'
-const open = async (path: string, name?: string) => { try { window.open(await companyFileUrl(path, name), '_blank', 'noopener') } catch (e) { toast((e as Error).message, 'err') } }
+const idSrc = (path: string) => companySrc(path, 'IC-passport copy' + (path.match(/\.[a-z0-9]+$/i)?.[0] || ''))
+const ssmSrc = (x: CompanyDoc) => companySrc(x.path, x.name, x.mime, x.size)
 const expiring = (d?: string | null) => !!d && d < new Date(Date.now() + 60 * 864e5).toISOString().slice(0, 10)
 
 export default function CompanyDetailPage() {
@@ -58,7 +60,7 @@ export default function CompanyDetailPage() {
   return (
     <div className="stack">
       <Card>{head}
-        <Tabs<Tab> value={tab} onChange={setTab} tabs={[{ id: 'details', label: 'Details' }, { id: 'ssm', label: 'SSM documents', badge: docs.length }, { id: 'directors', label: 'Directors', badge: dirs.length }]} />
+        <Tabs<Tab> value={tab} onChange={setTab} tabs={[{ id: 'details', label: 'Details' }, { id: 'ssm', label: 'SSM documents', clip: docs.length }, { id: 'directors', label: 'Directors', badge: dirs.length, clip: dirs.filter((x) => x.id_file).length }]} />
         {err && <p className="err">{err}</p>}
         {tab === 'details' && <div data-testid="company-details">
           <KV items={[['SSM no. (new)', d?.ssm_new], ['SSM no. (old)', d?.ssm_old], ['Incorporated', d?.incorporated_on ? fmtDate(d.incorporated_on) : ''], ['Sector', co.sector],
@@ -69,7 +71,7 @@ export default function CompanyDetailPage() {
         {tab === 'ssm' && <SsmTab company={id} docs={docs} canAdd={auth.canSeeDirectorIds} canDelete={auth.canDeleteCompany} reload={reload} />}
         {tab === 'directors' && <>
           {!auth.canSeeDirectorIds && <p className="muted small">IC / passport numbers are shown masked to the last 4 digits.</p>}
-          <DataTable label="Directors and shareholders" rows={dirs} rowKey={(x) => x.id} rowTestId={(x) => `director-${x.full_name}`} searchFrom={10} pageSize={20}
+          <DataTable label="Directors and shareholders" clip={(x) => (x.id_file ? 1 : 0)} rows={dirs} rowKey={(x) => x.id} rowTestId={(x) => `director-${x.full_name}`} searchFrom={10} pageSize={20}
             columns={[
               { key: 'n', label: 'Name', main: true, sort: (x) => x.full_name, render: (x) => <><b>{x.full_name}</b><br /><small className="muted">{designationLabel(x.designation)}</small></> },
               { key: 'id', label: 'IC / passport', render: (x) => x.id_no ? <span className="mono">{x.id_type === 'ic' ? 'IC ' : 'Passport '}{x.id_no}</span> : '—' },
@@ -77,9 +79,9 @@ export default function CompanyDetailPage() {
               { key: 'e', label: 'Email', hide: 'tablet', render: (x) => x.email || '—' },
             ]}
             expand={(x) => <Details items={[['Designation', designationLabel(x.designation)], ['ID', x.id_no ? `${x.id_type === 'ic' ? 'MyKad IC' : 'Passport'} ${x.id_no}` : '—'], ['Nationality', x.nationality || '—'],
-              ['Email', x.email || '—'], ['Mobile', x.mobile || '—'], ['ID copy', x.id_file ? 'Attached' : x.has_id_file ? 'Attached (CEO, GM and HR Admin only)' : '—'], ['Last change', x.updated_by_name || '—']]} />}
+              ['Email', x.email || '—'], ['Mobile', x.mobile || '—'], ['ID copy', x.id_file ? <AttachButton key="idf" src={idSrc(x.id_file)} label="IC / passport copy" /> : x.has_id_file ? 'Attached (CEO, GM and HR Admin only)' : '—'], ['Last change', x.updated_by_name || '—']]} />}
             actions={(x) => <Actions>
-              {x.id_file && <IconAction kind="view" label="Open the IC / passport copy" onClick={() => open(x.id_file!)} />}
+              {x.id_file && <IconAction kind="view" label="Open the IC / passport copy" onClick={() => void openAttach(idSrc(x.id_file!))} />}
               {auth.canSeeDirectorIds && <IconAction kind="edit" label="Edit this person" onClick={() => setDirForm({ ...x, id_no: x.id_no || '', nationality: x.nationality || '', email: x.email || '', mobile: x.mobile || '', id_file: x.id_file || undefined } as never)} />}
               {auth.canDeleteCompany && <IconAction kind="delete" label="Delete this director / shareholder" confirm={`Delete ${x.full_name}?`} onClick={() => deleteDirector(x).then(reload, (e) => toast((e as Error).message, 'err'))} />}
             </Actions>}
@@ -102,12 +104,13 @@ function SsmTab({ company, docs, canAdd, canDelete, reload }: { company: string;
   return <>
     <DataTable label="SSM documents" rows={docs} rowKey={(x) => x.id} searchFrom={10} pageSize={20} initialSort={{ key: 'up', dir: 'desc' }}
       columns={[
-        { key: 't', label: 'Document', main: true, sort: (x) => x.doc_type, render: (x) => <><b>{docTypeLabel(x.doc_type)}</b><br /><small className="muted">{x.name}</small></> },
+        { key: 't', label: 'Document', main: true, sort: (x) => x.doc_type, render: (x) => <><span className="dt-p-show att-float"><AttachButton src={ssmSrc(x)} compact mini /></span><b>{docTypeLabel(x.doc_type)}</b><br /><small className="muted">{x.name}</small></> },
+        { key: 'f', label: 'File', hide: 'phone', render: (x) => <AttachButton src={ssmSrc(x)} compact /> },
         { key: 'up', label: 'Uploaded', sort: (x) => x.uploaded_at, render: (x) => fmtDate(x.uploaded_at.slice(0, 10)) },
         { key: 'exp', label: 'Expires', hide: 'phone', sort: (x) => x.expiry_date || '', render: (x) => x.expiry_date ? <span className={expiring(x.expiry_date) ? 'warn' : ''}>{fmtDate(x.expiry_date)}</span> : '—' },
       ]}
-      expand={(x) => <Details items={[['Type', docTypeLabel(x.doc_type)], ['File', x.name || '—'], ['Uploaded by', `${x.uploaded_by_name || '—'} · ${fmtDate(x.uploaded_at.slice(0, 10))}`], ['Expires', x.expiry_date ? fmtDate(x.expiry_date) : 'No expiry']]} />}
-      actions={(x) => <Actions><IconAction kind="view" label="Open this copy" onClick={() => open(x.path)} /><IconAction kind="download" label="Download" onClick={() => open(x.path, x.name || 'ssm.pdf')} />
+      expand={(x) => <Details items={[['Type', docTypeLabel(x.doc_type)], ['File', <AttachButton key="f" src={ssmSrc(x)} />], ['Uploaded by', `${x.uploaded_by_name || '—'} · ${fmtDate(x.uploaded_at.slice(0, 10))}`], ['Expires', x.expiry_date ? fmtDate(x.expiry_date) : 'No expiry']]} />}
+      actions={(x) => <Actions><IconAction kind="download" label="Download" onClick={() => void saveAttach(ssmSrc(x)).catch((e) => toast((e as Error).message, 'err'))} />
         {canDelete && <IconAction kind="delete" label="Delete this document" confirm="Delete this SSM copy?" onClick={() => deleteDoc(x).then(reload, (e) => toast((e as Error).message, 'err'))} />}</Actions>}
       empty={<Empty title="No SSM copies yet">Form 9 / 24 / 49, e-Info or the company profile, as PDF or image.</Empty>} />
     {canAdd && <div className="row gap-s wrap mt-s" data-testid="ssm-add">
@@ -163,7 +166,7 @@ function DirectorForm({ company, v: v0, onClose, onSaved }: { company: string; v
       <label className="field"><span>Email</span><input type="email" value={v.email} onChange={(e) => setV({ ...v, email: e.target.value })} /></label>
       <label className="field"><span>Mobile (+60)</span><input type="tel" value={v.mobile} onChange={(e) => setV({ ...v, mobile: e.target.value })} /></label>
       <div className="field full"><span>IC / passport copy</span>
-        {v.id_file ? <span className="small">Attached <IconAction kind="view" label="Open" onClick={() => open(v.id_file!)} /><IconAction kind="close" label="Detach (the file stays until a GM / CEO deletes it)" onClick={() => setV({ ...v, id_file: undefined })} /></span>
+        {v.id_file ? <span className="row gap-s"><AttachButton src={idSrc(v.id_file)} label="IC / passport copy" compact /><IconAction kind="close" label="Detach (the file stays until a GM / CEO deletes it)" onClick={() => setV({ ...v, id_file: undefined })} /></span>
           : <FilePick small name="ID copy" accept="application/pdf,image/*" onFiles={(l) => l[0] && uploadCompanyFile(company, 'directors', l[0]).then((p) => setV((c) => ({ ...c, id_file: p })), (e) => toast((e as Error).message, 'err'))} />}</div>
     </div>
     {err && <p className="err" role="alert">{err}</p>}

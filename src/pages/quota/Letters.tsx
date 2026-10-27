@@ -11,7 +11,7 @@ import { inCompany, atMyt, COUNTRIES, ENTRY_LABEL, qcall, useQuota, type Entry, 
 import { QuotaAppChecklist } from './Extras'
 import { CompanyPanel } from '../../components/companyPanel'
 import { refreshConfig } from '../../lib/config'
-import { companyOpts, FileField, FileLink, NoteAsk, QForm, s, useQCtx, useSheetMeta, type V } from './shared'
+import { companyOpts, FileField, FileLink, NoteAsk, QForm, s, useQCtx, useSheetMeta, type V, fileCount } from './shared'
 
 const ADD_CO = '__add_company__'
 /** runs `run` once each time `when` turns true (opens the add-company panel when "+ Add company…" is picked) */
@@ -60,7 +60,7 @@ export function LettersTab({ company }: { company: string }) {
   return (
     <div className="qr-grid">
       <Card title="Approval letters" actions={<Btn kind="primary" icon="plus" small onClick={() => setForm({ company_id: company || ctx.companies[0]?.id, kind: 'new', approval_date: todayISO(), expiry_date: addMonths(todayISO(), 12), breakdown: {} })}>Record a letter</Btn>}>
-        <DataTable label="Approval letters" rows={quotas} rowKey={(q) => q.id} pageSize={8}
+        <DataTable clip={(q) => fileCount(d.files, q.letter_file, q.levy_file)} label="Approval letters" rows={quotas} rowKey={(q) => q.id} pageSize={8}
           initialSort={{ key: 'appr', dir: 'desc' }}
           columns={[
             { key: 'ref', label: 'Letter', main: true, render: (q) => <><b>{q.ref_no}</b> <Chip tone={ST_TONE[q.status]}>{q.status === 'pending' ? (ctx.isCeo ? 'Waiting for GM / CEO' : 'Waiting to be opened') : q.status}</Chip><br /><small className="muted">{ctx.cName(q.company_id)} · {KIND_LABEL[q.kind]}</small></>, sort: (q) => q.ref_no },

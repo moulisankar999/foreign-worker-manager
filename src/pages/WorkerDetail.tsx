@@ -1,3 +1,4 @@
+import { useDocCounts } from '../lib/vault'
 import { useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
@@ -33,6 +34,7 @@ export default function WorkerDetail() {
   const nav = useNavigate()
   const [sp, setSp] = useSearchParams()
   const { canWrite, canSeeSalary, isHr } = useAuth()
+  const { byWorker } = useDocCounts()
   const tab = (sp.get('tab') as Tab) || 'overview'
   const setTab = (t: Tab) => setSp({ tab: t }, { replace: true })
   const [statusEdit, setStatusEdit] = useState(false)
@@ -46,14 +48,14 @@ export default function WorkerDetail() {
   const docs = currentDocs(w)
   const consent = consentOf(w)
   const comp = completeness(w, outlets)
-  const allTabs: { id: Tab; label: string; badge?: number }[] = [
+  const allTabs: { id: Tab; label: string; badge?: number; clip?: number }[] = [
     { id: 'overview', label: 'Overview', badge: alerts.filter((a) => a.severity === 'critical' || a.severity === 'high').length },
     { id: 'requests', label: 'Requests' },
-    { id: 'vault', label: 'Vault' },
+    { id: 'vault', label: 'Vault', clip: byWorker.get(w.id) || 0 },
     { id: 'passport', label: 'Passport', badge: (consent === 'pending' || consent === 'uploaded' ? 1 : 0) + (overdueDays(w) > 0 ? 1 : 0) },
     { id: 'remarks', label: 'Remarks' },
     ...(isHr ? [{ id: 'checks' as Tab, label: 'Check status' }] : []),
-    { id: 'docs', label: 'Expiry docs', badge: docs.filter((d) => docStatus(d, s) !== 'Valid' && docStatus(d, s) !== 'No expiry').length },
+    { id: 'docs', label: 'Expiry docs', clip: docs.filter((d) => d.attachment).length, badge: docs.filter((d) => docStatus(d, s) !== 'Valid' && docStatus(d, s) !== 'No expiry').length },
     { id: 'leave', label: 'Leave & ticket' },
     { id: 'contract', label: 'Contract & exit' },
     { id: 'trackers', label: 'Compliance', badge: alerts.filter((a) => (a.severity === 'critical' || a.severity === 'high') && ['Absconding', 'Exit', '10-year stay', 'Recruitment cost', 'PLKS renewal'].includes(a.category)).length },

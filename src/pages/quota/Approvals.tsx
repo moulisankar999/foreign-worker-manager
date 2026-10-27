@@ -7,7 +7,7 @@ import { Btn, Card, Chip, Empty } from '../../components/ui'
 import { DataTable, Details, usePaged } from '../../components/dataTable'
 import { Actions, IconAction } from '../../components/iconAction'
 import { inCompany, atMyt, qcall, rmFmt, UR_STATUS, useQuota, type UseReq } from '../../lib/quota'
-import { FileField, FileLink, NoteAsk, QForm, s, useQCtx, type V } from './shared'
+import { FileField, FileLink, NoteAsk, QForm, s, useQCtx, type V, fileCount } from './shared'
 
 export const canDecide = (r: UseReq, rank: number, me?: string) =>
   r.requested_by !== me && ((rank >= 4 && (r.status === 'pending' || r.status === 'gm_approved')) || (rank === 3 && r.status === 'pending'))
@@ -52,7 +52,7 @@ export function ApprovalsTab({ company }: { company: string }) {
         {waitPage.pager('Waiting for your approval')}
       </Card>}
       <Card title="Quota Use Requests" actions={ctx.rank < 4 ? <Btn kind="primary" icon="plus" small onClick={() => setForm({ slots: 1 })}>New request</Btn> : <small className="muted">Requests are raised by HR or the GM.</small>}>
-        <DataTable label="Quota Use Requests" pageSize={10} rows={rows} rowKey={(r) => r.id} open={sp.get('open') ? { key: sp.get('open')! } : null}
+        <DataTable clip={(r) => fileCount(d.files, r.files)} label="Quota Use Requests" pageSize={10} rows={rows} rowKey={(r) => r.id} open={sp.get('open') ? { key: sp.get('open')! } : null}
           initialSort={{ key: 'at', dir: 'desc' }} search={(r) => `Q-${r.ref_no} ${r.purpose} ${r.country} ${qRef(r.quota_id)}`}
           filters={[{ key: 'st', label: 'Status', options: Object.keys(UR_STATUS).map((value) => ({ value, label: ctx.urLabel(value as UseReq["status"]) })), match: (r, v) => r.status === v }]}
           columns={[

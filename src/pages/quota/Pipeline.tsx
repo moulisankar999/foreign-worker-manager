@@ -7,7 +7,8 @@ import { Actions, IconAction } from '../../components/iconAction'
 import { useOutlets } from '../../lib/hooks'
 import { fmtDate } from '../../lib/util'
 import { inCompany, COUNTRIES, daysInStage, DEFAULT_TEMPLATE, liveStages, nextStep, progress, qcall, recruitStageOf, regAt, rmFmt, stageLabelIn, stageSkipped, stepCtx, tplOf, UR_STATUS, useQuota, type Batch, type QData, type Recruit, type Template } from '../../lib/quota'
-import { companyOpts, QForm, s, useQCtx, type V } from './shared'
+import { companyOpts, QForm, s, useQCtx, type V, fileCount } from './shared'
+const RECRUIT_FILES = ['medical_file', 'stamped_file', 'ticket_file', 'hr_ack_file', 'vdr_file', 'fomema_file']
 
 export const recruitStage = (d: QData, r: Recruit) => recruitStageOf(d, r)
 /** flags set by the sector / eligibility rules, shown on the record */
@@ -81,7 +82,7 @@ export function PipelineTab({ company }: { company: string }) {
             </section>
           })}{!recruits.length && <Empty title="No recruits">Add the selected candidates to a batch.</Empty>}</div>
         ) : (
-          <DataTable label="Recruits" rows={recruits} rowKey={(r) => r.id} search={(r) => `${r.full_name} ${r.passport_no} ${r.job} ${r.country}`}
+          <DataTable clip={(r) => fileCount(d.files, RECRUIT_FILES.map((k) => (r as unknown as Record<string, string | null>)[k]))} label="Recruits" rows={recruits} rowKey={(r) => r.id} search={(r) => `${r.full_name} ${r.passport_no} ${r.job} ${r.country}`}
             filters={[{ key: 'c', label: 'Country', options: COUNTRIES, match: (r, v) => r.country === v }, { key: 'st', label: 'Stage', options: STAGES.map((x) => ({ value: x.key, label: x.label })), match: (r, v) => recruitStage(d, r) === v }]}
             columns={[
               { key: 'n', label: 'Recruit', main: true, render: (r) => <><Link to={`/quota/recruit/${r.id}`}><b>{r.full_name}</b></Link>{r.status !== 'active' && <> <Chip tone={r.status === 'converted' ? 'green' : 'gray'}>{r.status}</Chip></>}<br /><small className="muted">{r.country}{r.ecr ? ` · ${r.ecr}` : ''} · {r.passport_no || 'no passport yet'}</small><RuleFlags f={r.rule_flags} /></>, sort: (r) => r.full_name },

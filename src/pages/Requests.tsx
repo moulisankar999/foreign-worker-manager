@@ -1,3 +1,4 @@
+import { ClipBadge } from '../components/attach'
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { Btn, Card, Chip, Empty, KV, Modal, SelectFilter, Tabs, Toolbar, Skeleton } from '../components/ui'
@@ -11,7 +12,7 @@ import { useOutlets, useSettings, useWorkers } from '../lib/hooks'
 import { slipPdf } from '../lib/passport'
 import { actRequest, applyRequest, assignRequest, createRequest, listAssignees, type Assignee, type RequestEvent, emergencyMisuse, noteRequest, proofDue, proofState, refNo, useRequest, useRequests, type ApplyChoice } from '../lib/requests'
 import { aiPrefill, aiDecideDraft } from '../lib/ai'
-import { uploadDoc, useDocs, type DocRow } from '../lib/vault'
+import { uploadDoc, useDocCounts, useDocs, type DocRow } from '../lib/vault'
 import {
   ACTION_LABEL, EMERGENCY_PROOF_CATEGORY, IMMEDIATE_FAMILY, OPEN_STATUSES, REQUEST_TYPE, REQUEST_TYPES, ROLE_LABEL, STATUS_LABEL, STATUS_TONE,
   availableActions, canAssign, needsMyAction, requiredLevel, ruleFor, type ReqField, type RequestRow,
@@ -85,6 +86,7 @@ export default function RequestsPage() {
   const shown = rows.filter((r) => (tab === 'mine_action' ? mine.includes(r) : tab === 'open' ? OPEN_STATUSES.includes(r.status) : tab === 'done' ? !OPEN_STATUSES.includes(r.status) : true)
     && (!type || r.type === type) && (!outlet || r.outlet_id === outlet))
   const wName = (id: string | null) => workers.find((w) => w.id === id)?.fullName || '—'
+  const { byRequest } = useDocCounts()
   return (
     <div className="page">
       <div className="page-h">
@@ -99,7 +101,7 @@ export default function RequestsPage() {
       {error && <p className="warn small">{error}</p>}
       {tab === 'tasks' ? <HrTasksCard tasks={tasks} /> : <Card>
         {loading && !rows.length ? <Skeleton /> : shown.length === 0 ? <Empty icon="check" title={tab === 'mine_action' ? 'Nothing waiting for you 🎉' : 'No requests'} /> : (
-          <DataTable label="Requests" rows={shown} rowKey={(r) => r.id} rowTestId={() => 'req-row'} initialSort={{ key: 'updated', dir: 'desc' }}
+          <DataTable label="Requests" clip={(r) => byRequest.get(r.id) || 0} rows={shown} rowKey={(r) => r.id} rowTestId={() => 'req-row'} initialSort={{ key: 'updated', dir: 'desc' }}
             search={(r) => `${REQUEST_TYPE[r.type]?.label || r.type} ${refNo(r)} ${wName(r.worker_id)} ${outletName(outlets, r.outlet_id || undefined)} ${r.created_by_name} ${STATUS_LABEL[r.status]}`} searchLabel="Search requests"
             rowClass={(r) => (r.priority === 'urgent' || r.priority === 'high' ? 'dt-bad' : r.manager_overdue ? 'dt-warn' : '')}
             columns={[
@@ -396,7 +398,7 @@ export function RequestDetail() {
       {isHr && reqTasks.length > 0 && <HrTasksCard tasks={reqTasks} />}
 
       {(r.type === 'home_leave' || r.type === 'emergency_leave' || ticketBooked) && (
-        <Card title="✈️ Flight ticket" className={ticketBooked ? 'card-ok' : ''}>
+        <Card title={<>✈️ Flight ticket<ClipBadge n={tickets.length} /></>} className={ticketBooked ? 'card-ok' : ''}>
           {ticketBooked ? (
             <>
               <p><strong>Ticket booked — download</strong></p>
@@ -412,7 +414,7 @@ export function RequestDetail() {
       )}
 
       {r.type === 'emergency_leave' && (
-        <Card title="📎 Proof">
+        <Card title={<>Proof<ClipBadge n={proofs.length} /></>}>
           <p>Status: <Chip tone={pState === 'received' ? 'green' : pState === 'waived' ? 'gray' : pState === 'overdue' ? 'red' : 'orange'}>{pState === 'pending' ? `proof pending (due ${fmtDate(proofDue(r, pDays))})` : pState === 'overdue' ? `proof overdue (was due ${fmtDate(proofDue(r, pDays))})` : pState}</Chip></p>
           {(reason || !!r.data.proofExpected) && <p className="muted small">Expected: {String(r.data.proofExpected || reason?.proof)}</p>}
           {proofs.length > 0 && <DocTable docs={proofs} label="Proof" />}
@@ -424,7 +426,7 @@ export function RequestDetail() {
         </Card>
       )}
 
-      <Card title={`Attachments (${others.length})`} actions={canUpload && w && <Btn small icon="plus" onClick={() => setUp({ category: t?.mcCategory || 'Other', title: `${t?.label || ''} ${refNo(r)}` })}>Add</Btn>}>
+      <Card title={<>Attachments ({others.length})<ClipBadge n={others.length} /></>} actions={canUpload && w && <Btn small icon="plus" onClick={() => setUp({ category: t?.mcCategory || 'Other', title: `${t?.label || ''} ${refNo(r)}` })}>Add</Btn>}>
         {others.length === 0 ? <p className="muted small">None</p> : <DocTable docs={others} label="Documents on this request" />}
       </Card>
 

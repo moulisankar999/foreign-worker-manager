@@ -255,13 +255,14 @@ export function ColumnChart({ data }: { data: { label: string; value: number; pa
   )
 }
 
-export function Tabs<T extends string>({ tabs, value, onChange, compact }: { tabs: { id: T; label: string; badge?: number }[]; value: T; onChange: (t: T) => void; compact?: boolean }) {
+export function Tabs<T extends string>({ tabs, value, onChange, compact }: { tabs: { id: T; label: string; badge?: number; clip?: number }[]; value: T; onChange: (t: T) => void; compact?: boolean }) {
   return (
     <div className={`tabs${compact ? ' tabs-c' : ''}`} role="tablist">
       {tabs.map((t) => (
         <button key={t.id} role="tab" aria-selected={value === t.id} className={value === t.id ? 'on' : ''} onClick={() => onChange(t.id)}>
           {t.label}
           {!!t.badge && <span className="tab-b">{t.badge}</span>}
+          {!!t.clip && <span className="clip-b" aria-label={`${t.clip} attachments`} data-testid="clip-badge"><Icon name="clip" size={12} />{t.clip}</span>}
         </button>
       ))}
     </div>

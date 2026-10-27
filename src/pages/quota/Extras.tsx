@@ -10,7 +10,7 @@ import type { Block } from '../../reports/types'
 import { supabase } from '../../lib/supabase'
 import { fmtDate, todayISO } from '../../lib/util'
 import { inCompany, atMyt, qcall, rmFmt, useQuota, type Exit, type MasterRow, type Quota, type Replacement } from '../../lib/quota'
-import { FileField, FileLink, NoteAsk, QForm, run, s, useQCtx, useSheetMeta, type V } from './shared'
+import { FileField, FileLink, NoteAsk, QForm, run, s, useQCtx, useSheetMeta, type V, fileCount } from './shared'
 
 const NUMS: [keyof MasterRow | 'pend' | 'pipe', string][] = [['approved', 'Approved'], ['reserved', 'Reserved'], ['used', 'Used'], ['pend', 'Pending cancellation'], ['available', 'Available'], ['pipe', 'In pipeline'], ['active_workers', 'Active workers'], ['runaways', 'Runaways'], ['expiring_unused', 'Expiring unused']]
 type MRow = MasterRow & { pend: number; pipe: number }
@@ -125,7 +125,7 @@ export function ReplacementsTab({ company }: { company: string }) {
     <Card title="Replacement applications (Immigration)" actions={ctx.rank >= 1 && ctx.rank <= 2 ? <Btn kind="primary" icon="plus" small disabled={!candidates.length} onClick={() => setForm({ trigger_date: todayISO() })}>Open application</Btn> : undefined}>
       <div className="note-box">Only two cases qualify: <b>FOMEMA fail after arrival</b>, or <b>VDR approved but he did not arrive</b>. Deaths, transfers and runaways are not replaceable.
         HR applies to Immigration and uploads the approval; a <b>different HR Admin</b> verifies it and the slot is restored as “Replacement approved by Immigration”. Meanwhile the slot shows <b>Pending cancellation</b>.</div>
-      <DataTable label="Replacement applications" rows={rows} rowKey={(c) => c.id} initialSort={{ key: 'd', dir: 'desc' }} search={(c) => `R-${c.ref_no} ${rec(c.recruit_id)?.full_name} ${c.imm_ref}`}
+      <DataTable clip={(c) => fileCount(d.files, c.approval_file, c.fomema_file)} label="Replacement applications" rows={rows} rowKey={(c) => c.id} initialSort={{ key: 'd', dir: 'desc' }} search={(c) => `R-${c.ref_no} ${rec(c.recruit_id)?.full_name} ${c.imm_ref}`}
         filters={[{ key: 's', label: 'Status', options: Object.entries(REPL_ST).map(([value, x]) => ({ value, label: x.label })), match: (c, v) => c.status === v }]}
         columns={[
           { key: 'w', label: 'Recruit', main: true, render: (c) => <><b>R-{c.ref_no}</b> {rec(c.recruit_id)?.full_name}<br /><small className="muted">{c.country} · {ctx.cName(c.company_id)}</small></>, sort: (c) => c.ref_no },
@@ -172,7 +172,7 @@ export function WindowsTab() {
   return (
     <Card title="Government windows" actions={ctx.isHraUp ? <IconAction kind="add" label="Record a window (circular)" onClick={() => setForm({})} /> : undefined}>
       <p className="muted">Windows the government opens for additional quota applications. Only an approved application in a window adds an “additional” letter.</p>
-      <DataTable label="Government windows" rows={d.windows} rowKey={(w) => w.id} dense initialSort={{ key: 'c', dir: 'desc' }}
+      <DataTable clip={(w) => fileCount(d.files, w.file_id)} label="Government windows" rows={d.windows} rowKey={(w) => w.id} dense initialSort={{ key: 'c', dir: 'desc' }}
         columns={[
           { key: 't', label: 'Window', main: true, render: (w) => <><b>{w.title}</b><br /><small className="muted">{w.circular_ref || '—'}</small></>, sort: (w) => w.title },
           { key: 'o', label: 'Opens', hide: 'phone', render: (w) => fmtDate(w.open_date || ''), sort: (w) => w.open_date || '' },

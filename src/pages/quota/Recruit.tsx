@@ -116,7 +116,7 @@ export default function RecruitPage({ id }: { id: string }) {
           {st.key === '_quota' && <> <Chip tone={done ? 'green' : 'red'}>{ur ? `Q-${ur.ref_no} ${ctx.urLabel(ur.status)}` : 'No request linked'}</Chip></>}
           {isUse && <> <Chip tone={done ? 'blue' : 'amber'}>{done ? 'Slot used' : 'Uses the reserved slot'}</Chip></>}
           {v?.done && <small className="muted"> · {fmtDate(v.date || '')}{v.ref ? ` · ${v.ref}` : ''}{v.note ? ` · ${v.note}` : ''}{v.override ? (ctx.isCeo ? ' · CEO override' : ' · marked done by an approver') : ''}</small>}
-          {stepDocs(st).map(({ t, f }) => <span key={t} className="qs-doc"><FileLink f={f} label={'📎 ' + docLabel(t)} /></span>)}
+          {stepDocs(st).map(({ t, f }) => <span key={t} className="qs-doc"><FileLink f={f} label={docLabel(t)} /></span>)}
           {st.hint && !done && <small className="hint">{st.hint}</small>}</div>
       </li>
     })}{!info.list.length && <li className="muted">{info.skip || 'No steps in this stage.'}</li>}</ol>
@@ -177,7 +177,7 @@ export default function RecruitPage({ id }: { id: string }) {
         {!narrow && sel && <Card className={`qr-stage ${sel.state === 'cur' ? 'cur' : ''}`} title={<>{sel.g.idx + 1}. {sel.g.stageLabel} {sel.skip && <span className="pill n">{sel.skip}</span>}{sel.state === 'cur' && <span className="pill b">Now</span>}<Chip tone="gray">{sel.done}/{sel.list.length}</Chip></>}>
           <div id={`qs-${sel.g.stage}`}>{stepList(sel)}</div>
         </Card>}
-        <Card className="qs-info" title={<Tabs compact value={tab} onChange={setTab} tabs={[{ id: 'quota', label: 'Quota & details' }, { id: 'travel', label: 'Visa & flight' }, { id: 'arrival', label: 'Arrival & FOMEMA' }, { id: 'docs', label: 'Documents', badge: docs.length }, { id: 'pay', label: `Payments · ${payTotal}` }, { id: 'hist', label: 'History', badge: evs.length }]} />}
+        <Card className="qs-info" title={<Tabs compact value={tab} onChange={setTab} tabs={[{ id: 'quota', label: 'Quota & details' }, { id: 'travel', label: 'Visa & flight' }, { id: 'arrival', label: 'Arrival & FOMEMA' }, { id: 'docs', label: 'Documents', clip: docs.length }, { id: 'pay', label: `Payments · ${payTotal}` }, { id: 'hist', label: 'History', badge: evs.length }]} />}
           actions={tabActions || undefined}>
           {tab === 'quota' && <>
             <h4 className="qr-h4">Quota</h4>
@@ -194,7 +194,7 @@ export default function RecruitPage({ id }: { id: string }) {
           {tab === 'arrival' && <KV items={[['Accommodation', r.accom_address ? <>{r.accom_address} <small className="muted">confirmed {fmtDate(r.accom_confirmed_on || '')}</small></> : <span className="pill warn">Confirm before FOMEMA</span>],
             ['Immigration clearance', r.imm_cleared_at ? atMyt(r.imm_cleared_at) : r.arrived_at ? <span className="pill warn">Within {immHours} hours of landing</span> : '—'],
             ['FOMEMA', r.fomema_result ? <><Chip tone={r.fomema_result === 'fit' ? 'green' : 'red'}>{r.fomema_result === 'fit' ? 'Fit' : 'Unfit'}</Chip> {fmtDate(r.fomema_on || '')} <FileLink f={d.files.find((f) => f.id === r.fomema_file)} label="report" /></> : r.arrived_at ? `Due by ${fmtDate(addDaysIso(r.arrived_at, fomemaDays))}` : '—']]} />}
-          {tab === 'docs' && (docs.length ? <KV items={docs.map(({ k, f }) => [docLabel(k), <FileLink key={k} f={f} />])} /> : <p className="muted">No documents stored for this recruit yet.</p>)}
+          {tab === 'docs' && (docs.length ? <KV items={docs.map(({ k, f }) => [docLabel(k), <FileLink key={k} f={f} compact={false} />])} /> : <p className="muted">No documents stored for this recruit yet.</p>)}
           {tab === 'pay' && (pays.length ? <><ul className="alist">{payPage.rows.map((x) => <li key={x.id} className={x.status === 'void' ? 'strike' : ''}>{fmtDate(x.paid_on)} · {payLabel(x.category)} · <b>{rmFmt(x.amount_rm)}</b> {x.status === 'pending_check' && <Chip tone="amber">To check</Chip>}</li>)}</ul>{payPage.pager('Payments')}</> : <p className="muted">No payments yet.</p>)}
           {tab === 'hist' && (evs.length ? <><ol className="qr-tl">{histPage.rows.map((e) => <li key={e.id}><b>{e.action}</b> <small className="muted">{atMyt(e.at)} · {ctx.who(e.by_name, e.by_role)}</small>{e.note && <div className="qr-tl-n">{e.note}</div>}</li>)}</ol>{histPage.pager('History')}</> : <p className="muted">—</p>)}
         </Card>

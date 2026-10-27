@@ -1,12 +1,11 @@
+import { AttachButton, legacySrc } from './attach'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Btn, Card, Chip, D, Empty, FormModal, KV, Modal, docTone, type FieldDef } from './ui'
 import { FilePick } from './filePick'
 import { compressImage } from '../lib/vault'
-import { Icon } from './Icon'
 import { updateWorker } from '../lib/db'
 import { useOutlets } from '../lib/hooks'
-import { openAttachment } from '../lib/sync'
 import { allowancesTotal, buildAlerts, currentBasic, docStatus, leaveBalances, loanBalance, loanLedger, minContractEnd, outstanding, proratedPenalty, sortedIncrements, ticketInfo } from '../lib/calc'
 import { buildICS } from '../lib/ics'
 import { defaultChecklist } from '../lib/memo'
@@ -82,7 +81,7 @@ export function DocumentsTab({ w, s }: P) {
                   <span className="doc-no">{i + 1}.</span><strong>{title}</strong>
                   <Chip tone={docTone(st)}>{st}</Chip>
                   <span className="spacer" />
-                  {d.attachment && <button type="button" className="btn btn-ghost btn-s" title="Open attachment" aria-label="Open attachment" onClick={() => openAttachment(d.attachment!)}><Icon name="doc" size={16} /></button>}
+                  {d.attachment && <AttachButton src={legacySrc(d.attachment, d.id)} compact />}
                   {d.expiryDate && <Btn small kind="ghost" icon="cal" title="Add to calendar" onClick={() => ics(d)} />}
                   {d.expiryDate && <Btn small onClick={() => setEdit({ type: d.type, label: d.label, number: d.number, issuePlace: d.issuePlace })}>Renew</Btn>}
                   <Btn small kind="ghost" icon="edit" title="Edit" onClick={() => setEdit(d)} />
@@ -132,7 +131,7 @@ function AttachmentField({ v, set }: { v: V; set: (p: V) => void }) {
           if (f.size > 5 * 1024 * 1024) { alert('File too large (max 5 MB)'); return }
           set({ attachment: { name: f0.name, type: f.type || f0.type, dataUrl: await readFileAsDataURL(f as File) } })
         }} />
-        {att && <span className="small">📎 {att.name} <button type="button" className="link" onClick={() => set({ attachment: undefined })}>remove</button></span>}
+        {att && <span className="row gap-s"><AttachButton src={legacySrc(att, String(v.id || 'new'))} compact /> <button type="button" className="link small" onClick={() => set({ attachment: undefined })}>remove</button></span>}
       </div>
     </div>
   )
