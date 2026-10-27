@@ -1,5 +1,6 @@
 /* Quota Use Requests: every use of the quota is approved before the calling visa (VDR) is applied.
  * The approval order and checks are enforced in the database (qr_decide_use); the screen shows neutral status text only. */
+import { celebrate } from '../../lib/celebrate'
 import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Btn, Card, Chip, Empty } from '../../components/ui'
@@ -87,7 +88,7 @@ export function ApprovalsTab({ company }: { company: string }) {
         onSave={(v) => { const q = Number(v.qty) || 0; if (q < 1 || q > resvLeft(ask.r)) throw new Error(`Between 1 and ${resvLeft(ask.r)}.`); return qcall('qr_release_unused', { p_id: ask.r.id, p_qty: q, p_note: v.note }) }} />}
       {ask && ask.action !== 'release' && <NoteAsk title={`${ACT[ask.action].t}: Q-${ask.r.ref_no}`} label={ACT[ask.action].label} required={ACT[ask.action].req} danger={ACT[ask.action].danger}
         confirm={ask.action === 'approve' ? 'Approve' : ACT[ask.action].t.split(' —')[0]} onClose={() => setAsk(null)}
-        onOk={(note) => qcall('qr_decide_use', { p_id: ask.r.id, p_action: ask.action, p_note: note || null })} />}
+        onOk={async (note) => { const out = await qcall('qr_decide_use', { p_id: ask.r.id, p_action: ask.action, p_note: note || null }); if (ask.action === 'approve' && out === 'approved') celebrate() }} />}
     </div>
   )
 }

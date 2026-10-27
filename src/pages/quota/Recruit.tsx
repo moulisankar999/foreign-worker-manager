@@ -1,5 +1,6 @@
 /* One recruit, from selection to arrival: the country checklist (with the quota gate), calling visa, flight,
  * airport authorisation letter, payments, history, and "Convert to worker" once he is here. */
+import { celebrate } from '../../lib/celebrate'
 import { useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Btn, Card, Chip, Empty, KV, Tabs, useNarrow } from '../../components/ui'
@@ -157,6 +158,8 @@ export default function RecruitPage({ id }: { id: string }) {
           <small className="muted">Template {tplRow ? `from ${fmtDate(tplRow.effective_from)}` : 'default'} {!nx && <> · {daysInStage(r)} day(s) in “{stageLabelIn(tpl, curStage)}”</>}</small></div>
         {nx && <p className="rc-next" title="Why you see this: it is the first required step of the checklist that is not done yet.">
           <span className="rc-next-l"><Icon name="spark" size={14} /> Next step</span> <b>{nx.label}</b>{nx.hint && <small className="muted"> — {nx.hint}</small>}
+          {(() => { const st = steps.find((x) => x.key === nx.key); const locked = (nx.key === tpl.use_step || nx.key === 'vdr_apply') && ur?.status !== 'approved'
+            return st && !nx.key.startsWith('_') && !locked ? <button type="button" className="btn btn-primary btn-s rc-next-go" data-testid="next-do" title="Opens the step with today's date filled in; any details the rules need are asked for there." onClick={() => setStep(st)}>Do it now</button> : null })()}
           <span className={`chip ${daysInStage(r) > stuckDays ? 'chip-amber' : 'chip-gray'}`} title={daysInStage(r) > stuckDays ? `Why you see this: this stage has been open longer than ${stuckDays} days (Rules → stage_alert_days) — check if something is stuck.` : undefined}>{daysInStage(r)} d in stage</span></p>}
         <RuleFlags f={r.rule_flags} />
         {r.country === 'India' && !r.ecr && <div className="note-box">Set ECR or ECNR in the details to get the right India steps.</div>}
@@ -318,7 +321,8 @@ function ConvertForm({ r, onClose }: { r: Recruit; onClose: () => void }) {
           try { await qcall('qr_mark_converted', { p_id: r.id, p_worker: w.id }); last = null; break } catch (e) { last = e; await new Promise((ok) => setTimeout(ok, 1500)); await syncNow().catch(() => undefined) }
         }
         if (last) { toast('Worker created on this device; the link will be finished once it syncs — open the recruit again later.', 'err'); return }
-        toast(`${w.workerNo} created`)
+        toast(`🎉 ${w.workerNo} created — welcome aboard!`)
+        celebrate()
         nav(`/workers/${w.id}`)
       }} />
   )

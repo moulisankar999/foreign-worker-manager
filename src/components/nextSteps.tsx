@@ -1,5 +1,7 @@
 /* v1.6.0: the home "What to do next" guide. A short, role-shaped, start-to-finish list; each step says in plain words what to
  * do and opens the right page in one tap. Counts come only from data this person can already see on the dashboard. */
+import { useEffect, useRef } from 'react'
+import { celebrate } from '../lib/celebrate'
 import { Link } from 'react-router-dom'
 import { Card } from './ui'
 import { Icon } from './Icon'
@@ -38,6 +40,10 @@ export function NextSteps({ counts, extra }: { counts: StepCounts; extra?: React
   const steps = useNextSteps(counts)
   const firstTodo = steps.find((s) => !!s.n)?.id
   const clear = steps.filter((s) => s.n === 0).length, counted = steps.filter((s) => s.n !== null).length
+  // milestone: the list was not clear and now everything is → one confetti burst (reduced-motion aware)
+  const was = useRef<boolean | null>(null)
+  const allClear = counted > 0 && clear === counted
+  useEffect(() => { if (was.current === false && allClear) celebrate(); was.current = allClear }, [allClear])
   return (
     <Card className="nx-card">
       <div className="nx-h">
