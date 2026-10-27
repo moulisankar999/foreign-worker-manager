@@ -39,6 +39,7 @@ create or replace function public.bday_today() returns date language sql stable 
   select (now() at time zone 'Asia/Kuala_Lumpur')::date
 $$;
 
+-- REVIEW: the non-English wishes below are kept as they are for now and are pending a native-speaker review.
 create or replace function public.bday_defaults() returns jsonb language sql immutable as $$
   select jsonb_build_object('autoWish', true, 'notifyStaff', true, 'templates', jsonb_build_object(
     'en', 'Happy birthday, {{name}}! 🎉 Everyone at {{company}} wishes you a wonderful year ahead — good health, happiness and success. Thank you for being part of our family.',

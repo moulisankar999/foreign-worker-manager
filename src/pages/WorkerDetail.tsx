@@ -7,7 +7,7 @@ import { PassportPanel, RemarksPanel, WorkerRequests } from '../components/worke
 import { AppAccessPanel } from '../components/appAccess'
 import { useAuth } from '../lib/auth'
 import { CONSENT_LABEL, CONSENT_TONE, consentOf, overdueDays } from '../lib/passport'
-import { Avatar, Btn, Card, Chip, Empty, FormModal, KV, Tabs, docTone, sevTone, statusTone } from '../components/ui'
+import { Avatar, Btn, Card, Chip, Empty, FormModal, KV, Tabs, docTone, sevTone, statusTone, Skeleton } from '../components/ui'
 import { ContractTab, DocumentsTab, FamilyTab, LeaveTab, LoansTab, MemoEditor, MemosTab, NotesTab, PayTab, setStatus } from '../components/sections'
 import { db } from '../lib/db'
 import { RemittanceTab } from '../components/remittance'
@@ -38,7 +38,7 @@ export default function WorkerDetail() {
   const [statusEdit, setStatusEdit] = useState(false)
   const [memo, setMemo] = useState<Partial<MemoRec> | null>(null)
 
-  if (w === undefined) return <div className="page"><p className="muted">Loading…</p></div>
+  if (w === undefined) return <div className="page"><Skeleton kind="page" rows={6} /></div>
   if (!w) return <div className="page"><Empty title="Worker not found"><Btn onClick={() => nav('/workers')}>Back to workers</Btn></Empty></div>
 
   const alerts = buildAlerts([w], s)

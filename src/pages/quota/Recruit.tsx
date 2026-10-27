@@ -3,7 +3,7 @@
 import { celebrate } from '../../lib/celebrate'
 import { useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Btn, Card, Chip, Empty, KV, Tabs, useNarrow } from '../../components/ui'
+import { Btn, Card, Chip, Empty, KV, Tabs, useNarrow, Skeleton } from '../../components/ui'
 import { usePaged } from '../../components/dataTable'
 import { IconAction } from '../../components/iconAction'
 import { toast } from '../../components/toast'
@@ -45,7 +45,7 @@ export default function RecruitPage({ id }: { id: string }) {
   const outlets = useOutlets()
   const payPage = usePaged(d.payments.filter((p) => p.recruit_id === id), 8)
   const histPage = usePaged(d.events.filter((e) => e.recruit_id === id).sort((a, b) => b.id - a.id), 8)
-  if (!d.loaded) return <div className="page"><p className="muted">Loading…</p></div>
+  if (!d.loaded) return <div className="page"><Skeleton kind="page" rows={6} /></div>
   if (!r) return <div className="page"><Empty title="Recruit not found"><Link to="/quota?tab=pipeline">Back to the pipeline</Link></Empty></div>
   const tpl = tplOf(d, r)
   const sc = stepCtx(d, r)

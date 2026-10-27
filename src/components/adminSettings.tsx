@@ -2,7 +2,7 @@
  * approval rules, HR Admin powers, document vault, emergency leave reasons, passport safekeeping,
  * notifications (outbound channels OFF until the provider keys are added), my alerts, and the audit log. */
 import { useEffect, useState } from 'react'
-import { Btn, Card, Chip, FormModal, Modal, type FieldDef } from './ui'
+import { Btn, Card, Chip, FormModal, Modal, type FieldDef, Skeleton } from './ui'
 import { useAuth } from '../lib/auth'
 import { saveConfig, useConfig, allVaultCategories, type PassportConfig } from '../lib/config'
 import { supabase } from '../lib/supabase'
@@ -255,7 +255,7 @@ export function NotificationsCard() {
       </div>
 
       <h3 className="h3 row gap-s">Delivery log <IconAction kind="refresh" label="Refresh the delivery log" onClick={() => void loadLog()} /></h3>
-      {!log ? <p className="muted small">Loading…</p> : !log.length ? <p className="muted small">No outbound messages yet.</p> : (
+      {!log ? <Skeleton rows={3} /> : !log.length ? <p className="muted small">No outbound messages yet.</p> : (
         <DataTable label="Delivery log" rows={log} rowKey={(d) => String(d.id)} initialSort={{ key: 'at', dir: 'desc' }} search={(d) => `${n.events[d.event]?.label || d.event} ${d.recipient || ''} ${d.address || ''} ${d.status}`} searchLabel="Search deliveries"
           filters={[{ key: 'st', label: 'Status', options: [...new Set(log.map((d) => d.status))], match: (d, v) => d.status === v }, { key: 'ch', label: 'Channel', options: [...new Set(log.map((d) => d.channel))].map((c) => ({ value: c, label: CHANNEL_LABEL[c] })), match: (d, v) => d.channel === v }]}
           columns={[

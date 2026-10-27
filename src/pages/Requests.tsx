@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { Btn, Card, Chip, Empty, KV, Modal, SelectFilter, Tabs, Toolbar } from '../components/ui'
+import { Btn, Card, Chip, Empty, KV, Modal, SelectFilter, Tabs, Toolbar, Skeleton } from '../components/ui'
 import { FilePick } from '../components/filePick'
 import { DocTable, UploadDoc } from '../components/vault'
 import { useAuth } from '../lib/auth'
@@ -98,7 +98,7 @@ export default function RequestsPage() {
       </Toolbar>
       {error && <p className="warn small">{error}</p>}
       {tab === 'tasks' ? <HrTasksCard tasks={tasks} /> : <Card>
-        {loading && !rows.length ? <p className="muted">Loading…</p> : shown.length === 0 ? <Empty icon="check" title={tab === 'mine_action' ? 'Nothing waiting for you 🎉' : 'No requests'} /> : (
+        {loading && !rows.length ? <Skeleton /> : shown.length === 0 ? <Empty icon="check" title={tab === 'mine_action' ? 'Nothing waiting for you 🎉' : 'No requests'} /> : (
           <DataTable label="Requests" rows={shown} rowKey={(r) => r.id} rowTestId={() => 'req-row'} initialSort={{ key: 'updated', dir: 'desc' }}
             search={(r) => `${REQUEST_TYPE[r.type]?.label || r.type} ${refNo(r)} ${wName(r.worker_id)} ${outletName(outlets, r.outlet_id || undefined)} ${r.created_by_name} ${STATUS_LABEL[r.status]}`} searchLabel="Search requests"
             rowClass={(r) => (r.priority === 'urgent' || r.priority === 'high' ? 'dt-bad' : r.manager_overdue ? 'dt-warn' : '')}
@@ -320,7 +320,7 @@ export function RequestDetail() {
   const w = workers.find((x) => x.id === r?.worker_id)
   const t = r ? REQUEST_TYPE[r.type] : undefined
   const actions = useMemo(() => (r ? availableActions(r, role || '', uidMe, { can, route }).filter((a) => a !== 'apply' || canWrite) : []), [r, role, uidMe, canWrite, can, route])
-  if (loading) return <div className="page"><p className="muted">Loading…</p></div>
+  if (loading) return <div className="page"><Skeleton kind="page" rows={6} /></div>
   if (!r) return <div className="page"><Empty title="Request not found">{error && <p className="muted">{error}</p>}<Btn onClick={() => nav('/requests')}>Back</Btn></Empty></div>
 
   const assignable = (isSuper || isGm) && canAssign(r, role || '', uidMe)

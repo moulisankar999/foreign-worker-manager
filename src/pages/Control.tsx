@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
-import { Btn, Card, Chip, Empty, Tabs } from '../components/ui'
+import { Btn, Card, Chip, Empty, Tabs, Skeleton } from '../components/ui'
 import { toast } from '../components/toast'
 import { DataTable, Details } from '../components/dataTable'
 import { IconAction } from '../components/iconAction'
@@ -150,7 +150,7 @@ function ErrorList({ rows, onClear }: { rows: AppError[] | null; onClear: () => 
     const { error } = await supabase.rpc('clear_client_errors')
     if (error) toast(error.message, 'err'); else { onClear(); toast('Cleared ✓') }
   }
-  if (!rows) return <p className="muted">Loading…</p>
+  if (!rows) return <Skeleton />
   return (
     <Card title={`Errors from users' devices (${rows.length})`} actions={rows.length ? <IconAction kind="delete" text label="Clear list" onClick={clear} /> : undefined}>
       {!rows.length ? <Empty icon="check" title="No errors reported">JavaScript errors and failed server calls from any user's app appear here.</Empty> : (
@@ -190,7 +190,7 @@ function SystemMap({ health }: { health: Health[] }) {
     return { edge: p('edge_secrets'), github: p('gh_secrets') }
   }, [health])
   if (err) return <p className="banner warn">{err}</p>
-  if (!rows) return <p className="muted">Loading…</p>
+  if (!rows) return <Skeleton />
   if (!rows.length) return <Empty icon="doc" title="System map not loaded yet" />
   const renewals = rows.find((r) => r.key === 'renewals')?.content.renewals || []
   return (

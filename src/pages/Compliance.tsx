@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import QRCode from 'qrcode'
-import { Btn, Card, Chip, Empty, FormModal, KV, Modal, Tabs, type FieldDef } from '../components/ui'
+import { Btn, Card, Chip, Empty, FormModal, KV, Modal, Tabs, type FieldDef, Skeleton } from '../components/ui'
 import { useAuth } from '../lib/auth'
 import { saveFormTranslation, saveTrackerConfig, useConfig } from '../lib/config'
 import { useOutlets, useWorkers } from '../lib/hooks'
@@ -241,7 +241,7 @@ function GrievancesTab({ rows }: { rows: Grievance[] | null }) {
     <>
       <GrievanceLinkCard />
       <Card title="Complaints received" actions={<select value={f} onChange={(e) => setF(e.target.value as 'open')} aria-label="Filter"><option value="open">Open</option><option value="all">All</option>{Object.entries(G_STATUS).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>}>
-        {rows === null ? <p className="muted">Loading…</p> : !list.length ? <p className="muted">No complaints{f !== 'all' ? ' in this view' : ''}.</p> : (
+        {rows === null ? <Skeleton /> : !list.length ? <p className="muted">No complaints{f !== 'all' ? ' in this view' : ''}.</p> : (
           <DataTable label="Complaints received" rows={list} rowKey={(g) => g.id} initialSort={{ key: 'at', dir: 'desc' }} search={(g) => `${g.ref_no} ${G_CATEGORY[g.category] || g.category} ${g.message} ${g.anonymous ? '' : g.name || ''}`} searchLabel="Search complaints"
             rowClass={(g) => (g.status === 'new' ? 'dt-bad' : '')}
             columns={[
@@ -320,7 +320,7 @@ function PdpaTab() {
       {canLog ? (
         <Card title="Data breach log" actions={<Btn small icon="plus" onClick={() => setEdit({ found_at: todayISO(), severity: 'medium', status: 'open' })}>Log a breach</Btn>}>
           <div className="callout warn small">If personal data is lost, stolen or seen by the wrong people: contain it, then notify the Personal Data Protection Commissioner as soon as practicable — the guideline is within <b>72 hours</b> — and tell the affected people without undue delay if they could suffer significant harm. Check with the PDP Commissioner (JPDP) or your adviser.</div>
-          {rows === null ? <p className="muted">Loading…</p> : !rows.length ? <p className="muted">No breaches logged.</p> : (
+          {rows === null ? <Skeleton /> : !rows.length ? <p className="muted">No breaches logged.</p> : (
             <DataTable label="Data breach log" rows={rows} rowKey={(b) => b.id} initialSort={{ key: 'f', dir: 'desc' }}
               rowClass={(b) => (b.status === 'open' ? 'dt-bad' : b.status === 'contained' ? 'dt-warn' : '')}
               columns={[

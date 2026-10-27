@@ -5,6 +5,10 @@ import { useCallback, useEffect, useState } from 'react'
 import { supabase } from './supabase'
 import { EXITED_STATUSES, type Worker } from './types'
 
+/** REVIEW (1.6.0): the built-in wishes other than English are machine-assisted drafts, kept as they are for now and
+ * flagged for a native-speaker check later (see bday_defaults() in migration 051). An admin can override any of them
+ * in Birthdays → Settings. */
+export const BDAY_REVIEW = ['ms', 'ta', 'hi', 'te', 'ml', 'kn', 'bn', 'ne', 'my']
 export const BDAY_LANGS: { code: string; name: string }[] = [
   { code: 'en', name: 'English' }, { code: 'ms', name: 'Malay' }, { code: 'ta', name: 'Tamil' }, { code: 'hi', name: 'Hindi' },
   { code: 'te', name: 'Telugu' }, { code: 'ml', name: 'Malayalam' }, { code: 'kn', name: 'Kannada' }, { code: 'bn', name: 'Bengali' },

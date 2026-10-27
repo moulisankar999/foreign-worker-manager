@@ -423,3 +423,16 @@ input[type=checkbox], input[type=radio] { accent-color: var(--pri); }
 .nx-t { align-items: flex-start; }
 .nx-t > span:first-child { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; line-height: 1.25; }
 .nx-c { margin-top: 1px; }
+/* 1.6.0 stat tile sparklines (8-week trend, top-right, no extra height) */
+.stat { position: relative; }
+.stat-sp { position: absolute; top: 8px; right: 10px; color: var(--pri); opacity: .85; line-height: 0; pointer-events: auto; }
+.stat-green .stat-sp { color: var(--green); } .stat-red .stat-sp { color: var(--red); } .stat-blue .stat-sp { color: var(--blue, #2563eb); }
+@media (max-width: 860px) { .stat-sp svg { width: 46px; height: 16px; } .stat-sp { top: 6px; right: 6px; } }
+.sr-only { position: absolute !important; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+/* 1.6.0 loading placeholders */
+.skel { display: grid; gap: 10px; padding: 6px 0; }
+.skel i { display: block; border-radius: 8px; background: linear-gradient(90deg, var(--line-2) 0%, color-mix(in srgb, var(--line-2) 40%, var(--card)) 50%, var(--line-2) 100%); background-size: 200% 100%; animation: skel 1.3s ease-in-out infinite; }
+.skel-l { height: 14px; } .skel-h { height: 26px; width: 40%; margin-bottom: 6px; }
+.skel-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; } .skel-tiles i { height: 74px; border-radius: 14px; }
+@keyframes skel { 0% { background-position: 100% 0; } 100% { background-position: -100% 0; } }
+@media (prefers-reduced-motion: reduce) { .skel i { animation: none; } }

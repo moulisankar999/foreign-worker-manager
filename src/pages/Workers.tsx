@@ -7,7 +7,7 @@ import { DataTable, Details } from '../components/dataTable'
 import { Actions, IconAction } from '../components/iconAction'
 import type { Settings } from '../lib/types'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { Avatar, Btn, Chip, Empty, SelectFilter, Toolbar, docTone, statusTone } from '../components/ui'
+import { Avatar, Btn, Chip, Empty, SelectFilter, Toolbar, docTone, statusTone, Skeleton } from '../components/ui'
 import { currentDocs, docStatus, isOnLeave, outletName, ticketInfo } from '../lib/calc'
 import { useOutlets, useSettings, useWorkersLoaded } from '../lib/hooks'
 import { BUSINESS_TYPES, NATIONALITIES, STATUSES, type Worker } from '../lib/types'
@@ -72,7 +72,7 @@ export default function Workers() {
         <SelectFilter label="Nationality" value={nat} onChange={(v) => set('nat', v)} options={NATIONALITIES} />
         <SelectFilter label="Data gaps" value={gap} onChange={(v) => set('gap', v)} options={[{ value: 'incomplete', label: 'Incomplete profile (draft)' }, { value: 'lang', label: 'Language missing' }]} />
       </Toolbar>
-      {loaded && list.length === 0 ? (
+      {!loaded ? <Skeleton rows={8} /> : list.length === 0 ? (
         <Empty icon="users" title="No workers match">{loaded.length === 0 && <Btn kind="primary" icon="plus" onClick={() => nav('/workers/new')}>Add worker</Btn>}</Empty>
       ) : (
         <DataTable label="Workers" rows={list} rowKey={(w) => w.id} rowTestId={() => 'worker-row'} pageSize={20} initialSort={{ key: 'name', dir: 'asc' }}

@@ -1,15 +1,15 @@
 /* 1.6.0 Birthdays (HR Admin, HR Manager, GM, CEO): today / this week / this month, Send wish (in-app, signed) and Call. */
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Avatar, Btn, Card, Modal } from '../components/ui'
+import { Avatar, Btn, Card, Modal, Skeleton } from '../components/ui'
 import { Icon } from '../components/Icon'
 import { toast } from '../components/toast'
 import { useAuth } from '../lib/auth'
 import { useConfig } from '../lib/config'
-import { useOutlets, useWorkers } from '../lib/hooks'
+import { useOutlets, useWorkers, useWorkersLoaded } from '../lib/hooks'
 import { companyName, outletCompany } from '../lib/companies'
 import { fmtPhone } from '../lib/validate'
-import { BDAY_LANGS, ROLE_LABEL, birthdays, firstName, mytToday, render, saveBdayConfig, sendWish, useBdayData, type BdayConfig, type BdayRow, type Range, type Wish } from '../lib/birthdays'
+import { BDAY_LANGS, BDAY_REVIEW, ROLE_LABEL, birthdays, firstName, mytToday, render, saveBdayConfig, sendWish, useBdayData, type BdayConfig, type BdayRow, type Range, type Wish } from '../lib/birthdays'
 import type { Worker } from '../lib/types'
 
 const SHOW = 8
@@ -17,6 +17,7 @@ const when = (r: BdayRow) => r.inDays === 0 ? 'Today' : r.inDays === 1 ? 'Tomorr
   : new Date(r.date + 'T00:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })
 
 export default function Birthdays() {
+  const wready = useWorkersLoaded()
   const { isHr, isSuper, isGm, role, profile } = useAuth()
   const workers = useWorkers()
   const outlets = useOutlets()
@@ -32,6 +33,7 @@ export default function Birthdays() {
   const rows = lists[range]
   const byW = useMemo(() => { const m = new Map<string, Wish[]>(); for (const w of [...wishes, ...sent]) m.set(w.worker_id, [...(m.get(w.worker_id) || []), w]); return m }, [wishes, sent])
   const next = useMemo(() => lists.today.length ? null : birthdays(workers, 'week', today)[0] || birthdays(workers, 'month', today).find((r) => r.inDays > 0), [lists, workers, today])
+  if (!wready) return <div className="page"><Skeleton kind="page" rows={6} /></div>
   if (!isHr) return <div className="page narrow"><h1>Birthdays</h1><p className="muted">Birthdays are for HR, the GM and the CEO.</p></div>
   const outletOf = (w: Worker) => outlets.find((o) => o.id === w.outletId)
   const signer = `${profile?.full_name || profile?.email?.split('@')[0] || ''} · ${ROLE_LABEL[role || ''] || role}`
@@ -135,7 +137,8 @@ function BdaySettings({ cfg, onClose, onSaved }: { cfg: BdayConfig; onClose: () 
       <div className="field"><label htmlFor="bd-tl">Default wish</label>
         <select id="bd-tl" value={lang} onChange={(e) => setLang(e.target.value)}>{BDAY_LANGS.map((l) => <option key={l.code} value={l.code}>{l.name}</option>)}</select>
         <textarea rows={5} maxLength={1000} value={c.templates[lang] || ''} onChange={(e) => setC({ ...c, templates: { ...c.templates, [lang]: e.target.value } })} />
-        <small className="hint">{'{{name}}'} = worker’s first name, {'{{company}}'} = company name. Leave empty to use the built-in text.</small></div>
+        <small className="hint">{'{{name}}'} = worker’s first name, {'{{company}}'} = company name. Leave empty to use the built-in text.</small>
+        {lang !== 'en' && BDAY_REVIEW.includes(lang) && !c.templates[lang] && <small className="hint" data-testid="bd-review">ℹ️ The built-in text in this language is waiting for a native-speaker check. You can type your own here.</small>}</div>
     </Modal>
   )
 }

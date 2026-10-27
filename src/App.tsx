@@ -2,6 +2,7 @@ import { Toaster } from './components/toast'
 import { useEffect, useState } from 'react'
 import { NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { Icon } from './components/Icon'
+import { Skeleton } from './components/ui'
 import { useAlerts, useOutlets, useSettings, useWorkers } from './lib/hooks'
 import { headerLogo } from './lib/logos'
 import { useConfig } from './lib/config'
@@ -70,7 +71,7 @@ export default function App() {
   const { session, profile, loading } = useAuth()
   const gm = /^#\/grievance\/([A-Za-z0-9]{8,64})\/?$/.exec(window.location.hash)
   if (gm) return <GrievancePublic token={gm[1]} />
-  if (loading) return <div className="auth-wrap"><p className="muted">Loading…</p></div>
+  if (loading) return <div className="auth-wrap"><Skeleton /></div>
   if (!session) return <Login />
   if (sessionStorage.getItem(RECOVERY_FLAG)) return <SetPasswordScreen mode="recovery" />
   if (!profile || profile.status !== 'active' || profile.id !== session.user.id) return <Pending />

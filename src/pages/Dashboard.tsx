@@ -1,7 +1,8 @@
+import { weeklyTrends } from '../lib/trends'
 import { useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useDashTab, type DashTab } from '../lib/dashTab'
-import { BarList, Btn, Card, Chip, ColumnChart, Empty, Stat, Tabs, sevTone } from '../components/ui'
+import { BarList, Btn, Card, Chip, ColumnChart, Empty, Stat, Tabs, sevTone, Skeleton } from '../components/ui'
 import { currentBasic, isExited, isOnLeave, outletName, outstanding, ticketInfo } from '../lib/calc'
 import { useAlerts, useOutlets, useSettings, useWorkersLoaded } from '../lib/hooks'
 import { loadSampleData } from '../lib/sample'
@@ -89,6 +90,7 @@ export default function Dashboard() {
 
   const tabIds = (canSeeSalary ? ['overview', 'expiries', 'requests', 'pay', 'risk', 'workforce'] : ['overview', 'expiries', 'requests', 'risk', 'workforce']) as DashTab[]
   const [tab, setTab] = useDashTab(tabIds, 'overview')
+  const trend = useMemo(() => (loaded ? weeklyTrends(workers) : undefined), [loaded, workers])
   const health = useMemo(() => healthScore(workers, alerts, outlets, { pay: !!canSeeSalary }), [workers, alerts, outlets, canSeeSalary])
   if (isOM) return <OmDashboard workers={workers} alerts={alerts} extra={extra} counts={{ mine: mineN, ceo: 0, users: 0, expiring: k.expired + k.d30, noLang: 0 }} />
   if (loaded && workers.length === 0 && canWrite)
@@ -128,11 +130,12 @@ export default function Dashboard() {
               {canWrite && <Btn kind="primary" icon="plus" onClick={() => nav('/workers/new')}>Add worker</Btn>}
             </div>
           </div>
-          {tab === 'overview' && <div className="stats stats-4 hero-stats">
-            <Stat label="Total workers" value={<CountUp value={k.total} />} icon="users" onClick={() => nav('/workers')} />
-            <Stat label="Active / working" value={<CountUp value={k.active} />} icon="check" tone="green" onClick={() => nav('/workers?status=Active-Working')} />
-            <Stat label="On leave" value={<CountUp value={k.leave} />} icon="plane" tone="blue" onClick={() => nav('/workers?status=__leave')} />
-            <Stat label="Expired docs" value={<CountUp value={k.expired} />} icon="alert" tone="red" onClick={() => nav('/alerts?sev=critical')} />
+          {tab === 'overview' && !loaded && <Skeleton kind="tiles" rows={4} />}
+          {tab === 'overview' && loaded && <div className="stats stats-4 hero-stats">
+            <Stat label="Total workers" value={<CountUp value={k.total} />} trend={trend?.total} icon="users" onClick={() => nav('/workers')} />
+            <Stat label="Active / working" value={<CountUp value={k.active} />} trend={trend?.active} icon="check" tone="green" onClick={() => nav('/workers?status=Active-Working')} />
+            <Stat label="On leave" value={<CountUp value={k.leave} />} trend={trend?.leave} icon="plane" tone="blue" onClick={() => nav('/workers?status=__leave')} />
+            <Stat label="Expired docs" value={<CountUp value={k.expired} />} trend={trend?.expired} icon="alert" tone="red" onClick={() => nav('/alerts?sev=critical')} />
           </div>}
         </section>
         <Tabs tabs={tabIds.map((id) => ({ id, label: labels[id], badge: id === 'requests' ? actionN : id === 'expiries' ? expiringN : undefined }))} value={tab} onChange={setTab} />

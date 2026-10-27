@@ -4,7 +4,7 @@
 import { FollowUps, MasterTable } from './Extras'
 import { useMemo, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { Card, Chip, Empty, SelectFilter, Stat, Tabs, Toolbar } from '../../components/ui'
+import { Card, Chip, Empty, SelectFilter, Stat, Tabs, Toolbar, Skeleton } from '../../components/ui'
 import { DataTable, usePaged } from '../../components/dataTable'
 import { Actions, IconAction } from '../../components/iconAction'
 import { useWorkers } from '../../lib/hooks'
@@ -68,7 +68,7 @@ export default function QuotaPage() {
       {ctx.companies.some((c) => isSampleCompany(c.id)) && <div className="note-box" data-testid="sample-banner"><Chip tone="amber">SAMPLE</Chip> Companies named “SAMPLE …” hold example data with watermarked sample documents.{top('data.demo') && <> Remove it any time in <Link to="/settings/data">Settings → Data → Remove sample data</Link>.</>}</div>}
       {company === OTHER_CO && <div className="note-box">These letters belong to companies that are no longer set up in Settings › Companies. Their ledger stays on record; add the company back to manage them.</div>}
       <Tabs tabs={tabs} value={tab} onChange={(t) => setSp({ tab: t }, { replace: true })} />
-      {!d.loaded ? <p className="muted">Loading…</p> : <>
+      {!d.loaded ? <Skeleton /> : <>
         {tab === 'overview' && <Overview company={company} />}
         {tab === 'letters' && <LettersTab company={company} />}
         {tab === 'approvals' && <ApprovalsTab company={company} />}
