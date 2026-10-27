@@ -44,7 +44,7 @@ async function waitEnabled(want) {
   return false
 }
 const restoreCfg = await keepConfig(admin, ['ai_assistant'])
-let restoreSecrets = []
+let restoreSecrets = [], setMock = false
 try {
   const before = aiSecrets()
   if (before.length) { console.log('note: removing existing AI_* secrets on TEST for the no-key phase:', before.join(', ')); restoreSecrets = before.filter((n) => n !== 'AI_PROVIDER' && n !== 'AI_ALLOW_MOCK') }
@@ -71,6 +71,7 @@ try {
   check('no-key: other roles get the soft message', /not available/i.test((await ask('om', 'hi')).reply || ''))
 
   // ---- Phase 2: mock provider (TEST only)
+  setMock = true
   cli('secrets set AI_PROVIDER=mock AI_ALLOW_MOCK=1')
   check('mock: switches on without an app update', await waitEnabled(true))
   let st = await ai('om', { op: 'status' })
@@ -137,6 +138,38 @@ try {
   r = await ask('hrm', `/tool draft_reminder {"title":"Check hostel","date":"2026-11-06","time":"10:30","worker":"${TAG} Ravi"}`)
   check('reminder draft prepared', r.drafts?.[0]?.kind === 'reminder' && r.drafts[0].payload.time === '10:30')
 
+  // ---- 1.6.1: the CEO's on/off switch (left ON afterwards)
+  const st0 = await ai('om', { op: 'status' })
+  check('switch: default ON (status enabled, not off)', st0.enabled === true && st0.off === false, JSON.stringify(st0))
+  check('switch: GM cannot turn it off', !!(await U.gm.c.rpc('ai_set_enabled', { p_on: false })).error)
+  check('switch: HR Admin cannot turn it off', !!(await U.hra.c.rpc('ai_set_enabled', { p_on: false })).error)
+  check('switch: HR Manager cannot turn it off', !!(await U.hrm.c.rpc('ai_set_enabled', { p_on: false })).error)
+  const gmUp = await U.gm.c.from('app_config').upsert({ key: 'ai_assistant', value: { dailyLimit: 40, enabled: false } }).select()
+  check('switch: GM cannot write the setting directly', !!gmUp.error || !(gmUp.data || []).length, JSON.stringify(gmUp.error || gmUp.data))
+  check('switch: still ON after the refused attempts', (await ai('om', { op: 'status' })).off === false)
+  const off = await U.ceo.c.rpc('ai_set_enabled', { p_on: false })
+  check('switch: CEO turns it off', !off.error && off.data?.enabled === false, JSON.stringify(off.error || off.data))
+  const nOff = await used('om')
+  for (const who of ['ceo', 'gm', 'hra', 'om']) {
+    const s2 = await ai(who, { op: 'status' })
+    check(`switch OFF: status says off for ${who}`, s2.off === true && s2.enabled === false, JSON.stringify(s2))
+  }
+  r = await ask('om', 'Whose permits expire soon?')
+  check('switch OFF: edge function refuses the question (403, friendly)', r._status === 403 && r.off === true && /turned off by your administrator/.test(r.error || ''), JSON.stringify(r))
+  r = await ask('ceo', 'hello?')
+  check('switch OFF: refused for the CEO too', r._status === 403 && r.off === true)
+  check('switch OFF: refused question not counted', (await used('om')) === nOff)
+  const aiBeginOff = await U.om.c.rpc('ai_begin')
+  check('switch OFF: database refuses ai_begin as well', !!aiBeginOff.error && /turned off/.test(aiBeginOff.error.message), JSON.stringify(aiBeginOff))
+  await U.ceo.c.rpc('ai_set_limit', { p_limit: 40 })
+  check('switch OFF: changing the limit keeps it off', (await ai('om', { op: 'status' })).off === true)
+  const audit = await admin.from('audit_log').select('action').eq('action', 'ai.switch').eq('user_id', U.ceo.id)
+  check('switch: change is in the audit log', !audit.error && (audit.data || []).length >= 1, JSON.stringify(audit.error || audit.data))
+  const on = await U.ceo.c.rpc('ai_set_enabled', { p_on: true })
+  check('switch: CEO turns it back on', !on.error && on.data?.enabled === true)
+  r = await ask('om', 'back on?')
+  check('switch ON again: questions answered', /^MOCK/.test(r.reply || ''), JSON.stringify(r))
+
   // ---- rate limit (restored afterwards)
   const nOm = await used('om')
   check('CEO only can change the limit', !!(await U.gm.c.rpc('ai_set_limit', { p_limit: 5 })).error)
@@ -148,7 +181,8 @@ try {
   fail++; console.log('FAIL (crash)', e.message)
 } finally {
   await restoreCfg()
-  try { const left = aiSecrets(); if (left.length) cli(`secrets unset ${left.join(' ')}`) } catch (e) { console.log('WARN: could not unset mock secrets', e.message) }
+  // only remove what this suite set (the mock switches) — never a real key it refused to touch
+  try { const left = aiSecrets().filter((n) => n === 'AI_PROVIDER' || n === 'AI_ALLOW_MOCK'); if (setMock && left.length) cli(`secrets unset ${left.join(' ')}`) } catch (e) { console.log('WARN: could not unset mock secrets', e.message) }
   const n = await cleanupOwn(admin, PREFIX)
   await admin.from('records').delete().in('id', [OA, OB, W1, W2])
   console.log(`cleanup: ${n} own users removed; AI_* secrets on TEST now: ${aiSecrets().join(', ') || 'none'}`)
