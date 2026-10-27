@@ -57,11 +57,11 @@ try {
   const r0 = await S.c.rpc('push_records', { p_rows: [
     { entity: 'outlets', id: O1_, client_ts: now(), data: { id: O1_, name: 'Outlet One', companyId: 'main' } },
     { entity: 'outlets', id: O2_, client_ts: now(), data: { id: O2_, name: 'Outlet Two', companyId: 'c2' } },
-    { entity: 'outlets', id: O3_, client_ts: now(), data: { id: O3_, name: 'Outlet Three' } },
+    { entity: 'outlets', id: O3_, client_ts: now(), data: { id: O3_, name: 'Outlet Three', companyId: 'main' } },
     W(W1_, O1_), W(W2_, O2_)] })
   check('seed outlets + workers', r0.data?.ok === 5, JSON.stringify(r0))
   const o3 = (await admin.from('records').select('data').eq('entity', 'outlets').eq('id', O3_).single()).data.data
-  check('outlet without company defaults to main', o3.companyId === 'main')
+  check('outlet O3 seeded with its company', o3.companyId === 'main')  // 1.6.2: an outlet without a company is refused (tests/outlet-company.test.mjs)
 
   // public sign-up options: names only
   const anon = createClient(URL_, ANON, opts)

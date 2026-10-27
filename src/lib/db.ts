@@ -67,6 +67,9 @@ export async function exportBackup() {
 export async function importBackup(data: unknown, mode: 'replace' | 'merge') {
   const d = data as { app?: string; settings?: Settings[]; outlets?: Outlet[]; jobs?: JobCategory[]; workers?: Worker[] }
   if (!d || d.app !== 'foreign-worker-manager' || !Array.isArray(d.workers)) throw new Error('Not a valid Foreign Worker Manager backup file')
+  // 1.6.2: every outlet needs a company (the server refuses outlets without one)
+  const noCo = (d.outlets || []).filter((o) => !o.companyId).map((o) => o.name)
+  if (noCo.length) throw new Error(`Every outlet needs a company. Set a company for ${noCo.slice(0, 5).join(', ')}${noCo.length > 5 ? ` and ${noCo.length - 5} more` : ''} in the backup file, or add those outlets in Settings → Outlets.`)
   await db.transaction('rw', db.workers, db.outlets, db.jobs, db.settings, async () => {
     if (mode === 'replace') await Promise.all([db.workers.clear(), db.outlets.clear(), db.jobs.clear(), db.settings.clear()])
     if (d.settings?.length) await db.settings.bulkPut(d.settings.map((s) => ({ ...DEFAULT_SETTINGS, ...s })))

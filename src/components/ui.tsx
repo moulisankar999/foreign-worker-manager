@@ -53,7 +53,7 @@ export function Btn({ children, onClick, kind = 'secondary', icon, type = 'butto
 }
 
 export type FieldType = 'text' | 'date' | 'number' | 'select' | 'textarea' | 'checkbox' | 'tel' | 'email' | 'money' | 'phone' | 'upper' | 'datetime-local'
-export interface FieldDef { key: string; label: string; type?: FieldType; options?: string[] | { value: string; label: string }[]; required?: boolean; placeholder?: string; full?: boolean; hint?: string; show?: (v: Record<string, unknown>) => boolean; defaultCc?: string; max?: string }
+export interface FieldDef { key: string; label: string; type?: FieldType; options?: string[] | { value: string; label: string }[]; required?: boolean; placeholder?: string; full?: boolean; hint?: string; show?: (v: Record<string, unknown>) => boolean; defaultCc?: string; max?: string; /** 1.6.2: inline message when a required field is left empty */ requiredMsg?: string }
 
 function MoneyInput({ id, value, onChange, required, placeholder }: { id: string; value: unknown; onChange: (v: unknown) => void; required?: boolean; placeholder?: string }) {
   const [txt, setTxt] = useState<string | null>(null)
@@ -85,7 +85,7 @@ export function Field({ def, value, onChange, issue, missing }: { def: FieldDef;
         {def.required && <span className="req"> *</span>}
       </label>
       {t === 'select' ? (
-        <select id={id} value={String(value ?? '')} onChange={(e) => onChange(e.target.value)} required={def.required}>
+        <select id={id} name={def.key} value={String(value ?? '')} onChange={(e) => onChange(e.target.value)} required={def.required}>
           <option value="">— Select —</option>
           {(def.options || []).map((o) => (typeof o === 'string' ? <option key={o} value={o}>{o}</option> : <option key={o.value} value={o.value}>{o.label}</option>))}
         </select>
@@ -97,10 +97,10 @@ export function Field({ def, value, onChange, issue, missing }: { def: FieldDef;
         <input id={id} type="text" autoCapitalize="characters" autoComplete="off" spellCheck={false} value={String(value ?? '')} placeholder={def.placeholder}
           onChange={(e) => onChange(e.target.value.toUpperCase().replace(/[^A-Z0-9/-]/g, ''))} />
       ) : t === 'textarea' ? (
-        <textarea id={id} rows={3} value={String(value ?? '')} placeholder={def.placeholder} onChange={(e) => onChange(e.target.value)} required={def.required} />
+        <textarea id={id} name={def.key} rows={3} value={String(value ?? '')} placeholder={def.placeholder} onChange={(e) => onChange(e.target.value)} required={def.required} />
       ) : (
         <input
-          id={id} type={t} max={def.max} inputMode={t === 'number' ? 'decimal' : undefined} step={t === 'number' ? 'any' : undefined}
+          id={id} name={def.key} type={t} max={def.max} inputMode={t === 'number' ? 'decimal' : undefined} step={t === 'number' ? 'any' : undefined}
           value={value === undefined || value === null ? '' : String(value)} placeholder={def.placeholder} required={def.required}
           onChange={(e) => onChange(t === 'number' ? (e.target.value === '' ? undefined : Number(e.target.value)) : e.target.value)}
         />
@@ -154,9 +154,17 @@ export function FormModal({ title, fields, initial, onSave, onClose, onDelete, c
 }) {
   const [v, setV] = useState(initial)
   const [err, setErr] = useState<string | null>(null)
+  // 1.6.2: a required field left empty gets its own inline message (also when the browser's own check stops the submit)
+  const [req, setReq] = useState<Issues>({})
+  const reqMsg = (f: FieldDef) => f.requiredMsg || `${f.label} is required`
+  const flag = (f: FieldDef) => setReq((cur) => ({ ...cur, [f.key]: { level: 'error', msg: reqMsg(f) } }))
+  const change = (nv: Record<string, unknown>) => {
+    setV(nv)
+    setReq((cur) => { const k = Object.keys(cur).filter((key) => nv[key] === undefined || nv[key] === ''); return k.length === Object.keys(cur).length ? cur : Object.fromEntries(k.map((key) => [key, cur[key]])) })
+  }
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
-    for (const f of fields) if (f.required && (!f.show || f.show(v)) && (v[f.key] === undefined || v[f.key] === '')) return setErr(`${f.label} is required`)
+    for (const f of fields) if (f.required && (!f.show || f.show(v)) && (v[f.key] === undefined || v[f.key] === '')) { flag(f); return setErr(reqMsg(f)) }
     for (const f of fields) if (f.type === 'money' && (!f.show || f.show(v))) { const mi = moneyIssue(v[f.key], f.label); if (mi) return setErr(mi.msg) }
     const msg = validate?.(v)
     if (msg) return setErr(msg)
@@ -165,8 +173,8 @@ export function FormModal({ title, fields, initial, onSave, onClose, onDelete, c
   }
   return (
     <Modal title={title} onClose={onClose}>
-      <form onSubmit={submit}>
-        <FormGrid fields={fields} value={v} onChange={setV} />
+      <form onSubmit={submit} onInvalidCapture={(e) => { const f = fields.find((x) => x.key === (e.target as HTMLInputElement).name); if (f?.required) flag(f) }}>
+        <FormGrid fields={fields} value={v} onChange={change} issues={req} />
         {children?.(v, (p) => setV((cur) => ({ ...cur, ...p })))}
         {err && <p className="err" role="alert">{err}</p>}
         <div className="modal-actions">

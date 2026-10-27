@@ -33,7 +33,7 @@ export default function Dashboard() {
   const alerts = useAlerts()
   const nav = useNavigate()
   const [busy, setBusy] = useState(false)
-  const { isOM, canWrite, canSeeSalary, isSuper, isHr, role, session, can, route } = useAuth()
+  const { isOM, canWrite, canSeeSalary, isSuper, isHr, role, session, can, route, myCompanies } = useAuth()
   const ceoN = useCeoBadge()
   const { rows: reqs } = useRequests()
   const { pending: newUsers } = usePendingUsers()
@@ -103,7 +103,7 @@ export default function Dashboard() {
             <p className="muted">Add your outlets in Settings, then add workers. Or explore with fake demo data first.</p>
             <div className="row gap-s wrap center">
               <Btn kind="primary" icon="plus" onClick={() => nav('/workers/new')}>Add first worker</Btn>
-              {!outlets.some((o) => !o.name.startsWith('DEMO ')) && <Btn icon="download" disabled={busy} onClick={async () => { setBusy(true); await loadSampleData(); setBusy(false) }}>Load sample data</Btn>}
+              {!outlets.some((o) => !o.name.startsWith('DEMO ')) && <Btn icon="download" disabled={busy} onClick={async () => { setBusy(true); await loadSampleData(myCompanies).catch((e) => alert((e as Error).message)); setBusy(false) }}>Load sample data</Btn>}
               <Btn icon="gear" onClick={() => nav('/settings/org')}>Set up outlets</Btn>
             </div>
           </Empty>

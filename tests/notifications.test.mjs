@@ -93,7 +93,7 @@ try {
   const now = () => new Date().toISOString()
   const W = (id, outletId, extra = {}) => ({ entity: 'workers', id, deleted: false, client_ts: now(), data: { id, workerNo: 'FW-' + id, fullName: 'Ram Bahadur ' + id, outletId, passportNo: 'PA1234567', phoneMY: '0134445555', documents: [], ...extra } })
   const in10 = new Date(Date.now() + 30 * 864e5).toISOString().slice(0, 10)
-  await S.c.rpc('push_records', { p_rows: [{ entity: 'outlets', id: O1_, client_ts: now(), data: { id: O1_, name: 'Outlet One' } }, { entity: 'outlets', id: O2_, client_ts: now(), data: { id: O2_, name: 'Outlet Two' } },
+  await S.c.rpc('push_records', { p_rows: [{ entity: 'outlets', id: O1_, client_ts: now(), data: { id: O1_, name: 'Outlet One', companyId: 'main' } }, { entity: 'outlets', id: O2_, client_ts: now(), data: { id: O2_, name: 'Outlet Two', companyId: 'main' } },
     W(W1_, O1_, { waOptIn: true, waOptInAt: '2026-10-01', documents: [{ id: 'd1', type: 'Work permit (PLKS)', expiryDate: in10 }, { id: 'd2', type: 'Passport', expiryDate: '2020-01-01' }] }),
     W(W2_, O2_, { documents: [{ id: 'd3', type: 'FOMEMA medical', expiryDate: '2021-01-01' }] })] })
 

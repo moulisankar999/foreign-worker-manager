@@ -21,7 +21,7 @@ import { outletLogo } from '../lib/logos'
 import { CompaniesCard, UserApprovalRulesCard } from '../components/companies'
 import { useConfig } from '../lib/config'
 import { supabase } from '../lib/supabase'
-import { companyName, DEFAULT_COMPANY_ID, outletCompany } from '../lib/companies'
+import { companyName, outletCompany } from '../lib/companies'
 import { clearDeviceCopy, syncNow } from '../lib/sync'
 import { buildAlerts } from '../lib/calc'
 import { useJobs, useOutlets, useSettings, useWorkers } from '../lib/hooks'
@@ -219,7 +219,7 @@ export default function SettingsPage() {
       {tab === 'org' && <>
         <Sec id="s-companies"><CompaniesCard /></Sec>
         <Sec id="s-outlets">
-      <Card title={`Outlets / business units (${outlets.length})`} actions={canWrite && <Btn kind="primary" small icon="plus" onClick={() => setOutlet({ type: 'Restaurant', companyId: coOptions[0]?.value || DEFAULT_COMPANY_ID })}>Add outlet</Btn>}>
+      <Card title={`Outlets / business units (${outlets.length})`} actions={canWrite && <Btn kind="primary" small icon="plus" onClick={() => setOutlet({ type: 'Restaurant' })}>Add outlet</Btn>}>
         {outlets.length === 0 ? <p className="muted">No outlets yet. Add your restaurants, shops, hotels…</p> : (
           <DataTable label="Outlets" rows={outlets} rowKey={(o) => o.id} rowTestId={(o) => `outlet-${o.id}`} initialSort={{ key: 'name', dir: 'asc' }}
             search={(o) => `${o.name} ${o.type} ${o.manager || ''} ${o.state || ''} ${companyName(companies, outletCompany(o))}`} searchLabel="Search outlets"
@@ -304,13 +304,13 @@ export default function SettingsPage() {
             <Btn kind="primary" icon="download" onClick={doExport}>Download backup (JSON)</Btn>
             {canWrite && <Btn icon="upload" onClick={() => fileRef.current?.click()}>Restore / import backup</Btn>}
             <input ref={fileRef} type="file" accept="application/json,.json" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) doImport(f); e.target.value = '' }} />
-            {canWrite && !hasRealData && <Btn icon="users" onClick={async () => { if (confirm('Load sample (fake DEMO) workers and outlets? Existing data is kept. Everyone on your team will see them.')) { await loadSampleData(); setMsg('Sample data loaded.') } }}>Load sample data</Btn>}
+            {canWrite && !hasRealData && <Btn icon="users" onClick={async () => { if (confirm('Load sample (fake DEMO) workers and outlets? Existing data is kept. Everyone on your team will see them.')) { await loadSampleData(top('org.companies') ? [] : myCompanies).then(() => setMsg('Sample data loaded.'), (e) => setMsg((e as Error).message)) } }}>Load sample data</Btn>}
             <Btn kind="ghost" icon="download" onClick={async () => { if (confirm('Remove the copy on this device and download everything again from the cloud? Cloud data is not affected.')) { await clearDeviceCopy(); await syncNow(); setMsg('Re-downloaded from the cloud.') } }}>Re-download from cloud</Btn>
             <Btn kind="ghost" icon="upload" onClick={() => { void syncNow(); setMsg('Sync started.') }}>Sync now</Btn>
           </div>
           {canWrite && hasRealData && <details className="adv"><summary>Advanced</summary>
             <p className="small warn">You already have real workers or outlets. Sample data adds 24 fake “DEMO” workers and 9 outlets that <strong>everyone on your team</strong> will see, mixed with your real data. Only use this for training.</p>
-            <Btn icon="users" onClick={async () => { if (confirm('Add fake DEMO workers and outlets next to your REAL data? Everyone on your team will see them.')) { await loadSampleData(); setMsg('Sample data loaded.') } }}>Load sample data</Btn>
+            <Btn icon="users" onClick={async () => { if (confirm('Add fake DEMO workers and outlets next to your REAL data? Everyone on your team will see them.')) { await loadSampleData(top('org.companies') ? [] : myCompanies).then(() => setMsg('Sample data loaded.'), (e) => setMsg((e as Error).message)) } }}>Load sample data</Btn>
           </details>}
           {msg && <p className="ok" role="status">{msg}</p>}
         </Card>
@@ -353,11 +353,12 @@ export default function SettingsPage() {
           }} />
       )}
       {outlet && (
-        <FormModal title={outlet.id ? 'Edit outlet' : 'Add outlet'} initial={{ ...outlet, companyId: outlet.companyId || DEFAULT_COMPANY_ID }} onClose={() => setOutlet(null)}
+        <FormModal title={outlet.id ? 'Edit outlet' : 'Add outlet'} initial={outlet} onClose={() => setOutlet(null)}
+          validate={(v) => (v.companyId || outlet.companyId) && companies.some((c) => c.id === (v.companyId || outlet.companyId)) ? null : 'Choose the company this outlet belongs to'}
           fields={[{ key: 'name', label: 'Outlet name', required: true, full: true },
-            ...(top('org.companies') || !outlet.id ? [{ key: 'companyId', label: 'Company', type: 'select' as const, options: coOptions, required: true }] : []), { key: 'type', label: 'Business type', type: 'select', options: [...BUSINESS_TYPES], required: true }, { key: 'manager', label: 'Manager / PIC' }, { key: 'phone', label: 'Outlet phone', type: 'tel', hint: 'Used by Call on the Birthdays list' }, { key: 'state', label: 'State', type: 'select', options: [...STATES], hint: 'Used for public holidays and pay rules' }, { key: 'restDay', label: 'Weekly rest day', type: 'select', options: [...REST_DAYS] }, { key: 'address', label: 'Address', type: 'textarea' }]}
+            ...(top('org.companies') || !outlet.id ? [{ key: 'companyId', label: 'Company', type: 'select' as const, options: coOptions, required: true, requiredMsg: 'Choose the company this outlet belongs to' }] : []), { key: 'type', label: 'Business type', type: 'select', options: [...BUSINESS_TYPES], required: true }, { key: 'manager', label: 'Manager / PIC' }, { key: 'phone', label: 'Outlet phone', type: 'tel', hint: 'Used by Call on the Birthdays list' }, { key: 'state', label: 'State', type: 'select', options: [...STATES], hint: 'Used for public holidays and pay rules' }, { key: 'restDay', label: 'Weekly rest day', type: 'select', options: [...REST_DAYS] }, { key: 'address', label: 'Address', type: 'textarea' }]}
           onDelete={outlet.id ? () => { if (workers.some((w) => w.outletId === outlet.id)) alert('Workers are assigned to this outlet; they will show “—”.'); db.outlets.delete(String(outlet.id)) } : undefined}
-          onSave={(v) => db.outlets.put({ id: (outlet.id as string) || uid(), name: String(v.name), type: v.type as BusinessType, manager: v.manager as string, address: v.address as string, ...(v.state ? { state: String(v.state) } : {}), ...(v.restDay ? { restDay: String(v.restDay) } : {}), companyId: String(v.companyId || outlet.companyId || DEFAULT_COMPANY_ID), ...(outlet.logo ? { logo: String(outlet.logo) } : {}) }).then(() => {})} />
+          onSave={(v) => db.outlets.put({ id: (outlet.id as string) || uid(), name: String(v.name), type: v.type as BusinessType, manager: v.manager as string, address: v.address as string, ...(v.phone ? { phone: String(v.phone) } : {}), ...(v.state ? { state: String(v.state) } : {}), ...(v.restDay ? { restDay: String(v.restDay) } : {}), companyId: String(v.companyId || outlet.companyId), ...(outlet.logo ? { logo: String(outlet.logo) } : {}) }).then(() => {})} />
       )}
       {job && (
         <FormModal title={job.id ? 'Edit category' : 'Add category'} initial={job} onClose={() => setJob(null)}

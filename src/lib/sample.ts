@@ -1,4 +1,5 @@
 import { db, ensureSeed } from './db'
+import { getConfig } from './config'
 import type { BusinessType, DocRec, LeaveRec, Outlet, Worker, WorkerStatus } from './types'
 import { addDays, addMonths, todayISO, uid } from './util'
 
@@ -37,10 +38,15 @@ const JOBS: Record<BusinessType, string[]> = {
   'Jewellery Shop': ['Sales Assistant', 'Goldsmith', 'Polisher', 'Security'],
 }
 
-export async function loadSampleData() {
+/** 1.6.2: every outlet needs a company. Sample outlets go to the first real (non-demo) company the user may use
+ * (`myCompanies` empty = all companies). */
+export async function loadSampleData(myCompanies: string[] = []) {
   await ensureSeed()
   const t = todayISO()
-  const outlets: Outlet[] = OUTLETS.map(([name, type]) => ({ id: uid(), name, type, address: 'DEMO address, Malaysia', manager: 'DEMO Manager' }))
+  const cos = getConfig().companies.items.filter((c) => !myCompanies.length || myCompanies.includes(c.id))
+  const co = cos.find((c) => !c.demo && !c.sample)?.id || cos[0]?.id
+  if (!co) throw new Error('Add a company first: every outlet needs a company.')
+  const outlets: Outlet[] = OUTLETS.map(([name, type]) => ({ id: uid(), name, type, address: 'DEMO address, Malaysia', manager: 'DEMO Manager', companyId: co }))
   await db.outlets.bulkPut(outlets)
   // expiry offsets (days from today) to create a mix of expired / expiring / valid
   const expOffsets = [-12, 5, 18, 25, 40, 55, 75, 88, 120, 200, 300, 400, -3, 9, 33, 64, 150, 260, 365, 500, 28, 70, 180, 15]

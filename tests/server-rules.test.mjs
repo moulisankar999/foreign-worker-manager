@@ -90,7 +90,7 @@ try {
   // data via push_records
   const now = () => new Date().toISOString()
   const W = (id, outletId, extra = {}) => ({ entity: 'workers', id, deleted: false, client_ts: now(), data: { id, workerNo: id, fullName: 'Worker ' + id, outletId, nationality: 'Nepal', initialBasicPay: 1700, bankAccount: '123', loans: [], documents: [], ...extra } })
-  const r1 = await S.c.rpc('push_records', { p_rows: [{ entity: 'outlets', id: O1_, client_ts: now(), data: { id: O1_, name: 'Outlet 1' } }, { entity: 'outlets', id: O2_, client_ts: now(), data: { id: O2_, name: 'Outlet 2' } }, W(W1_, O1_), W(W2_, O2_), W(W3_, O1_)] })
+  const r1 = await S.c.rpc('push_records', { p_rows: [{ entity: 'outlets', id: O1_, client_ts: now(), data: { id: O1_, name: 'Outlet 1', companyId: 'main' } }, { entity: 'outlets', id: O2_, client_ts: now(), data: { id: O2_, name: 'Outlet 2', companyId: 'main' } }, W(W1_, O1_), W(W2_, O2_), W(W3_, O1_)] })
   check('super admin push_records ok', r1.data?.ok === 5, JSON.stringify(r1))
   const pull = async (who) => { const r = await users[who].c.rpc('pull_records', { p_since: '1970-01-01', p_limit: 1000 }); if (r.error) throw r.error; return r.data }
   const om1Rows = await pull('om1')
