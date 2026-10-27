@@ -1,6 +1,6 @@
 {
   "name": "fw-worker-native",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "private": true,
   "description": "Capacitor shell for the FW Worker app. Dependencies come from the repo root node_modules; run npm scripts from the root.",
   "dependencies": {
