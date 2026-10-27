@@ -134,6 +134,11 @@ export async function saveConfig<K extends keyof AppConfig>(key: K, value: AppCo
   set({ ...raw, [key]: value })
 }
 export const getConfig = () => cfg
+/** v1.6.1: the CEO's AI Assistant switch (app_config.ai_assistant.enabled; absent = on). Live for every signed-in user. */
+export const aiSwitchOn = () => ((raw as Record<string, unknown>).ai_assistant as { enabled?: boolean } | undefined)?.enabled !== false
+export function useAiSwitchOn(): boolean {
+  return useSyncExternalStore((cb) => { subs.add(cb); return () => subs.delete(cb) }, aiSwitchOn)
+}
 export function useConfig(): AppConfig {
   return useSyncExternalStore((cb) => { subs.add(cb); return () => subs.delete(cb) }, () => cfg)
 }

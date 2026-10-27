@@ -35,13 +35,14 @@ import { BUSINESS_TYPES, SKILL_LEVELS, type BusinessType, type Settings } from '
 import { download, todayISO, uid } from '../lib/util'
 import { ANDROID_APK_URL, APP_VERSION, isNative, platformLabel } from '../lib/platform'
 import { PayRulesSettings } from '../components/pay'
+import { AiSwitchCard } from '../components/aiSwitch'
 import { REST_DAYS, STATES } from '../lib/pay'
 
 type V = Record<string, unknown>
 interface BIPEvent extends Event { prompt: () => Promise<void> }
 
 /* Settings is split into tabs (deep links: #/settings/<tab>). Each tab shows only for roles that can use it. */
-export type SettingsTab = 'account' | 'users' | 'agencies' | 'org' | 'workers' | 'pay' | 'passport' | 'requests' | 'notifications' | 'data' | 'about'
+export type SettingsTab = 'account' | 'users' | 'agencies' | 'org' | 'workers' | 'pay' | 'passport' | 'requests' | 'notifications' | 'ai' | 'data' | 'about'
 const TABS: { id: SettingsTab; label: string; icon: string; sub: string }[] = [
   { id: 'account', label: 'Account', icon: 'users', sub: 'My profile, password, sign out' },
   { id: 'users', label: 'Users & Access', icon: 'lock', sub: 'Users, sign-ups, roles, General Manager powers, HR Admin permissions, audit log' },
@@ -52,11 +53,12 @@ const TABS: { id: SettingsTab; label: string; icon: string; sub: string }[] = [
   { id: 'passport', label: 'Passport & Consent', icon: 'plane', sub: 'Safekeeping, release reasons, consent translations' },
   { id: 'requests', label: 'Requests & Approvals', icon: 'check', sub: 'Who approves which request' },
   { id: 'notifications', label: 'Notifications', icon: 'bell', sub: 'Phone alerts, my alerts, WhatsApp / SMS / email' },
+  { id: 'ai', label: 'AI Assistant', icon: 'spark', sub: 'Turn the Assistant on or off for everyone' },
   { id: 'data', label: 'Data & Backup', icon: 'download', sub: 'Backup, restore, sync, calendar export' },
   { id: 'about', label: 'About', icon: 'more', sub: 'Version, install the app' },
 ]
 /** searchable settings: [tab, section id, words] */
-const TITLES: Record<string, string> = {"s-sample": "Remove sample data (Approval & Recruitment)", "s-demo": "Remove sample (DEMO) data", "s-account": "Account & cloud sync", "s-password": "Change password", "s-signout": "Sign out", "s-pending": "New users waiting for approval", "s-users": "Users", "s-approvers": "Who may approve new users", "s-hrflags": "HR Admin & HR Manager permissions", "s-audit": "Audit log", "s-gmpowers": "General Manager powers", "s-agencies": "Agencies & Integrations", "s-adduser": "Add user", "s-companies": "Companies", "s-outlets": "Outlets", "s-policy": "Company & policy", "s-jobs": "Job categories", "s-vault": "Document vault", "s-payrules": "Pay & Leave rules", "s-passport": "Passport safekeeping", "s-reasons": "Emergency release reasons", "s-consent": "Consent form translations", "s-rules": "Approval rules", "s-phone": "Phone alerts", "s-myalerts": "My alerts", "s-notify": "WhatsApp / SMS / email notifications", "s-backup": "Backup & data", "s-calendar": "Calendar & in-app notifications", "s-about": "About"}
+const TITLES: Record<string, string> = {"s-sample": "Remove sample data (Approval & Recruitment)", "s-demo": "Remove sample (DEMO) data", "s-account": "Account & cloud sync", "s-password": "Change password", "s-signout": "Sign out", "s-pending": "New users waiting for approval", "s-users": "Users", "s-approvers": "Who may approve new users", "s-hrflags": "HR Admin & HR Manager permissions", "s-audit": "Audit log", "s-gmpowers": "General Manager powers", "s-agencies": "Agencies & Integrations", "s-adduser": "Add user", "s-companies": "Companies", "s-outlets": "Outlets", "s-policy": "Company & policy", "s-jobs": "Job categories", "s-vault": "Document vault", "s-payrules": "Pay & Leave rules", "s-passport": "Passport safekeeping", "s-reasons": "Emergency release reasons", "s-consent": "Consent form translations", "s-rules": "Approval rules", "s-phone": "Phone alerts", "s-myalerts": "My alerts", "s-notify": "WhatsApp / SMS / email notifications", "s-backup": "Backup & data", "s-calendar": "Calendar & in-app notifications", "s-about": "About", "s-ai": "AI Assistant on / off"}
 const INDEX: [SettingsTab, string, string][] = [
   ['account', 's-account', 'Account & cloud sync signed in role access sync now'],
   ['account', 's-password', 'Change password'],
@@ -86,6 +88,7 @@ const INDEX: [SettingsTab, string, string][] = [
   ['data', 's-backup', 'Backup restore import export JSON sample data re-download from cloud'],
   ['data', 's-demo', 'Remove sample DEMO data delete demo workers outlets clean up'],
   ['data', 's-calendar', 'Calendar export expiries ics install notifications'],
+  ['ai', 's-ai', 'AI Assistant on off switch turn off hide assistant chat'],
   ['about', 's-about', 'About version app download Android APK iPhone'],
 ]
 
@@ -112,7 +115,7 @@ export default function SettingsPage() {
   const params = useParams<{ tab?: string }>()
   const visible = useMemo(() => TABS.filter((t) => ({
     account: true, users: isAdmin || canApproveUsers || isSuper || canSeeAudit || creatableRoles.length > 0, agencies: canAgencies, org: isHr, workers: isHr, pay: isHr, passport: isHr, requests: isHr,
-    notifications: true, data: true, about: true,
+    notifications: true, ai: isSuper, data: true, about: true,
   } as Record<SettingsTab, boolean>)[t.id]), [isAdmin, canApproveUsers, isSuper, canSeeAudit, isHr, creatableRoles.length, canAgencies])
   const legacy = window.location.hash.includes('backup') ? 'data' : ''
   const tab: SettingsTab = (visible.find((t) => t.id === (params.tab || legacy))?.id) || 'account'
@@ -288,6 +291,8 @@ export default function SettingsPage() {
         <Sec id="s-myalerts"><MyAlertsCard /></Sec>
         {top('notifications.settings') ? <Sec id="s-notify"><NotificationsCard /></Sec> : <p className="muted small">WhatsApp / SMS / email delivery is set up by the CEO (off by default).</p>}
       </>}
+
+      {tab === 'ai' && isSuper && <Sec id="s-ai"><AiSwitchCard /></Sec>}
 
       {tab === 'data' && <>
       {top('data.demo') && hasSample && <Sec id="s-sample"><RemoveSampleCard /></Sec>}

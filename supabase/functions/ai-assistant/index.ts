@@ -431,9 +431,12 @@ Deno.serve(async (req) => {
   if (st.error || !st.data) return json({ error: 'Your account is not active.' }, 403)
   const status = st.data as J
   const role = String(status.role || 'viewer')
-  if (body.op === 'status' || !body.op) return json({ enabled: ENABLED, provider: ENABLED ? (MOCK ? 'mock' : PROVIDER) : null, model: ENABLED && role === 'super_admin' ? (MOCK ? 'mock' : MODEL) : undefined, limit: status.limit, used: status.used, role })
+  // 1.6.1: the CEO's on/off switch (Settings → AI Assistant); a database without migration 053 reports nothing → on
+  const on = status.on !== false
+  if (body.op === 'status' || !body.op) return json({ enabled: ENABLED && on, configured: ENABLED, off: !on, provider: ENABLED ? (MOCK ? 'mock' : PROVIDER) : null, model: ENABLED && role === 'super_admin' ? (MOCK ? 'mock' : MODEL) : undefined, limit: status.limit, used: status.used, role })
   if (body.op !== 'chat') return json({ error: 'Unknown op' }, 400)
   gemModel = MODEL
+  if (!on) return json({ disabled: true, off: true, error: 'The Assistant has been turned off by your administrator.', reply: 'The Assistant has been turned off by your administrator.' }, 403)
   if (!ENABLED) return json({ disabled: true, reply: role === 'super_admin' ? 'The assistant is not switched on yet. Add the AI provider key as a Supabase secret to switch it on.' : 'The assistant is not available yet.' })
 
   const msgsIn = (Array.isArray(body.messages) ? body.messages : []) as J[]
@@ -442,7 +445,7 @@ Deno.serve(async (req) => {
   if (!history.length || history[history.length - 1].role !== 'user') return json({ error: 'Ask a question.' }, 400)
 
   const begin = await db.rpc('ai_begin')
-  if (begin.error) return json({ error: begin.error.message, limit: true }, 429)
+  if (begin.error) return begin.error.hint === 'ai_off' || /turned off/i.test(begin.error.message) ? json({ disabled: true, off: true, error: begin.error.message, reply: begin.error.message }, 403) : json({ error: begin.error.message, limit: true }, 429)
 
   const [{ data: sal }, { data: qr }, { data: prof }] = await Promise.all([db.rpc('can_view_salary'), db.rpc('qr_rank'), db.from('profiles_v').select('full_name').eq('id', u.data.user.id).maybeSingle()])
   const me: Me = { id: u.data.user.id, role, rank: RANK[role] || 1, name: String((prof as J | null)?.full_name || ''), canSeeSalary: sal === true, quotaRank: Number(qr) || 0 }

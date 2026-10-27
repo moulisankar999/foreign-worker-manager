@@ -2,11 +2,11 @@
 import { useEffect, useState } from 'react'
 import { supabase } from './supabase'
 
-export interface AiStatus { enabled: boolean; provider?: string | null; model?: string; limit?: number; used?: number; role?: string; error?: string }
+export interface AiStatus { enabled: boolean; /** 1.6.1: the CEO switched the Assistant off for everyone */ off?: boolean; configured?: boolean; provider?: string | null; model?: string; limit?: number; used?: number; role?: string; error?: string }
 export interface AiTable { title: string; columns: { key: string; label: string }[]; rows: Record<string, unknown>[]; more?: number }
 export interface AiDraft { id: string; kind: 'request' | 'note' | 'reminder'; title: string; worker_id: string | null; payload: Record<string, unknown>; state?: 'confirmed' | 'discarded'; ref?: string }
 export interface AiMsg { role: 'user' | 'assistant'; text: string; tables?: AiTable[]; drafts?: AiDraft[]; error?: boolean; at: string }
-export interface AiReply { reply: string; tables?: AiTable[]; drafts?: AiDraft[]; usage?: { used: number; limit: number }; disabled?: boolean; llm_saw?: string }
+export interface AiReply { reply: string; tables?: AiTable[]; drafts?: AiDraft[]; usage?: { used: number; limit: number }; disabled?: boolean; off?: boolean; llm_saw?: string }
 
 async function call<T>(body: Record<string, unknown>): Promise<T> {
   const { data, error } = await supabase.functions.invoke('ai-assistant', { body })
@@ -19,16 +19,31 @@ async function call<T>(body: Record<string, unknown>): Promise<T> {
 }
 
 let cached: { uid: string; p: Promise<AiStatus> } | null = null
+const statusSubs = new Set<(s: AiStatus) => void>()
 export function aiStatus(uid: string, fresh = false): Promise<AiStatus> {
   if (!fresh && cached?.uid === uid) return cached.p
   const p = call<AiStatus>({ op: 'status' }).catch((e) => ({ enabled: false, error: (e as Error).message }))
   cached = { uid, p }
+  void p.then((v) => { if (cached?.p === p) statusSubs.forEach((f) => f(v)) })
   return p
 }
 export function useAiStatus(uid?: string | null) {
   const [s, setS] = useState<AiStatus | null>(null)
-  useEffect(() => { if (!uid) return; let live = true; void aiStatus(uid).then((v) => live && setS(v)); return () => { live = false } }, [uid])
+  useEffect(() => {
+    if (!uid) return
+    let live = true
+    void aiStatus(uid).then((v) => live && setS(v))
+    const f = (v: AiStatus) => live && setS(v)
+    statusSubs.add(f)
+    return () => { live = false; statusSubs.delete(f) }
+  }, [uid])
   return [s, async () => { if (uid) setS(await aiStatus(uid, true)) }] as const
+}
+/** CEO only — the database refuses everyone else. Every open screen picks the change up (config is live). */
+export async function aiSetEnabled(on: boolean, uid?: string) {
+  const { error } = await supabase.rpc('ai_set_enabled', { p_on: on })
+  if (error) throw new Error(error.message)
+  if (uid) void aiStatus(uid, true)
 }
 
 export const aiChat = (messages: { role: string; text: string }[], lang: string) => call<AiReply>({ op: 'chat', messages, lang })

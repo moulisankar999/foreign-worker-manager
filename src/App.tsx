@@ -45,6 +45,7 @@ import QuotaPage from './pages/quota/QuotaPage'
 import { qRank } from './lib/quota'
 import Assistant from './pages/Assistant'
 import { useAiStatus } from './lib/ai'
+import { useAiSwitchOn } from './lib/config'
 import { Tour } from './components/tour'
 import { CommandPalette, openPalette, recordVisit } from './components/commandPalette'
 
@@ -85,7 +86,9 @@ function MainApp() {
   const ceoBadge = useCeoBadge()
   const ctlBadge = useControlBadge()
   const [aiSt] = useAiStatus(session?.user.id)
-  const aiOn = aiSt?.enabled
+  // 1.6.1: the CEO's switch hides the Assistant for everyone, the CEO included (it lives in Settings → AI Assistant)
+  const aiOff = !useAiSwitchOn() || !!aiSt?.off
+  const aiOn = aiSt?.enabled && !aiOff
   const allOutlets = useOutlets()
   useConfig() // re-render when a company logo changes
   const myLogo = headerLogo(role, myCompanies, myOutlets, allOutlets)
@@ -116,11 +119,11 @@ function MainApp() {
   }, [loc.pathname, loc.search, session?.user.id])
   const [crumb, setCrumb] = useState('')
   const section = NAV.find((n) => n.to !== '/' && loc.pathname.startsWith(n.to)) || (loc.pathname.startsWith('/companies') ? { to: '/settings/org', label: 'Settings' } : null)
-  const aiShow = (isSuper || !!aiOn) && !loc.pathname.startsWith('/assistant')
+  const aiShow = !aiOff && (isSuper || !!aiOn) && !loc.pathname.startsWith('/assistant')
   const askAi = () => nav(`/assistant?q=${encodeURIComponent(crumb ? `About "${crumb}"${section && section.label !== crumb ? ` (${section.label})` : ''}: what needs my attention, and what should I do next?` : 'What needs my attention today?')}`)
 
   const quotaOn = qRank(role) > 0
-  const visible = NAV.filter((n) => !n.mobile && (!n.ceo || isSuper) && (!n.hr || (canWrite && !isOM)) && (!n.quota || quotaOn) && (!n.ai || isSuper || !!aiOn) && (!n.bday || isHr))
+  const visible = NAV.filter((n) => !n.mobile && (!n.ceo || isSuper) && (!n.hr || (canWrite && !isOM)) && (!n.quota || quotaOn) && (!n.ai || (!aiOff && (isSuper || !!aiOn))) && (!n.bday || isHr))
   // phone tab bar: Home, Workers, Approval & Recruitment (or Requests), Alerts, More
   const TABS = [NAV[0], NAV[2], quotaOn ? NAV.find((n) => n.to === '/quota')! : NAV[3], NAV.find((n) => n.to === '/alerts')!, NAV[NAV.length - 1]]
   const tabBadge = (to: string) => badge(to) + (to === '/more' && quotaOn ? myReq : 0)

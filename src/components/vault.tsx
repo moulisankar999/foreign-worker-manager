@@ -1,11 +1,11 @@
-import { AttachButton, ClipBadge, docSrc } from './attach'
+import { AttachButton, ClipBadge, docSrc, openAttach } from './attach'
 import { useMemo, useRef, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { Btn, Card, Chip, Empty, Modal, Toolbar, SelectFilter, Skeleton } from './ui'
 import { useAuth } from '../lib/auth'
 import { allVaultCategories, useConfig } from '../lib/config'
 import { VAULT_CATEGORIES } from '../lib/workflow'
-import { docVersions, downloadDoc, fmtSize, openDoc, prepareFiles, shareDoc, updateDoc, uploadDoc, useDocs, type DocRow, type NewDoc } from '../lib/vault'
+import { docVersions, downloadDoc, fmtSize, prepareFiles, shareDoc, updateDoc, uploadDoc, useDocs, type DocRow, type NewDoc } from '../lib/vault'
 import { useWorkers } from '../lib/hooks'
 import { fmtDate, todayISO } from '../lib/util'
 import { DataTable, Details } from './dataTable'
@@ -40,7 +40,7 @@ export function DocActions({ d, noPreview }: { d: DocRow; noPreview?: boolean })
   const act = (f: () => Promise<unknown>) => () => { setBusy(true); void run(f).finally(() => setBusy(false)) }
   return (
     <Actions>
-      {!noPreview && <IconAction kind="view" label="Preview" disabled={busy} onClick={act(() => openDoc(d))} />}
+      {!noPreview && <IconAction kind="view" label="Preview" disabled={busy} onClick={act(() => openAttach(docSrc(d)))} />}
       <IconAction kind="download" label="Download" disabled={busy} onClick={act(() => downloadDoc(d))} />
       <IconAction kind="send" label="Share" disabled={busy} onClick={act(() => shareDoc(d))} />
       {d.version > 1 && <IconAction kind="more" label="Older versions" onClick={() => void docVersions(d.group_id).then(setVers)} />}
@@ -53,7 +53,7 @@ export function DocActions({ d, noPreview }: { d: DocRow; noPreview?: boolean })
               { key: 'at', label: 'Uploaded', render: (v) => fmtDate(v.uploaded_at.slice(0, 10)) },
               { key: 'size', label: 'Size', hide: 'phone', render: (v) => fmtSize(v.size_bytes) },
             ]}
-            actions={(v) => <Actions><IconAction kind="view" label="Preview" onClick={() => void run(() => openDoc(v))} /><IconAction kind="download" label="Download" onClick={() => void run(() => downloadDoc(v))} /></Actions>} />
+            actions={(v) => <Actions><IconAction kind="view" label="Preview" onClick={() => void openAttach(docSrc(v))} /><IconAction kind="download" label="Download" onClick={() => void run(() => downloadDoc(v))} /></Actions>} />
         </Modal>
       )}
       {edit && <EditDoc d={d} onClose={() => setEdit(false)} />}

@@ -12,6 +12,7 @@ import { useAuth } from '../lib/auth'
 import { db } from '../lib/db'
 import { createRequest, refNo } from '../lib/requests'
 import { download, uid } from '../lib/util'
+import { useAiSwitchOn } from '../lib/config'
 import { AI_LANGS, aiChat, aiDecideDraft, aiSetLimit, clearChat, initialAiLang, loadChat, reminderIcs, saveChat, stashDraft, useAiStatus, type AiDraft, type AiMsg, type AiTable } from '../lib/ai'
 
 const SUGGEST: Record<string, string[]> = {
@@ -150,6 +151,7 @@ export default function Assistant() {
   const { session, role, profile, isSuper } = useAuth()
   const me = session?.user.id || ''
   const [st, refresh] = useAiStatus(me)
+  const switchOn = useAiSwitchOn()
   const [msgs, setMsgs] = useState<AiMsg[]>(() => (me ? loadChat(me) : []))
   // v1.6.0: 'Ask Assistant' buttons open this page with a question about the page you came from (you still press Send)
   const [text, setText] = useState(() => { try { return new URLSearchParams(window.location.hash.split('?')[1] || '').get('q') || '' } catch { return '' } })
@@ -176,12 +178,19 @@ export default function Assistant() {
       if (r.usage) setUsage(r.usage)
     } catch (e) {
       setMsgs([...next, { role: 'assistant', text: (e as Error).message, error: true, at: new Date().toISOString() }])
+      if (/turned off/i.test((e as Error).message)) void refresh()
     } finally { setBusy(false) }
   }
   const lastA = msgs.reduce((a, m, i) => (m.role === 'assistant' ? i : a), -1)
   const setDraft = (mi: number, id: string, state: 'confirmed' | 'discarded', ref?: string) =>
     setMsgs((all) => all.map((m, i) => (i !== mi ? m : { ...m, drafts: m.drafts?.map((d) => (d.id === id ? { ...d, state, ref } : d)) })))
 
+  // 1.6.1: switched off by the CEO (Settings → AI Assistant) — the menus hide it; a saved link lands here
+  if (!switchOn || st?.off) return (
+    <div className="page narrow" data-testid="ai-off">
+      <Empty icon="spark" title="The Assistant is turned off">The Assistant has been turned off by your administrator.{isSuper && <> <Link to="/settings/ai">Turn it on in Settings</Link>.</>}</Empty>
+    </div>
+  )
   if (!st) return <div className="page narrow"><p className="muted">Loading the assistant…</p></div>
   if (!st.enabled) {
     if (!isSuper) return <div className="page narrow"><Empty icon="spark" title="The assistant is coming soon">Your administrator has not switched it on yet.</Empty></div>
