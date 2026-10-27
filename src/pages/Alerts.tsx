@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { Btn, Card, Chip, Empty, SelectFilter, Toolbar, sevTone } from '../components/ui'
+import { Btn, Card, Chip, Empty, SelectFilter, Toolbar, sevTone, Skeleton } from '../components/ui'
 import { SEVERITY_ORDER, outletName, type Alert } from '../lib/calc'
-import { useAlerts, useOutlets, useSettings } from '../lib/hooks'
+import { useAlerts, useOutlets, useSettings, useWorkersLoaded } from '../lib/hooks'
 import { buildICS } from '../lib/ics'
 import { notifyOnOpen, notifySupported, requestNotify } from '../lib/notify'
 import { BUSINESS_TYPES } from '../lib/types'
@@ -10,6 +10,7 @@ import { usePaged } from '../components/dataTable'
 import { download, fmtDate, toCSV, todayISO } from '../lib/util'
 
 export default function Alerts() {
+  const wready = useWorkersLoaded()
   const all = useAlerts()
   const outlets = useOutlets()
   const s = useSettings()
@@ -26,6 +27,7 @@ export default function Alerts() {
   const counts = SEVERITY_ORDER.map((x) => ({ x, n: all.filter((a) => a.severity === x).length }))
   const exportICS = (rows: Alert[]) => download(`worker-expiries-${todayISO()}.ics`, buildICS(rows.filter((a) => a.date), Math.max(...s.leadTimes)), 'text/calendar')
 
+  if (!wready) return <div className="page"><Skeleton kind="page" rows={6} /></div>
   return (
     <div className="page">
       <div className="page-h">

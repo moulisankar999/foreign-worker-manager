@@ -12,7 +12,8 @@ import { RemitEditor, maskAcct, providerName } from '../components/remittance'
 import { db, saveWorker } from '../lib/db'
 import { useAuth } from '../lib/auth'
 import { inScope } from '../lib/companies'
-import { useJobs, useOutlets, useSettings } from '../lib/hooks'
+import { useAllWorkers, useJobs, useOutlets, useSettings } from '../lib/hooks'
+import { expiryTip, learnValidity, nameTip, passportDup, personDup, workerNoDup } from '../lib/smartForm'
 import { BUSINESS_TYPES, DOC_SHORT, DOC_STAGES, GENDERS, NATIONALITIES, RELATIONS, RELIGIONS, SKILL_LEVELS, STATUSES, type DocRec, type FamilyRec, type RemitRec, type Worker, type WorkerStatus } from '../lib/types'
 import { languagesSummary } from '../lib/languages'
 import { qRank, useQuotaLetters } from '../lib/quota'
@@ -52,6 +53,8 @@ export default function WorkerForm() {
   const s = useSettings()
   const outlets = useOutlets()
   const jobs = useJobs()
+  const allWorkers = useAllWorkers() // demo workers too: IDs and passports must be unique everywhere
+  const validity = useMemo(() => learnValidity(allWorkers), [allWorkers])
   const { role, myCompanies, myOutlets, isHr, canSeeSalary } = useAuth()
   const [step, setStep] = useState(0)
   const [v, setV] = useState<V>({ status: 'Active-Working', joinDate: todayISO(), nationality: '', skillLevel: '' })
@@ -88,7 +91,7 @@ export default function WorkerForm() {
     })
     else db.workers.toArray().then((ws) => {
       const max = ws.reduce((m, w) => Math.max(m, parseInt(w.workerNo.replace(/\D/g, '')) || 0), 1000)
-      done({ status: 'Active-Working', joinDate: todayISO(), nationality: '', skillLevel: '', workerNo: `FW${max + 1}`, contractStart: todayISO(), contractEnd: addMonths(todayISO(), 24),
+      done({ status: 'Active-Working', joinDate: todayISO(), nationality: '', skillLevel: '', workerNo: `FW${max + 1}`, contractStart: todayISO(), contractEnd: addMonths(todayISO(), s.defaultMinContractMonths || 24),
         minContractMonths: s.defaultMinContractMonths, earlyPenalty: s.defaultPenalty, annualLeaveDays: s.annualLeaveDays })
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -192,13 +195,26 @@ export default function WorkerForm() {
   put('vp_no', docNumberIssue(v.vp_no, 'vp'))
   for (const k of ['initialBasicPay', 'earlyPenalty']) put(k, moneyIssue(v[k], k === 'initialBasicPay' ? 'Basic salary' : 'Penalty'))
   if (v.contractStart && v.contractEnd && String(v.contractEnd) <= String(v.contractStart)) issues.contractEnd = { level: 'error', msg: 'Contract end must be after the start' }
+  // 1.6.0 smart checks: duplicates, one-tap fixes and rule/record-driven auto-fill (tips never block)
+  const changed = (k: string) => JSON.stringify(v[k] ?? null) !== JSON.stringify(init[k] ?? null)
+  put('workerNo', workerNoDup(v.workerNo, id, allWorkers))
+  if (changed('fullName')) put('fullName', nameTip(v.fullName))
+  if (!issues.fullName) put('fullName', personDup(v.fullName, v.dob, id, allWorkers))
+  if (!issues.pp_no) put('pp_no', passportDup(v.pp_no, id, allWorkers))
+  if (v.contractStart && !v.contractEnd && s.defaultMinContractMonths) {
+    const val = addMonths(String(v.contractStart), s.defaultMinContractMonths)
+    issues.contractEnd = { level: 'tip', msg: `End after the minimum period: ${fmtDate(val)}?`, fix: { label: 'Use this date', value: val }, why: `Settings → Workers sets the default minimum contract to ${s.defaultMinContractMonths} months.` }
+  }
+  for (const [type, k] of DOC_CARDS) {
+    if (!issues[`${k}_exp`]) put(`${k}_exp`, expiryTip(type, DOC_SHORT[type] || type, v[`${k}_issue`] as string, v[`${k}_exp`] as string, validity))
+  }
   for (const [, k] of DOC_CARDS) {
     const d = dateIssues(v[`${k}_issue`] as string, v[`${k}_exp`] as string, { passport: k === 'pp', contractEnd: v.contractEnd as string })
     if (d.issue) issues[`${k}_issue`] = d.issue
     if (d.expiry) issues[`${k}_exp`] = d.expiry
   }
   // errors only block when this session typed/changed the value — old records with legacy values never get stuck
-  const blocking = Object.entries(issues).filter(([k, i]) => i.level === 'error' && JSON.stringify(v[k] ?? null) !== JSON.stringify(init[k] ?? null))
+  const blocking = Object.entries(issues).filter(([k, i]) => i.level === 'error' && (k === 'workerNo' ? !editing || changed(k) : changed(k)))
   const stepMissing = (i: number) => comp.missing.filter((m) => stepOfKey(m.key === 'companyId' ? 'outletId' : m.key) === i)
   const stepErrors = (i: number) => Object.entries(issues).filter(([k, x]) => x.level === 'error' && stepOfKey(k) === i)
   const showMissing = (i: number) => checked.has(i) || checked.has(REVIEW)
@@ -345,8 +361,8 @@ export default function WorkerForm() {
                 ))}</div>
               </div>
             ) : <p className="banner green small">✓ All {comp.total} required items are filled — the profile will be <strong>Complete</strong>.</p>}
-            {Object.keys(issues).length > 0 && (
-              <ul className="wf-issues">{Object.entries(issues).map(([k, i]) => (
+            {Object.values(issues).some((i) => i.level !== 'tip') && (
+              <ul className="wf-issues">{Object.entries(issues).filter(([, i]) => i.level !== 'tip').map(([k, i]) => (
                 <li key={k} className={i.level}><button type="button" className="link" onClick={() => go(stepOfKey(k))}>{i.level === 'error' ? '⛔' : '⚠️'} {i.msg}</button></li>
               ))}</ul>
             )}

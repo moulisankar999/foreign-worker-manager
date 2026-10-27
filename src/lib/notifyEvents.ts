@@ -95,6 +95,7 @@ export const DEFAULT_NOTIFY: NotifyConfig = {
     ceo_review: R('Decision to review (CEO)', 'Requests', ['super_admin'], ia, '{{byRole}} {{by}} {{decision}} {{ref}} {{type}} — {{worker}}', '', { body: '{{comment}} Tap to review or overrule.', email: '{{byRole}} {{by}} {{decision}} {{ref}} {{type}} for {{worker}} ({{outlet}}). {{comment}} Review: {{link}}' }),
     ceo_overruled: R('Final decision made (request locked)', 'Requests', ['participants', 'hr_admin'], ia, '{{ref}} {{type}} — final decision: {{status}}', '', { body: '{{worker}}: a final decision has been made — the request is locked.', email: '{{ref}} {{type}} for {{worker}}: a final decision has been made and it is now {{status}}. {{link}}' }),
     hr_task_created: R('HR follow-up after a final decision', 'Requests', ['hr_manager', 'hr_admin'], ia, 'HR follow-up needed: {{ref}} {{type}} — {{worker}}', '', { body: '{{count}} follow-up task(s) after the final decision. Open Requests → Follow-ups.' }),
+    birthdays_today: R("Today's birthdays (morning list)", 'Workers', ['super_admin', 'hr_admin', 'hr_manager'], { in_app: true, push: true }, '🎂 {{count}} birthday(s) today', '', { body: '{{names}} — open Birthdays to send a wish.' }),
     daily_digest: R('Daily digest', 'Digest', [], { email: true }, '{{company}} daily summary', '', { wa: 'fwm_daily_digest' }),
   },
 }

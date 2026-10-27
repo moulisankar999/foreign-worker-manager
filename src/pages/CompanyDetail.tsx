@@ -2,7 +2,7 @@
  * What shows depends on the role — the server enforces the same (migration 045). */
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { Btn, Card, Chip, Empty, KV, Modal, Tabs } from '../components/ui'
+import { Btn, Card, Chip, Empty, KV, Modal, Tabs, Skeleton } from '../components/ui'
 import { Actions, IconAction } from '../components/iconAction'
 import { DataTable, Details } from '../components/dataTable'
 import { FilePick } from '../components/filePick'
@@ -37,7 +37,7 @@ export default function CompanyDetailPage() {
   const [dirForm, setDirForm] = useState<(Partial<NewDirector> & { id?: string }) | null>(null)
   const reload = useCallback(async () => { if (!auth.canSeeCompanyDetails) return; try { setData(await loadCompany(id)) } catch (e) { setErr((e as Error).message) } }, [id, auth.canSeeCompanyDetails])
   useEffect(() => { void reload() }, [reload])
-  if (!co && !cfgLoaded) return <Card title="Company"><p className="muted">Loading…</p></Card>
+  if (!co && !cfgLoaded) return <Card title="Company"><Skeleton /></Card>
   if (!co) return <Card title="Company"><Empty title="Company not found">It may have been removed, or it is not one of your companies. <Link to="/settings/org">Back to companies</Link></Empty></Card>
   const nOut = outlets.filter((o) => outletCompany(o) === id).length
   const head = (

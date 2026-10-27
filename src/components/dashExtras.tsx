@@ -1,3 +1,4 @@
+import { NextSteps, type StepCounts } from './nextSteps'
 import { Link, useNavigate } from 'react-router-dom'
 import { Card, Chip, Stat, Tabs } from './ui'
 import { useDashTab } from '../lib/dashTab'
@@ -95,7 +96,7 @@ export function WorkflowPanel({ workers }: { workers: Worker[] }) {
 
 /** Simplified dashboard for an Outlet Manager (his outlets only — enforced by the server). */
 const OM_TABS: { id: 'overview' | 'requests' | 'workers'; label: string }[] = [{ id: 'overview', label: 'Overview' }, { id: 'requests', label: 'Requests' }, { id: 'workers', label: 'My workers' }]
-export function OmDashboard({ workers, alerts, extra }: { workers: Worker[]; alerts: Alert[]; extra: Extra[] }) {
+export function OmDashboard({ workers, alerts, extra, counts }: { workers: Worker[]; alerts: Alert[]; extra: Extra[]; counts: StepCounts }) {
   const { myOutlets } = useAuth()
   const outlets = useOutlets()
   const nav = useNavigate()
@@ -113,6 +114,7 @@ export function OmDashboard({ workers, alerts, extra }: { workers: Worker[]; ale
               <button key={k} onClick={() => nav(`/requests/new?type=${k}`)}><span>{i}</span>{l}</button>
             ))}
           </div>
+          <NextSteps counts={counts} />
           <Priorities alerts={alerts} workers={workers} outlets={outlets} om extra={extra} />
         </>}
         {tab === 'requests' && <WorkflowPanel workers={workers} />}

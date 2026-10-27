@@ -151,7 +151,8 @@ export default function Assistant() {
   const me = session?.user.id || ''
   const [st, refresh] = useAiStatus(me)
   const [msgs, setMsgs] = useState<AiMsg[]>(() => (me ? loadChat(me) : []))
-  const [text, setText] = useState('')
+  // v1.6.0: 'Ask Assistant' buttons open this page with a question about the page you came from (you still press Send)
+  const [text, setText] = useState(() => { try { return new URLSearchParams(window.location.hash.split('?')[1] || '').get('q') || '' } catch { return '' } })
   const [lang, setLang] = useState(initialAiLang)
   const [busy, setBusy] = useState(false)
   const [usage, setUsage] = useState<{ used: number; limit: number } | null>(null)

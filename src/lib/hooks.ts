@@ -28,6 +28,10 @@ export function useWorkers() {
   const hide = useHideDemo()
   return useLiveQuery(() => loadWorkers(hide), [hide]) ?? EMPTY_W
 }
+/** every worker this user can see, demo/sample ones included — for uniqueness checks (IDs, passports) */
+export function useAllWorkers() {
+  return useLiveQuery(() => loadWorkers(false), []) ?? EMPTY_W
+}
 export function useWorkersLoaded() {
   const hide = useHideDemo()
   return useLiveQuery(() => loadWorkers(hide), [hide])

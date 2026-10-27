@@ -76,6 +76,13 @@ export async function companyFileUrl(path: string, download?: string) {
 
 // ---------- data
 const must = <T>(r: { data: T | null; error: { message: string } | null }) => { if (r.error) throw new Error(r.error.message); return r.data as T }
+/** 1.6.0: another company (that you can see) already registered with this SSM no. */
+export async function ssmTaken(ssmNew: string, selfId?: string): Promise<string | null> {
+  const n = ssmNew.replace(/\D/g, '')
+  if (n.length !== 12) return null
+  const { data } = await supabase.from('company_details').select('company_id').eq('ssm_new', n).limit(2)
+  return (data || []).map((r: { company_id: string }) => r.company_id).find((c) => c !== selfId) || null
+}
 export async function loadCompany(id: string) {
   const [det, docs, dirs] = await Promise.all([
     supabase.from('company_details').select('*').eq('company_id', id).maybeSingle(),

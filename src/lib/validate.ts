@@ -4,7 +4,8 @@ import { parsePhoneNumberFromString, type CountryCode } from 'libphonenumber-js/
 import type { DocRec, Outlet, Worker } from './types'
 import { todayISO } from './util'
 
-export type Issue = { level: 'error' | 'warn'; msg: string }
+/** level 'tip' = a suggestion (never blocks). fix = one-tap correction / auto-fill; link = open the matching record; why = "why am I seeing this". */
+export type Issue = { level: 'error' | 'warn' | 'tip'; msg: string; fix?: { label: string; value: unknown }; link?: { label: string; href: string }; why?: string }
 export type Issues = Record<string, Issue>
 
 // ---------- phone ----------

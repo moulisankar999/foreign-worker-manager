@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import { Btn, Card, Chip, Empty, Modal, Toolbar, SelectFilter } from './ui'
+import { Btn, Card, Chip, Empty, Modal, Toolbar, SelectFilter, Skeleton } from './ui'
 import { useAuth } from '../lib/auth'
 import { allVaultCategories, useConfig } from '../lib/config'
 import { VAULT_CATEGORIES } from '../lib/workflow'
@@ -194,7 +194,7 @@ export function VaultPanel({ workerId }: { workerId: string }) {
     <Card title={`Document vault (${docs.length})`} actions={(canWrite || isOM) && <Btn small kind="primary" icon="plus" onClick={() => setUp({})}>Add / scan</Btn>}>
       {cats.length > 1 && <Toolbar><SelectFilter label="Category" value={cat} onChange={setCat} options={[{ value: '', label: 'All categories' }, ...cats]} /></Toolbar>}
       {error && <p className="warn small">{error}</p>}
-      {loading ? <p className="muted">Loading…</p> : shown.length === 0 ? <Empty title="No documents in the vault yet"><p className="muted small">Scan passport, permit, FOMEMA, contract, tickets… with the phone camera.</p></Empty> : (
+      {loading ? <Skeleton /> : shown.length === 0 ? <Empty title="No documents in the vault yet"><p className="muted small">Scan passport, permit, FOMEMA, contract, tickets… with the phone camera.</p></Empty> : (
         <DocTable docs={shown} label="Document vault" />
       )}
       {canWrite && shown.length > 0 && <p className="muted small">To replace a document with a newer copy, open the document's details or use “Add / scan” with the same category — older versions stay available.</p>}
@@ -224,7 +224,7 @@ export function DocumentLibrary() {
       </Toolbar>
       {error && <p className="warn small">{error}</p>}
       <Card>
-        {loading ? <p className="muted">Loading…</p> : shown.length === 0 ? <Empty title="No documents match" /> : (
+        {loading ? <Skeleton /> : shown.length === 0 ? <Empty title="No documents match" /> : (
           <DocTable docs={shown} workerName={name} label="Document library" />
         )}
       </Card>

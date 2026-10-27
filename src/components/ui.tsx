@@ -105,7 +105,11 @@ export function Field({ def, value, onChange, issue, missing }: { def: FieldDef;
           onChange={(e) => onChange(t === 'number' ? (e.target.value === '' ? undefined : Number(e.target.value)) : e.target.value)}
         />
       )}
-      {issue ? <small className={`fmsg ${issue.level}`} role={issue.level === 'error' ? 'alert' : undefined}>{issue.level === 'error' ? '⛔ ' : '⚠️ '}{issue.msg}</small>
+      {issue ? <small className={`fmsg ${issue.level === 'tip' ? 'fmsg-tip' : issue.level}`} role={issue.level === 'error' ? 'alert' : undefined} title={issue.why ? `Why you see this: ${issue.why}` : undefined}>
+        {issue.level === 'error' ? '⛔ ' : issue.level === 'tip' ? '✨ ' : '⚠️ '}{issue.msg}
+        {issue.fix && <button type="button" className="fmsg-fix" onClick={() => onChange(issue.fix!.value)}>{issue.fix.label}</button>}
+        {issue.link && <a className="fmsg-link" href={issue.link.href}>{issue.link.label}</a>}
+        {issue.why && <span className="why-i" tabIndex={0} aria-label={`Why you see this: ${issue.why}`}>ⓘ</span>}</small>
         : missing ? <small className="fmsg missing">Required to complete the profile</small> : null}
       {def.hint && <small className="hint">{def.hint}</small>}
     </div>
@@ -176,6 +180,17 @@ export function FormModal({ title, fields, initial, onSave, onClose, onDelete, c
   )
 }
 
+/** 1.6.0: loading placeholder (shimmer lines shaped like the content). Keeps "Loading…" for screen readers. */
+export function Skeleton({ rows = 4, kind = 'list' }: { rows?: number; kind?: 'list' | 'tiles' | 'page' }) {
+  return (
+    <div className={`skel skel-${kind}`} role="status" aria-live="polite" data-testid="skeleton">
+      <span className="sr-only">Loading…</span>
+      {kind === 'page' && <i className="skel-h" />}
+      {kind === 'tiles' ? <div className="skel-tiles">{Array.from({ length: rows }, (_, i) => <i key={i} />)}</div>
+        : Array.from({ length: rows }, (_, i) => <i key={i} className="skel-l" style={{ width: `${92 - ((i * 17) % 35)}%` }} />)}
+    </div>
+  )
+}
 export function Empty({ icon = 'doc', title, children }: { icon?: string; title: string; children?: ReactNode }) {
   return (
     <div className="empty">
@@ -186,13 +201,23 @@ export function Empty({ icon = 'doc', title, children }: { icon?: string; title:
   )
 }
 
-export function Stat({ label, value, tone = 'teal', icon, onClick, sub }: { label: string; value: ReactNode; tone?: string; icon?: string; onClick?: () => void; sub?: string }) {
+/** 1.6.0: tiny trend line (last points of a series); hidden from screen readers, the label says the trend */
+export function Spark({ data, w = 72, h = 22 }: { data: number[]; w?: number; h?: number }) {
+  if (data.length < 2) return null
+  const max = Math.max(...data), min = Math.min(...data), span = max - min || 1
+  const pts = data.map((v, i) => `${(i / (data.length - 1)) * w},${h - 2 - ((v - min) / span) * (h - 4)}`).join(' ')
+  const last = pts.split(' ').pop()!.split(',')
+  return <svg className="spark" width={w} height={h} viewBox={`0 0 ${w} ${h}`} aria-hidden="true"><polyline points={pts} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round" /><circle cx={last[0]} cy={last[1]} r="2.4" fill="currentColor" /></svg>
+}
+const trendWord = (d: number[]) => { const a = d[0], b = d[d.length - 1]; return b > a ? `up from ${a}` : b < a ? `down from ${a}` : 'no change' }
+export function Stat({ label, value, tone = 'teal', icon, onClick, sub, trend }: { label: string; value: ReactNode; tone?: string; icon?: string; onClick?: () => void; sub?: string; trend?: number[] }) {
   return (
     <button type="button" className={`stat stat-${tone}`} onClick={onClick} disabled={!onClick}>
       {icon && <span className="stat-i"><Icon name={icon} size={18} /></span>}
       <span className="stat-v">{value}</span>
       <span className="stat-l">{label}</span>
       {sub && <span className="stat-s">{sub}</span>}
+      {trend && trend.length > 1 && <span className="stat-sp" title={`Last ${trend.length} weeks: ${trendWord(trend)}`}><Spark data={trend} /><span className="sr-only">Last {trend.length} weeks: {trendWord(trend)}</span></span>}
     </button>
   )
 }

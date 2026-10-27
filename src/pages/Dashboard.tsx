@@ -1,7 +1,8 @@
+import { weeklyTrends } from '../lib/trends'
 import { useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useDashTab, type DashTab } from '../lib/dashTab'
-import { BarList, Btn, Card, Chip, ColumnChart, Empty, Stat, Tabs, sevTone } from '../components/ui'
+import { BarList, Btn, Card, Chip, ColumnChart, Empty, Stat, Tabs, sevTone, Skeleton } from '../components/ui'
 import { currentBasic, isExited, isOnLeave, outletName, outstanding, ticketInfo } from '../lib/calc'
 import { useAlerts, useOutlets, useSettings, useWorkersLoaded } from '../lib/hooks'
 import { loadSampleData } from '../lib/sample'
@@ -10,6 +11,9 @@ import { PendingUsersPanel } from '../components/userApprovals'
 import { useAuth } from '../lib/auth'
 import { missingLanguage } from '../lib/languages'
 import { fmtDate, fmtMonth, rm0, todayISO } from '../lib/util'
+import { CountUp, Ring } from '../components/viz'
+import { healthScore } from '../lib/compliance'
+import { NextSteps } from '../components/nextSteps'
 import { ExpiryTimeline, Greeting, HealthCard, LatestChecks, Priorities, StatusGlance, TipCard, type Extra } from '../components/advice'
 import { useCeoBadge } from './CeoReview'
 import { setShowDemo, useShowDemo } from '../lib/demo'
@@ -18,7 +22,9 @@ import { needsMyAction } from '../lib/workflow'
 import { usePendingUsers } from '../lib/userApprovals'
 import { RiskTable } from './Compliance'
 import { useOutletRisks } from '../lib/risk'
+import { birthdays } from '../lib/birthdays'
 
+const NO_EXTRA: Extra[] = [] // requests, CEO review and new users are steps in What to do next
 export default function Dashboard() {
   const loaded = useWorkersLoaded()
   const workers = loaded ?? []
@@ -27,7 +33,7 @@ export default function Dashboard() {
   const alerts = useAlerts()
   const nav = useNavigate()
   const [busy, setBusy] = useState(false)
-  const { isOM, canWrite, canSeeSalary, isSuper, role, session, can, route } = useAuth()
+  const { isOM, canWrite, canSeeSalary, isSuper, isHr, role, session, can, route } = useAuth()
   const ceoN = useCeoBadge()
   const { rows: reqs } = useRequests()
   const { pending: newUsers } = usePendingUsers()
@@ -84,7 +90,9 @@ export default function Dashboard() {
 
   const tabIds = (canSeeSalary ? ['overview', 'expiries', 'requests', 'pay', 'risk', 'workforce'] : ['overview', 'expiries', 'requests', 'risk', 'workforce']) as DashTab[]
   const [tab, setTab] = useDashTab(tabIds, 'overview')
-  if (isOM) return <OmDashboard workers={workers} alerts={alerts} extra={extra} />
+  const trend = useMemo(() => (loaded ? weeklyTrends(workers) : undefined), [loaded, workers])
+  const health = useMemo(() => healthScore(workers, alerts, outlets, { pay: !!canSeeSalary }), [workers, alerts, outlets, canSeeSalary])
+  if (isOM) return <OmDashboard workers={workers} alerts={alerts} extra={extra} counts={{ mine: mineN, ceo: 0, users: 0, expiring: k.expired + k.d30, noLang: 0 }} />
   if (loaded && workers.length === 0 && canWrite)
     return (
       <div className="page">
@@ -103,42 +111,44 @@ export default function Dashboard() {
       </div>
     )
 
+  const bdays = birthdays(workers, 'today')
   const urgent = alerts.filter((a) => a.severity === 'critical' || a.severity === 'high').slice(0, 8)
   const labels: Record<DashTab, string> = { overview: 'Overview', expiries: 'Expiries', requests: 'Requests', pay: 'Pay', risk: 'Risk & checks', workforce: 'Workforce' }
   const actionN = mineN + newUsers.length + (isSuper ? ceoN : 0), expiringN = k.expired + k.d30
   return (
       <div className="page dash-tabs">
-        <div className="page-h">
-          <Greeting sub={`${k.total} current workers${k.exited ? ` · ${k.exited} exited` : ''}`} />
-          {isSuper && <DemoChip />}
-          <div className="row gap-s wrap dash-add">
-            {canWrite && <Btn kind="primary" icon="plus" onClick={() => nav('/workers/new')}>Add worker</Btn>}
+        <section className="hero160" aria-label="Today">
+          <div className="hero-top">
+            <Greeting sub={`${k.total} current workers${k.exited ? ` · ${k.exited} exited` : ''}`} />
+            {isSuper && <DemoChip />}
+            {isHr && bdays.length > 0 && <Link to="/birthdays" className="chip chip-pink bd-chip" data-testid="bd-chip" title="Why you see this: workers in your scope with a birthday today (Malaysia time). Tap to send a wish.">🎂 {bdays.length} birthday{bdays.length > 1 ? 's' : ''} today</Link>}
+            <button type="button" className="hero-ring" onClick={() => setTab('risk')} title={`Why you see this: your compliance health score — ${health.label}. It weighs expired documents, passports held, levy, insurance and more. Click for the breakdown.`}>
+              <Ring value={health.score} size={58} stroke={6} tone={`var(--${health.tone === 'gray' ? 'muted' : health.tone})`} label={`Compliance health ${health.score ?? 'not available'}`} />
+              <span><b><span className="hr-long">Compliance health</span><span className="hr-short">Compliance</span></b><small>{health.label}</small></span>
+            </button>
+            <div className="row gap-s wrap dash-add">
+              {canWrite && <Btn kind="primary" icon="plus" onClick={() => nav('/workers/new')}>Add worker</Btn>}
+            </div>
           </div>
-        </div>
+          {tab === 'overview' && !loaded && <Skeleton kind="tiles" rows={4} />}
+          {tab === 'overview' && loaded && <div className="stats stats-4 hero-stats">
+            <Stat label="Total workers" value={<CountUp value={k.total} />} trend={trend?.total} icon="users" onClick={() => nav('/workers')} />
+            <Stat label="Active / working" value={<CountUp value={k.active} />} trend={trend?.active} icon="check" tone="green" onClick={() => nav('/workers?status=Active-Working')} />
+            <Stat label="On leave" value={<CountUp value={k.leave} />} trend={trend?.leave} icon="plane" tone="blue" onClick={() => nav('/workers?status=__leave')} />
+            <Stat label="Expired docs" value={<CountUp value={k.expired} />} trend={trend?.expired} icon="alert" tone="red" onClick={() => nav('/alerts?sev=critical')} />
+          </div>}
+        </section>
         <Tabs tabs={tabIds.map((id) => ({ id, label: labels[id], badge: id === 'requests' ? actionN : id === 'expiries' ? expiringN : undefined }))} value={tab} onChange={setTab} />
         <div role="tabpanel" className="page dash-panel">
           {tab === 'overview' && <>
-            <Priorities alerts={alerts} workers={workers} outlets={outlets} extra={extra} />
-            <div className="stats stats-4">
-              <Stat label="Total workers" value={k.total} icon="users" onClick={() => nav('/workers')} />
-              <Stat label="Active / working" value={k.active} icon="check" tone="green" onClick={() => nav('/workers?status=Active-Working')} />
-              <Stat label="On leave" value={k.leave} icon="plane" tone="blue" onClick={() => nav('/workers?status=__leave')} />
-              <Stat label="Expired docs" value={k.expired} icon="alert" tone="red" onClick={() => nav('/alerts?sev=critical')} />
-            </div>
-            {canWrite && k.noLang > 0 && (
-              <div className="banner amber small datagap" role="status">
-                <span>🗣️ <strong>Data gap:</strong> {k.noLang} current worker{k.noLang === 1 ? ' has' : 's have'} no primary language yet. It is needed for the passport consent form in the worker's own language.</span>
-                <span><Btn small onClick={() => nav('/workers?gap=lang&status=__current')}>Review {k.noLang === 1 ? 'worker' : 'workers'}</Btn></span>
-              </div>
-            )}
-            <div className="quick">
-              {canWrite && <button onClick={() => nav('/workers/new')}><span>➕</span>Add worker</button>}
-              <button onClick={() => nav('/requests/new')}><span>📝</span>New request</button>
-              <button onClick={() => nav('/alerts')}><span>🔔</span>Alerts</button>
-              <button onClick={() => nav('/reports?r=expiry')}><span>📄</span>Expiry report</button>
-              <button onClick={() => nav('/reports?r=tickets')}><span>✈️</span>Flight tickets</button>
-              <button onClick={() => nav('/reports?r=passport')}><span>🛂</span>Passport register</button>
-            </div>
+            <NextSteps counts={{ mine: mineN, ceo: ceoN, users: newUsers.length, expiring: k.expired + k.d30, noLang: canWrite ? k.noLang : 0 }}
+              extra={<div className="nx-short small"><span className="muted">Shortcuts:</span>
+                {canWrite && <button className="chip chip-gray" onClick={() => nav('/workers/new')}>➕ Add worker</button>}
+                <button className="chip chip-gray" onClick={() => nav('/requests/new')}>📝 New request</button>
+                <button className="chip chip-gray" onClick={() => nav('/reports?r=expiry')}>📄 Expiry report</button>
+                <button className="chip chip-gray" onClick={() => nav('/reports?r=tickets')}>✈️ Flight tickets</button>
+                <button className="chip chip-gray" onClick={() => nav('/reports?r=passport')}>🛂 Passport register</button></div>} />
+            <Priorities alerts={alerts} workers={workers} outlets={outlets} extra={NO_EXTRA} />
           </>}
           {tab === 'expiries' && <>
             <div className="stats stats-4">

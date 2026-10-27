@@ -15,7 +15,7 @@ export function platformLabel(): string {
   return isAppleMobile() ? 'Web app (iPhone / iPad)' : 'Web app'
 }
 
-export const APP_VERSION = '1.5.1'
+export const APP_VERSION = '1.6.0'
 export { APP_PUBLIC_URL } from './appUrl'
 export const ANDROID_APK_URL = 'https://github.com/moulisankar999/foreign-worker-manager/releases/latest/download/FW-Manager.apk'
 

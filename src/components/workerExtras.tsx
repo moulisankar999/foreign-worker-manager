@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { Btn, Card, Chip, Empty, FormModal, KV } from './ui'
+import { Btn, Card, Chip, Empty, FormModal, KV, Skeleton } from './ui'
 import { UploadDoc } from './vault'
 import { useAuth } from '../lib/auth'
 import { useConfig } from '../lib/config'
@@ -181,7 +181,7 @@ export function WorkerRequests({ w }: { w: Worker }) {
   const { rows, loading } = useRequests({ workerId: w.id })
   return (
     <Card title={`Requests (${rows.filter((r) => OPEN_STATUSES.includes(r.status)).length} open)`} actions={canRequest && <Btn small kind="primary" icon="plus" onClick={() => nav(`/requests/new?worker=${w.id}`)}>New request</Btn>}>
-      {loading && !rows.length ? <p className="muted">Loading…</p> : rows.length === 0 ? <Empty title="No requests for this worker" /> : (
+      {loading && !rows.length ? <Skeleton /> : rows.length === 0 ? <Empty title="No requests for this worker" /> : (
         <DataTable label="Requests of this worker" rows={rows} rowKey={(r) => r.id} initialSort={{ key: 'at', dir: 'desc' }}
           columns={[
             { key: 't', label: 'Request', main: true, sort: (r) => REQUEST_TYPE[r.type]?.label || r.type, render: (r) => <span className="dt-person"><span className="req-ic" aria-hidden>{REQUEST_TYPE[r.type]?.icon}</span><span><Link className="dt-link" to={`/requests/${r.id}`}>{REQUEST_TYPE[r.type]?.label || r.type}</Link><small>{refNo(r)}</small></span></span> },
