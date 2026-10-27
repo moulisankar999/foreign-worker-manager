@@ -11,7 +11,7 @@ import type { Block } from '../../reports/types'
 import { download, fmtDate, todayISO } from '../../lib/util'
 import { addMonths } from '../../lib/util'
 import { inCompany, CLAIM_STATUS, EXIT_KIND, fileBytes, qcall, useQuota, type Claim } from '../../lib/quota'
-import { FileField, FileLink, NoteAsk, QForm, s, useQCtx, useSheetMeta, type V } from './shared'
+import { FileField, FileLink, NoteAsk, QForm, s, useQCtx, useSheetMeta, type V, fileCount } from './shared'
 
 export function ClaimsTab({ company }: { company: string }) {
   const ctx = useQCtx()
@@ -28,7 +28,7 @@ export function ClaimsTab({ company }: { company: string }) {
     <div className="qr-grid">
       <div className="note-box">Replacement quota (gantian) is opened by the government from time to time — the most recent window ran 19 Jan – 31 Mar 2026. Keep every COM here; when a window opens, select the eligible ones, print the pack and submit. <b>{elig.length}</b> COM(s) are eligible and not yet claimed.</div>
       <Card title="Replacement claims" actions={ctx.isHraUp && <Btn kind="primary" icon="plus" small disabled={!elig.length} onClick={() => setForm({ company_id: company || elig[0]?.company_id, title: `Replacement claim ${todayISO().slice(0, 7)}`, exit_ids: [] })}>New claim</Btn>}>
-        <DataTable label="Replacement claims" rows={rows} rowKey={(c) => c.id} initialSort={{ key: 'n', dir: 'desc' }}
+        <DataTable clip={(c) => fileCount(d.files, c.pack_file)} label="Replacement claims" rows={rows} rowKey={(c) => c.id} initialSort={{ key: 'n', dir: 'desc' }}
           columns={[
             { key: 'n', label: 'Claim', main: true, render: (c) => <><b>C-{c.ref_no}</b> {c.title}<br /><small className="muted">{ctx.cName(c.company_id)}</small></>, sort: (c) => c.ref_no },
             { key: 'k', label: 'COMs', align: 'right', render: (c) => `${items(c).filter((r) => !r.i.released || r.i.approved).length}${c.approved_count != null ? ` · ${c.approved_count} approved` : ''}` },

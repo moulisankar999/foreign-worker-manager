@@ -1,3 +1,4 @@
+import { AttachViewer } from './components/attach'
 import { Toaster } from './components/toast'
 import { useEffect, useState } from 'react'
 import { NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
@@ -214,6 +215,7 @@ function MainApp() {
           </Routes>
         </main>
         <Toaster />
+        <AttachViewer />
       </div>
       <nav className="bottom" aria-label="Main mobile">
         {TABS.map((n) => (

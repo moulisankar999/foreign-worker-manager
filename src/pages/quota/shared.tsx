@@ -1,4 +1,5 @@
 /* Shared bits for the Approval & Recruitment pages. */
+import { AttachButton, quotaSrc } from '../../components/attach'
 import { useMemo, useState, type ReactNode } from 'react'
 import { Btn, Chip, FormGrid, Modal, type FieldDef } from '../../components/ui'
 import { FilePick } from '../../components/filePick'
@@ -8,7 +9,7 @@ import { useConfig } from '../../lib/config'
 import { companyLogo, useLogoUrl } from '../../lib/logos'
 import { isSampleCompany, outletCompany } from '../../lib/companies'
 import { useOutlets } from '../../lib/hooks'
-import { fileUrl, qRank, uploadQuotaFile, urLabel, useQuota, whoLabel, type QFile, type UseReq } from '../../lib/quota'
+import { qRank, uploadQuotaFile, urLabel, useQuota, whoLabel, type QFile, type UseReq } from '../../lib/quota'
 import { ROLE_LABEL } from '../../lib/workflow'
 import { mytStamp } from '../../reports/format'
 import type { SheetMeta } from '../../reports/Sheets'
@@ -102,9 +103,16 @@ export function FileField({ company, kind, value, onChange, label = 'Scanned cop
     </div>
   )
 }
-export function FileLink({ f, label }: { f?: QFile | null; label?: string }) {
+/** v1.6.1: a stored file shows as a clear button (icon / thumbnail · name · View) opening the private viewer */
+export function FileLink({ f, label, compact = true }: { f?: QFile | null; label?: string; compact?: boolean }) {
   if (!f) return <span className="muted">—</span>
-  return <a href="#" onClick={async (e) => { e.preventDefault(); await run(async () => window.open(await fileUrl(f), '_blank', 'noopener')) }}>{label || f.name || 'file'}</a>
+  const l = (label || '').replace(/^📎\s*/, '').trim()
+  const nice = !l || /^(copy|file)$/i.test(l) ? undefined : l[0].toUpperCase() + l.slice(1)
+  return <AttachButton src={quotaSrc(f)} label={nice} compact={compact} />
+}
+/** how many of these file ids the user can actually open (files their role can't list are never counted) */
+export function fileCount(files: QFile[], ...xs: (string | null | undefined | (string | null | undefined)[])[]) {
+  return xs.flat().filter((x) => x && files.some((f) => f.id === x)).length
 }
 
 /** A4 sheet header details for this module's printouts */

@@ -1,3 +1,4 @@
+import { AttachButton, ClipBadge, docSrc } from './attach'
 import { useMemo, useRef, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { Btn, Card, Chip, Empty, Modal, Toolbar, SelectFilter, Skeleton } from './ui'
@@ -31,7 +32,7 @@ export function useCategories() {
 const docKind = (d: DocRow) => (d.mime === 'application/pdf' ? `PDF${d.pages && d.pages > 1 ? `, ${d.pages} pages` : ''}` : 'Photo')
 
 /** Icon actions for one document: preview, download, share, older versions, edit details (remove lives inside Edit, with its confirm). */
-export function DocActions({ d }: { d: DocRow }) {
+export function DocActions({ d, noPreview }: { d: DocRow; noPreview?: boolean }) {
   const { canWrite } = useAuth()
   const [vers, setVers] = useState<DocRow[] | null>(null)
   const [edit, setEdit] = useState(false)
@@ -39,7 +40,7 @@ export function DocActions({ d }: { d: DocRow }) {
   const act = (f: () => Promise<unknown>) => () => { setBusy(true); void run(f).finally(() => setBusy(false)) }
   return (
     <Actions>
-      <IconAction kind="view" label="Preview" disabled={busy} onClick={act(() => openDoc(d))} />
+      {!noPreview && <IconAction kind="view" label="Preview" disabled={busy} onClick={act(() => openDoc(d))} />}
       <IconAction kind="download" label="Download" disabled={busy} onClick={act(() => downloadDoc(d))} />
       <IconAction kind="send" label="Share" disabled={busy} onClick={act(() => shareDoc(d))} />
       {d.version > 1 && <IconAction kind="more" label="Older versions" onClick={() => void docVersions(d.group_id).then(setVers)} />}
@@ -69,13 +70,14 @@ export function DocTable({ docs, workerName, label = 'Documents' }: { docs: DocR
       filters={!workerName && cats.length > 1 ? [{ key: 'cat', label: 'Category', options: cats, match: (d, v) => d.category === v }] : undefined}
       rowClass={(d) => { const n = daysTo(d.expiry_date); return n === null ? '' : n < 0 ? 'dt-bad' : n <= 60 ? 'dt-warn' : '' }}
       columns={[
-        { key: 'title', label: 'Document', main: true, sort: (d) => (d.title || d.file_name || '').toLowerCase(), render: (d) => <>{d.title || d.file_name}<small>{d.category}{d.doc_no ? ` · ${d.doc_no}` : ''}</small></> },
+        { key: 'title', label: 'Document', main: true, sort: (d) => (d.title || d.file_name || '').toLowerCase(), render: (d) => <><span className="dt-p-show att-float"><AttachButton src={docSrc(d)} compact mini /></span>{d.title || d.file_name}<small>{d.category}{d.doc_no ? ` · ${d.doc_no}` : ''}</small></> },
+        { key: 'file', label: 'File', hide: 'phone', render: (d) => <AttachButton src={docSrc(d)} compact /> },
         ...(workerName ? [{ key: 'w', label: 'Worker', hide: 'phone' as const, sort: (d: DocRow) => workerName(d.worker_id), render: (d: DocRow) => <Link className="dt-link" to={`/workers/${d.worker_id}?tab=vault`}>{workerName(d.worker_id)}</Link> }] : []),
         { key: 'exp', label: 'Expiry', sort: (d) => d.expiry_date || '9999', render: (d) => expiryChip(d.expiry_date) || <span className="muted">—</span> },
         { key: 'up', label: 'Uploaded', hide: 'tablet', sort: (d) => d.uploaded_at, render: (d) => <span className="small">{fmtDate(d.uploaded_at.slice(0, 10))}<small>{d.uploaded_by_name || ''}</small></span> },
         { key: 'ver', label: 'Ver.', hide: 'tablet', align: 'center', sort: (d) => d.version, render: (d) => `v${d.version}` },
       ]}
-      actions={(d) => <DocActions d={d} />}
+      actions={(d) => <DocActions d={d} noPreview />}
       expand={(d) => (
         <>
           <Details items={[
@@ -191,7 +193,7 @@ export function VaultPanel({ workerId }: { workerId: string }) {
   const cats = [...new Set(docs.map((d) => d.category))].sort()
   const shown = cat ? docs.filter((d) => d.category === cat) : docs
   return (
-    <Card title={`Document vault (${docs.length})`} actions={(canWrite || isOM) && <Btn small kind="primary" icon="plus" onClick={() => setUp({})}>Add / scan</Btn>}>
+    <Card title={<>Document vault ({docs.length})<ClipBadge n={docs.length} /></>} actions={(canWrite || isOM) && <Btn small kind="primary" icon="plus" onClick={() => setUp({})}>Add / scan</Btn>}>
       {cats.length > 1 && <Toolbar><SelectFilter label="Category" value={cat} onChange={setCat} options={[{ value: '', label: 'All categories' }, ...cats]} /></Toolbar>}
       {error && <p className="warn small">{error}</p>}
       {loading ? <Skeleton /> : shown.length === 0 ? <Empty title="No documents in the vault yet"><p className="muted small">Scan passport, permit, FOMEMA, contract, tickets… with the phone camera.</p></Empty> : (

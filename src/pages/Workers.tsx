@@ -1,3 +1,5 @@
+import { ClipBadge } from '../components/attach'
+import { useDocCounts } from '../lib/vault'
 import { useMemo, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../lib/db'
@@ -45,6 +47,7 @@ export default function Workers() {
   const nat = sp.get('nat') || ''
   const gap = sp.get('gap') || ''
   const { canWrite } = useAuth()
+  const { byWorker } = useDocCounts()
   const set = (k: string, v: string) => { const n = new URLSearchParams(sp); if (v) n.set(k, v); else n.delete(k); setSp(n, { replace: true }) }
 
   const list = useMemo(() => {
@@ -79,7 +82,7 @@ export default function Workers() {
           rowClass={(w) => (!completeness(w, outlets).complete ? 'dt-warn' : '')}
           columns={[
             { key: 'name', label: 'Worker', main: true, sort: (w) => w.fullName.toLowerCase(),
-              render: (w) => <span className="dt-person"><Avatar name={w.fullName} photo={w.photo} size={34} /><span><Link to={`/workers/${w.id}`} className="dt-link">{w.fullName}</Link><small>{w.workerNo}{!completeness(w, outlets).complete ? ' · Draft' : ''}</small></span></span> },
+              render: (w) => <span className="dt-person"><Avatar name={w.fullName} photo={w.photo} size={34} /><span><Link to={`/workers/${w.id}`} className="dt-link">{w.fullName}</Link><ClipBadge n={(byWorker.get(w.id) || 0) + (canWrite ? w.documents.filter((d) => d.attachment).length : 0)} /><small>{w.workerNo}{!completeness(w, outlets).complete ? ' · Draft' : ''}</small></span></span> },
             { key: 'id', label: 'Worker ID', hide: 'tablet', sort: (w) => w.workerNo, render: (w) => w.workerNo },
             { key: 'status', label: 'Status', sort: (w) => w.status, render: (w) => <Chip tone={statusTone(w.status)}>{w.status}</Chip> },
             { key: 'outlet', label: 'Outlet', hide: 'phone', sort: (w) => outletName(outlets, w.outletId), render: (w) => outletName(outlets, w.outletId) },

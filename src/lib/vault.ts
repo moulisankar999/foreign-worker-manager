@@ -127,6 +127,31 @@ function ensureLive() {
   if (ch) return
   ch = supabase.channel('documents-live').on('postgres_changes', { event: '*', schema: 'public', table: 'documents' }, () => docsChanged()).subscribe()
 }
+/** v1.6.1: how many current files each worker / request holds — only rows this user's role may list (row-level security) */
+let countCache: { t: number; at: number; w: Map<string, number>; r: Map<string, number> } | null = null
+let countReq: Promise<void> | null = null
+export function useDocCounts(): { byWorker: Map<string, number>; byRequest: Map<string, number> } {
+  const [t, setT] = useState(tick)
+  const [, force] = useState(0)
+  useEffect(() => { ensureLive(); const f2 = () => setT(tick); subs.add(f2); return () => { subs.delete(f2) } }, [])
+  useEffect(() => {
+    if (countCache && countCache.t === t && Date.now() - countCache.at < 60e3) return
+    let alive = true
+    countReq ||= (async () => {
+      const { data } = await supabase.from('documents').select('worker_id,request_id').eq('deleted', false).eq('is_current', true).limit(5000)
+      const w = new Map<string, number>(); const r = new Map<string, number>()
+      for (const x of (data || []) as { worker_id: string; request_id: string | null }[]) {
+        w.set(x.worker_id, (w.get(x.worker_id) || 0) + 1)
+        if (x.request_id) r.set(x.request_id, (r.get(x.request_id) || 0) + 1)
+      }
+      countCache = { t, at: Date.now(), w, r }
+    })().finally(() => { countReq = null })
+    void countReq.then(() => alive && force((n) => n + 1))
+    return () => { alive = false }
+  }, [t])
+  return { byWorker: countCache?.w || EMPTY_MAP, byRequest: countCache?.r || EMPTY_MAP }
+}
+const EMPTY_MAP = new Map<string, number>()
 export interface DocFilter { workerId?: string; requestId?: string; category?: string; all?: boolean; includeOld?: boolean }
 export function useDocs(f: DocFilter): { docs: DocRow[]; loading: boolean; error: string; reload: () => void } {
   const [state, setState] = useState<{ docs: DocRow[]; loading: boolean; error: string }>({ docs: [], loading: true, error: '' })

@@ -3,6 +3,7 @@
  * Sortable headers, optional search + filters for long lists, header sticks under the top bar while the page scrolls.
  * Long lists are split into pages (v1.5.1) so a list never grows into an endless scroll.
  * Phones get fewer columns (hide: 'phone') and the row actions move into the opened row, so nothing scrolls sideways. */
+import { ClipBadge } from './attach'
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Icon } from './Icon'
 
@@ -49,8 +50,10 @@ const isInteractive = (t: EventTarget | null, stop: HTMLElement) => {
 
 export function DataTable<T>({
   rows, rowKey, columns, expand, actions, search, searchLabel = 'Search', filters, initialSort, empty, rowClass, rowTestId, rowId,
-  label, className, searchFrom = 8, pageSize = 15, open: openReq, onOpenChange, dense, canExpand,
+  label, className, searchFrom = 8, pageSize = 15, open: openReq, onOpenChange, dense, canExpand, clip,
 }: {
+  /** v1.6.1: number of files the user can open on this row → paperclip badge in the main cell (nothing when 0) */
+  clip?: (r: T) => number
   rows: T[]
   rowKey: (r: T) => string
   columns: Column<T>[]
@@ -177,7 +180,7 @@ export function DataTable<T>({
                   <tr id={rowId?.(r)} data-testid={rowTestId?.(r)} data-key={k}
                     className={`dt-r${ex ? ' dt-click' : ''}${isOpen ? ' dt-open' : ''}${rowClass ? ' ' + rowClass(r) : ''}`}
                     onClick={ex ? (e) => { if (!isInteractive(e.target, e.currentTarget)) toggle(k) } : undefined}>
-                    {columns.map((c) => <td key={c.key} className={`${hideCls(c)}${c.align ? ' dt-' + c.align : ''}${c.main ? ' dt-main' : ''}`.trim() || undefined}>{c.render(r)}</td>)}
+                    {columns.map((c) => <td key={c.key} className={`${hideCls(c)}${c.align ? ' dt-' + c.align : ''}${c.main ? ' dt-main' : ''}`.trim() || undefined}>{c.render(r)}{c.main && clip ? <ClipBadge n={clip(r)} /> : null}</td>)}
                     {actions && <td className="dt-h-phone dt-act">{act}</td>}
                     {hasExpand && !ex && <td className="dt-chev" />}
                     {ex && (

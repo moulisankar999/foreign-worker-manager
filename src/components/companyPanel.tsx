@@ -1,6 +1,7 @@
 /* v1.4.2: "Add company" side panel — opened from the approval-letter form, Settings › Companies and the company picker.
  * One call to the server (company_create) saves the company, its details, SSM copies and directors; the new company
  * is handed back so the caller can select it at once. Sections fold so the panel fits one screen. */
+import { AttachButton, ClipBadge, companySrc } from './attach'
 import { useEffect, useState, type ReactNode } from 'react'
 import { companyDup } from '../lib/smartForm'
 import { Btn } from './ui'
@@ -96,8 +97,8 @@ export function CompanyPanel({ onClose, onCreated }: { onClose: () => void; onCr
               {inp('email', 'Email', { type: 'email', placeholder: 'office@company.com.my' })}
             </div>
           </Fold>
-          <Fold title="SSM documents" sub={docs.length ? `${docs.length} attached` : 'Form 9 / 24 / 49, e-Info, profile'}>
-            {docs.length > 0 && <ul className="co-list">{docs.map((d, i) => <li key={d.path}><span><b>{docTypeLabel(d.doc_type)}</b><small className="muted"> · {d.name}{d.expiry_date ? ` · expires ${d.expiry_date}` : ''}</small></span>
+          <Fold title={<>SSM documents<ClipBadge n={docs.length} /></>} sub={docs.length ? `${docs.length} attached` : 'Form 9 / 24 / 49, e-Info, profile'}>
+            {docs.length > 0 && <ul className="co-list">{docs.map((d, i) => <li key={d.path}><AttachButton src={companySrc(d.path, d.name)} label={docTypeLabel(d.doc_type) + (d.expiry_date ? ` · expires ${d.expiry_date}` : '')} compact />
               <IconAction kind="delete" label="Remove this attachment" onClick={() => setDocs((l) => l.filter((_, j) => j !== i))} /></li>)}</ul>}
             <div className="qr-form2">
               <label className="field"><span className="qr-lbl">Type</span><select value={docType} onChange={(e) => setDocType(e.target.value)}>{SSM_DOC_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}</select></label>
