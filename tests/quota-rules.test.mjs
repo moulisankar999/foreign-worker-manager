@@ -53,6 +53,25 @@ try {
   check('compliant letter under v2 is accepted', !r.error, err(r)); const Q = r.data
   await U.gm.c.rpc('qr_open_quota', { p_id: Q, p_ok: true, p_note: 'checked' })
 
+  // ---- t204u: who may open a quota (KDN) letter — HR Admin, HR Manager, GM, CEO; the recorder may open it too
+  await mk('om', 'outlet_manager', [A]); await mk('vw', 'viewer', [A])
+  const letter = async (who, n) => (await U[who].c.rpc('qr_save_quota', { p: { company_id: A, ref_no: `KDN/${stamp}/open-${n}`, approval_date: today, expiry_date: '2027-12-31', sector: SEC, breakdown: { [LAND]: 1 } } })).data
+  const opened = async (id) => (await admin.from('qr_quotas').select('status, created_by, opened_by, created_by_name, opened_by_name').eq('id', id).single()).data
+  let L = await letter('hra', 1); r = await U.hra.c.rpc('qr_open_quota', { p_id: L, p_ok: true })
+  let o = await opened(L); check('HR Admin opens a letter they recorded themselves', !r.error && o?.status === 'active' && o.opened_by === U.hra.id && o.created_by === U.hra.id, err(r))
+  L = await letter('hrm', 2); r = await U.hrm.c.rpc('qr_open_quota', { p_id: L, p_ok: true })
+  o = await opened(L); check('HR Manager opens a letter they recorded themselves', !r.error && o?.status === 'active' && o.opened_by === U.hrm.id, err(r))
+  L = await letter('hrm', 3); r = await U.hra.c.rpc('qr_open_quota', { p_id: L, p_ok: true }); check('HR Admin opens a letter HR Manager recorded', !r.error, err(r))
+  L = await letter('gm', 4); r = await U.gm.c.rpc('qr_open_quota', { p_id: L, p_ok: true }); check('GM opens a letter they recorded', !r.error, err(r))
+  L = await letter('ceo', 5); r = await U.ceo.c.rpc('qr_open_quota', { p_id: L, p_ok: true }); check('CEO opens a letter they recorded', !r.error, err(r))
+  L = await letter('hrm', 6)
+  r = await U.om.c.rpc('qr_open_quota', { p_id: L, p_ok: true }); check('Outlet manager cannot open a letter', !!r.error && (await opened(L))?.status === 'pending', err(r))
+  r = await U.vw.c.rpc('qr_open_quota', { p_id: L, p_ok: true }); check('Viewer cannot open a letter', !!r.error && (await opened(L))?.status === 'pending', err(r))
+  r = await U.hrm.c.rpc('qr_open_quota', { p_id: L, p_ok: false, p_note: 'wrong copy' }); check('HR Manager can also reject (not open) a letter', !r.error && (await opened(L))?.status === 'rejected', err(r))
+  const au2 = (await admin.from('audit_log').select('action, user_id, details, summary').eq('entity', 'quota').like('summary', `%KDN/${stamp}/open-2%`)).data || []
+  const ao = au2.find((x) => x.action === 'qr_quota_open'), aa = au2.find((x) => x.action === 'qr_quota_add')
+  check('audit keeps who recorded and who opened', !!ao && !!aa && aa.user_id === U.hrm.id && ao.user_id === U.hrm.id && ao.details?.recorded_by === U.hrm.id && /recorded by HRM/.test(ao.summary), JSON.stringify(au2))
+
   // ---- maker-checker on rules
   r = await propose('hra', { key: 'sector_rules', scope: SEC + 'b', value: { mode: 'warn' }, effective_from: today, source_ref: 'HR proposal' }); const P1 = r.data
   check('HR Admin proposes a rule change → waiting for the CEO', !r.error && (await admin.from('qr_reg_rules').select('status').eq('id', P1).single()).data?.status === 'pending', err(r))

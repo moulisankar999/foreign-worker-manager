@@ -995,3 +995,18 @@ input.is-fixed { background: var(--soft, #f1f5f9); color: var(--text); font-weig
 /* 1.6.3: on phone the worker card's sub-line also names the company (the Company / outlet column is hidden there) */
 .dt-co-ph { display: none; }
 @container (max-width: 520px) { .dt-co-ph { display: inline; } }
+
+/* 1.6.4 permit company: colour for the CEO only (non-CEO get a plain .pc) */
+.pc-ok{color:#15803d;font-weight:600}
+.pc-bad{color:#dc2626;font-weight:700}
+.pc-unknown{color:#6b7280;font-style:italic}
+.co-cell small .pc{font-size:inherit}
+.pc-kpis{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px;margin:8px 0}
+.pc-kpi{background:var(--card,#fff);border:1px solid var(--line,#e5e7eb);border-radius:10px;padding:10px;text-align:center}
+.pc-kpi b{display:block;font-size:22px}
+.pc-kpi span{font-size:12px;color:#6b7280}
+.pc-kpi.ok b{color:#15803d}.pc-kpi.bad b{color:#dc2626}.pc-kpi.unk b{color:#6b7280}
+.pc-risks{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}
+.pc-groups{display:grid;gap:8px}
+.pc-page .card{margin-bottom:0}
+@media (max-width:600px){.pc-kpis{grid-template-columns:repeat(3,minmax(0,1fr))}.pc-kpi b{font-size:18px}}

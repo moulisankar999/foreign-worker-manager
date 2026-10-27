@@ -7,6 +7,7 @@ import { CheckStatusPanel } from '../components/agencies'
 import { PassportPanel, RemarksPanel, WorkerRequests } from '../components/workerExtras'
 import { AppAccessPanel } from '../components/appAccess'
 import { useAuth } from '../lib/auth'
+import { PermitCo } from '../components/permit'
 import { CONSENT_LABEL, CONSENT_TONE, consentOf, overdueDays } from '../lib/passport'
 import { Avatar, Btn, Card, Chip, Empty, FormModal, KV, Tabs, docTone, sevTone, statusTone, Skeleton } from '../components/ui'
 import { ContractTab, DocumentsTab, FamilyTab, LeaveTab, LoansTab, MemoEditor, MemosTab, NotesTab, PayTab, setStatus } from '../components/sections'
@@ -89,6 +90,7 @@ export default function WorkerDetail() {
             <h2 className="row gap-s">{w.fullName}<LogoImg path={outletLogo(outlets.find((o) => o.id === w.outletId))} size={28} fallback={false} /></h2>
             <p className="muted">{w.workerNo} · {w.nationality} · {w.jobCategory || '—'} ({w.skillLevel || '—'})</p>
             <p className="muted" data-testid="wd-company"><b className="co-name">{outletCompanyName(cos, outlets, w.outletId) || 'No company'}</b> · {outletName(outlets, w.outletId)} · {w.businessType || '—'} · {serviceText(w.joinDate, w.exitDate)} service</p>
+            <p className="muted" data-testid="wd-permit">Permit company: <PermitCo w={w} /></p>
             <div className="row gap-s wrap mt-s">
               {canWrite ? <button className="chip-btn" onClick={() => setStatusEdit(true)} aria-label="Change status"><Chip tone={statusTone(w.status)}>{w.status} ▾</Chip></button> : <Chip tone={statusTone(w.status)}>{w.status}</Chip>}
               {consent !== 'signed' && <button className="chip-btn" onClick={() => setTab('passport')}><Chip tone={CONSENT_TONE[consent]}>🛂 {CONSENT_LABEL[consent]}</Chip></button>}

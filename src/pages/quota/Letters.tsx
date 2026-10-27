@@ -63,7 +63,7 @@ export function LettersTab({ company }: { company: string }) {
         <DataTable clip={(q) => fileCount(d.files, q.letter_file, q.levy_file)} label="Approval letters" rows={quotas} rowKey={(q) => q.id} pageSize={8}
           initialSort={{ key: 'appr', dir: 'desc' }}
           columns={[
-            { key: 'ref', label: 'Letter', main: true, render: (q) => <><b>{q.ref_no}</b> <Chip tone={ST_TONE[q.status]}>{q.status === 'pending' ? (ctx.isCeo ? 'Waiting for GM / CEO' : 'Waiting to be opened') : q.status}</Chip><br /><small className="muted">{ctx.cName(q.company_id)} · {KIND_LABEL[q.kind]}</small></>, sort: (q) => q.ref_no },
+            { key: 'ref', label: 'Letter', main: true, render: (q) => <><b>{q.ref_no}</b> <Chip tone={ST_TONE[q.status]}>{q.status === 'pending' ? 'Waiting to be opened' : q.status}</Chip><br /><small className="muted">{ctx.cName(q.company_id)} · {KIND_LABEL[q.kind]}</small></>, sort: (q) => q.ref_no },
             { key: 'bd', label: 'Approved', render: (q) => Object.entries(q.breakdown || {}).map(([c, v]) => `${c} ${v}`).join(', ') },
             { key: 'bal', label: 'Available', align: 'right', render: (q) => tallyOf(q).reduce((a, t) => a + t.available, 0), sort: (q) => tallyOf(q).reduce((a, t) => a + t.available, 0) },
             { key: 'appr', label: 'Approved on', hide: 'tablet', render: (q) => fmtDate(q.approval_date), sort: (q) => q.approval_date },
@@ -73,13 +73,13 @@ export function LettersTab({ company }: { company: string }) {
             {q.status !== 'rejected' && <QuotaAppChecklist q={q} />}
             <Details items={[['Sector', [q.sector, q.subsector].filter(Boolean).join(' / ') || '—'], ['Job title', q.job_title || '—'], ['Section 60K', [q.section60k_ref, q.section60k_expiry && `exp ${fmtDate(q.section60k_expiry)}`].filter(Boolean).join(' · ') || '—'],
               ['Conditions', q.conditions || '—'], ['Levy', q.levy_note || '—'], ['Letter copy', <FileLink key="f" f={d.files.find((f) => f.id === q.letter_file)} />],
-              ['Recorded by', `${ctx.who(q.created_by_name, null)} · ${atMyt(q.created_at)}`], ['Opened by', q.opened_at ? `${ctx.isGmUp ? q.opened_by_name : 'Approver'} · ${atMyt(q.opened_at)}` : '—'],
+              ['Recorded by', `${ctx.who(q.created_by_name, null)} · ${atMyt(q.created_at)}`], ['Opened by', q.opened_at ? `${ctx.who(q.opened_by_name, null)} · ${atMyt(q.opened_at)}` : '—'],
               ['Extensions', q.extensions?.length ? q.extensions.map((x) => `${fmtDate(x.from)} → ${fmtDate(x.to)} (${x.ref})`).join('; ') : '—'], ['Notes', q.notes || '—']]} />
             {tallyOf(q).length > 0 && <KV items={tallyOf(q).map((t) => [t.country, `approved ${t.approved} · available ${t.available} · reserved ${t.reserved} · used ${t.used} · lapsed ${t.lapsed}`])} />}
           </>}
           actions={(q) => <Actions>
             <IconAction kind="view" label="Show this letter's ledger" onClick={() => setSp({ tab: 'letters', q: q.id }, { replace: true })} />
-            {q.status === 'pending' && ctx.isGmUp && q.created_by !== ctx.profile?.id && <>
+            {q.status === 'pending' && ctx.canOpenLetter && <>
               <IconAction kind="approve" label="Checked against the original — open the letter (posts the approved slots)" onClick={() => setDecide({ q, ok: true })} />
               <IconAction kind="reject" label="Do not open this letter" onClick={() => setDecide({ q, ok: false })} />
             </>}

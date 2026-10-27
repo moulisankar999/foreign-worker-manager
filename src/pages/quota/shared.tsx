@@ -33,7 +33,9 @@ export function useQCtx() {
     .filter((c) => unscoped || auth.myCompanies.includes(c.id) || outletCos.has(c.id))
   const cName = (id?: string | null) => cfg.companies.items.find((c) => c.id === id)?.name || id || ''
   const who = (name?: string | null, role?: string | null) => whoLabel(name, role, rank)
-  return { ...auth, cfg, rank, companies, cName, who, urLabel: (st: UseReq['status']) => urLabel(st, rank), isCeo: rank >= 4, isGmUp: rank >= 3, isHraUp: rank >= 2 }
+  return { ...auth, cfg, rank, companies, cName, who, urLabel: (st: UseReq['status']) => urLabel(st, rank), isCeo: rank >= 4, isGmUp: rank >= 3, isHraUp: rank >= 2,
+    // t204u: HR Admin, HR Manager, GM and CEO open quota letters (also ones they recorded themselves) — same rule as qr_open_quota (056)
+    canOpenLetter: ['super_admin', 'admin', 'general_manager', 'hr_admin', 'hr_manager'].includes(auth.role || '') }
 }
 export const canSeeQuota = (role?: string | null) => qRank(role) > 0
 

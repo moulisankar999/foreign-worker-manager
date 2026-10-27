@@ -366,11 +366,11 @@ export const atMyt = (iso?: string | null) => (iso ? new Date(iso).toLocaleStrin
 
 /** light list of open letters for the worker form (only fetched for quota roles) */
 export function useQuotaLetters(enabled: boolean) {
-  const [list, setList] = useState<{ id: string; ref_no: string; company_id: string }[]>([])
+  const [list, setList] = useState<{ id: string; ref_no: string; company_id: string; sector?: string | null; subsector?: string | null; job_title?: string | null }[]>([])
   useEffect(() => {
     if (!enabled) return
     let live = true
-    void supabase.from('qr_quotas').select('id, ref_no, company_id').in('status', ['active', 'closed']).order('approval_date', { ascending: false })
+    void supabase.from('qr_quotas').select('id, ref_no, company_id, sector, subsector, job_title').in('status', ['active', 'closed']).order('approval_date', { ascending: false })
       .then((r) => { if (live && !r.error) setList((r.data || []) as typeof list) })
     return () => { live = false }
   }, [enabled])

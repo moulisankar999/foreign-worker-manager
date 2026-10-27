@@ -18,6 +18,7 @@ export default function More() {
   const items: [string, string, string, string][] = [
     ...(!aiOff && (isSuper || ai?.enabled) ? [['/assistant', 'spark', 'Assistant', ai?.enabled ? 'Ask about workers, expiries, quota, requests and the app' : 'Not switched on yet'] as [string, string, string, string]] : []),
     ...(isSuper ? [['/ceo-review', 'lock', `CEO review${ceoN ? ` (${ceoN})` : ''}`, 'GM decisions & rejections — overrule, recall, mark reviewed'] as [string, string, string, string]] : []),
+    ...(isSuper ? [['/permit-compliance', 'shield', 'Permit compliance', 'Workers at an outlet of a different company than their KDN / permit — move plan & fix list'] as [string, string, string, string]] : []),
     ...(isSuper ? [['/control', 'shield', `Software Control${ctlN ? ` (${ctlN})` : ''}`, 'Health monitor, app errors, system map & renewals'] as [string, string, string, string]] : []),
     ...(qRank(role) > 0 ? [['/requests', 'check', 'Requests', 'Leave, passport, transfer and other requests — raise or decide'] as [string, string, string, string]] : []),
     ['/documents', 'doc', 'Document library', 'All scanned documents & expiries'],

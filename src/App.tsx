@@ -37,6 +37,7 @@ import { usePendingUsers } from './lib/userApprovals'
 import { IS_TEST_BUILD } from './lib/supabase'
 import { UserMenu } from './components/userMenu'
 import CeoReviewPage, { useCeoBadge } from './pages/CeoReview'
+import PermitCompliancePage from './pages/PermitCompliance'
 import CompliancePage from './pages/Compliance'
 import GrievancePublic from './pages/GrievancePublic'
 import ControlPage, { useControlBadge } from './pages/Control'
@@ -61,6 +62,7 @@ const NAV = [
   { to: '/compliance', label: 'Compliance', icon: 'shield', desk: true, hr: true },
   { to: '/quota', label: 'Approval & Recruitment', icon: 'plane', desk: true, quota: true },
   { to: '/ceo-review', label: 'CEO review', icon: 'lock', desk: true, ceo: true },
+  { to: '/permit-compliance', label: 'Permit compliance', icon: 'shield', desk: true, ceo: true },
   { to: '/control', label: 'Software Control', icon: 'shield', desk: true, ceo: true },
   { to: '/settings', label: 'Settings', icon: 'gear', desk: true },
   { to: '/help', label: 'Help', icon: 'help', desk: true },
@@ -205,6 +207,7 @@ function MainApp() {
             <Route path="/requests/new" element={<NewRequest />} />
             <Route path="/requests/:id" element={<RequestDetail />} />
             <Route path="/ceo-review" element={<CeoReviewPage />} />
+            <Route path="/permit-compliance" element={<PermitCompliancePage />} />
             <Route path="/compliance" element={<CompliancePage />} />
             {qRank(role) > 0 && <Route path="/quota" element={<QuotaPage />} />}
             {qRank(role) > 0 && <Route path="/quota/recruit/:id" element={<QuotaPage />} />}
@@ -222,7 +225,7 @@ function MainApp() {
       </div>
       <nav className="bottom" aria-label="Main mobile">
         {TABS.map((n) => (
-          <NavLink key={n.to} to={n.to} end={n.end} aria-label={n.label} className={({ isActive }) => (isActive || (n.to === '/' && loc.pathname.startsWith('/dashboard')) || (n.to === '/more' && /^\/(more|requests|settings|help|reports|documents|compliance|ceo-review|control|inbox|assistant)/.test(loc.pathname) && !TABS.some((t) => t.to !== '/more' && t.to !== '/' && loc.pathname.startsWith(t.to))) ? 'on' : '')}>
+          <NavLink key={n.to} to={n.to} end={n.end} aria-label={n.label} className={({ isActive }) => (isActive || (n.to === '/' && loc.pathname.startsWith('/dashboard')) || (n.to === '/more' && /^\/(more|requests|settings|help|reports|documents|compliance|permit-compliance|ceo-review|control|inbox|assistant)/.test(loc.pathname) && !TABS.some((t) => t.to !== '/more' && t.to !== '/' && loc.pathname.startsWith(t.to))) ? 'on' : '')}>
             <span className="bi">
               <Icon name={n.icon} size={22} />
               {tabBadge(n.to) > 0 && <span className="badge">{tabBadge(n.to)}</span>}

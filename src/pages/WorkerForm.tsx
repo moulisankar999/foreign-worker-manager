@@ -136,7 +136,8 @@ export default function WorkerForm() {
     { key: 'joinDate', label: 'Start date', type: 'date', required: true },
     ...(editing ? [] : [{ key: 'status', label: 'Employment status', type: 'select' as const, options: [...STATUSES] }]),
     { key: 'agent', label: 'Recruitment agent', full: true },
-    ...(letters.length ? [{ key: 'quotaId', label: 'Quota approval letter', type: 'select' as const, options: letters.map((l) => ({ value: l.id, label: l.ref_no })), hint: 'Counts this worker in the letter\'s tally (Approval & Recruitment)' }] : []),
+    { key: 'permitCompanyId', label: 'Permit company', type: 'select', options: [{ value: '', label: '— From the KDN letter —' }, ...cosAll.map((c) => ({ value: c.id, label: c.name }))], hint: 'Company holding his KDN approval and calling visa (may differ from the outlet\'s company). Blank = the KDN letter\'s company.' },
+    ...(letters.length ? [{ key: 'quotaId', label: 'KDN approval letter', type: 'select' as const, options: [{ value: '', label: '— None —' }, ...letters.filter((l) => !v.permitCompanyId || l.company_id === v.permitCompanyId || l.id === v.quotaId).map((l) => ({ value: l.id, label: [l.ref_no, companyName(cosAll, l.company_id), l.sector, l.job_title].filter(Boolean).join(' · ') }))], hint: 'Optional. Listed for the chosen permit company; counts this worker in the letter\'s tally (Approval & Recruitment)' }] : []),
   ]
   const contract: FieldDef[] = [
     { key: 'contractStart', label: 'Contract start', type: 'date' },
@@ -255,7 +256,7 @@ export default function WorkerForm() {
     if (dup && dup.id !== id) { setErr('Worker ID already exists'); setStep(0); return }
     const now = new Date().toISOString()
     const pick = (keys: string[]) => Object.fromEntries(keys.map((k) => [k, v[k] === '' ? undefined : v[k]]))
-    const base = { ...pick([...personal, ...job, ...contract, ...address].map((f) => f.key).filter((k) => !k.startsWith('nok_'))), ...languageFieldsOut(v),
+    const base = { ...pick([...personal, ...job, ...contract, ...address].map((f) => f.key).filter((k) => !k.startsWith('nok_') && !k.startsWith('_'))), ...languageFieldsOut(v),
       fullName: String(v.fullName).trim(), ...(isHr ? { remittance: (v.remittance as RemitRec[] | undefined) || [] } : {}) }
     const documents = docsFromV(v, orig?.documents || [])
     const nokPatch = v.nok_name ? { name: String(v.nok_name), relation: String(v.nok_relation || 'Other'), phone: v.nok_phone as string, address: v.nok_address as string } : null

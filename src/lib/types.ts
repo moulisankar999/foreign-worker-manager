@@ -120,6 +120,8 @@ export interface Worker {
   firstArrivalDate?: string
   permitEmployer?: string
   permitSector?: string
+  /** v1.6.4: company that holds this worker's KDN approval / calling visa (blank = from the KDN letter) */
+  permitCompanyId?: string
   /** hostel from the hostel register (Act 446) */
   hostelId?: string
   /** v1.4 Approval & Recruitment: approval letter this worker uses, and the recruit record he came from */

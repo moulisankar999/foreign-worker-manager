@@ -40,7 +40,7 @@ export default function QuotaPage() {
   const waiting = d.requests.filter((r) => canDecide(r, ctx.rank, ctx.profile?.id)).length
   const tabs: { id: TabId; label: string; badge?: number }[] = [
     { id: 'overview', label: 'Overview' },
-    { id: 'letters', label: 'Letters & ledger', badge: ctx.isGmUp ? d.quotas.filter((q) => q.status === 'pending').length : undefined },
+    { id: 'letters', label: 'Letters & ledger', badge: ctx.canOpenLetter ? d.quotas.filter((q) => q.status === 'pending').length : undefined },
     { id: 'approvals', label: 'Quota use approvals', badge: waiting || undefined },
     { id: 'pipeline', label: 'Pipeline' },
     { id: 'arrivals', label: 'Arrivals & hostel' },

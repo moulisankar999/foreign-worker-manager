@@ -12,6 +12,7 @@ import { ABSCOND_STEPS, CHECK, COST_TYPES, EXIT_STEPS, RECRUITMENT_COSTS, hostel
 import { zeroCostPdf } from '../lib/passport'
 import { zeroCostLanguage } from '../lib/zeroCostText'
 import { companyName, outletCompany } from '../lib/companies'
+import { KdnText, PermitCo } from './permit'
 import type { Worker } from '../lib/types'
 import { download, fmtDate, rm, todayISO, uid } from '../lib/util'
 import { DataTable, Details } from './dataTable'
@@ -54,6 +55,7 @@ function PermitCard({ w }: { w: Worker }) {
   const co = companyName(cfg.companies.items, outletCompany(outlets.find((o) => o.id === w.outletId)))
   const fields: FieldDef[] = [
     { key: 'firstArrivalDate', label: 'First arrival in Malaysia (for the 10-year limit)', type: 'date', hint: 'The first time this worker entered Malaysia on a work permit, with any employer. Blank = join date is used.' },
+    { key: 'permitCompanyId', label: 'Permit company', type: 'select', options: [{ value: '', label: '— From the KDN letter —' }, ...cfg.companies.items.map((c) => ({ value: c.id, label: c.name }))], hint: 'The company holding this worker\'s KDN approval and calling visa. Blank = the company of his KDN letter.' },
     { key: 'permitEmployer', label: 'Employer named on the work permit', placeholder: co, hint: 'As printed on the PLKS / VP(TE) sticker or i-Kad.' },
     { key: 'permitSector', label: 'Permit sector', type: 'select', options: ['', 'Services', 'Manufacturing', 'Construction', 'Plantation', 'Agriculture', 'Mining & quarrying'] },
   ]
@@ -62,14 +64,14 @@ function PermitCard({ w }: { w: Worker }) {
       <KV items={[
         ['Years in Malaysia', y === null ? '—' : <>{y.toFixed(1)} of {t.stayCapYears} years {y >= t.stayCapYears ? <Chip tone="red">limit reached</Chip> : y >= t.stayHighYears ? <Chip tone="orange">near limit</Chip> : y >= t.stayWarnYears ? <Chip tone="amber">plan ahead</Chip> : null}</>],
         ['Counted from', w.firstArrivalDate ? `First arrival ${fmtDate(w.firstArrivalDate)}` : w.joinDate ? `Join date ${fmtDate(w.joinDate)} (first arrival not recorded)` : '—'],
-        ['Permit employer', w.permitEmployer || '—'], ['Company in this app', co || '—'], ['Permit sector', w.permitSector || '—'],
+        ['Permit company', <PermitCo w={w} />], ['KDN letter', <KdnText w={w} />], ['Permit employer', w.permitEmployer || '—'], ['Outlet company', co || '—'], ['Permit sector', w.permitSector || '—'],
       ]} />
       {alerts.length ? (
         <ul className="rows compact">{alerts.map((a) => <li key={a.id}><div className="r-main"><strong>{a.title}</strong><small>{a.detail}</small></div><Chip tone={sevTone(a.severity)}>{a.severity}</Chip></li>)}</ul>
       ) : <p className="muted small">No permit, stay or job-match warnings.</p>}
       <p className="muted small">Rules used: PLKS renewal from {Math.round(t.plksLeadDays / 30)} months before expiry; passport warning at {t.passportWarnMonths} months (at least {t.passportMinMonths} needed); FOMEMA every {t.fomemaEveryMonths} months; security bond at least {t.bondMinMonths} months at renewal; {t.stayCapYears}-year stay limit. Job-match warnings are soft reminders — {CHECK}.</p>
-      {edit && <FormModal title="Permit & stay" fields={fields} initial={{ firstArrivalDate: w.firstArrivalDate || '', permitEmployer: w.permitEmployer || '', permitSector: w.permitSector || '' }} onClose={() => setEdit(false)}
-        onSave={(v) => updateWorker(w.id, (x) => { x.firstArrivalDate = s(v.firstArrivalDate) || undefined; x.permitEmployer = s(v.permitEmployer) || undefined; x.permitSector = s(v.permitSector) || undefined })} />}
+      {edit && <FormModal title="Permit & stay" fields={fields} initial={{ permitCompanyId: w.permitCompanyId || '', firstArrivalDate: w.firstArrivalDate || '', permitEmployer: w.permitEmployer || '', permitSector: w.permitSector || '' }} onClose={() => setEdit(false)}
+        onSave={(v) => updateWorker(w.id, (x) => { x.permitCompanyId = s(v.permitCompanyId) || undefined; x.firstArrivalDate = s(v.firstArrivalDate) || undefined; x.permitEmployer = s(v.permitEmployer) || undefined; x.permitSector = s(v.permitSector) || undefined })} />}
     </Card>
   )
 }

@@ -36,11 +36,11 @@ try {
   await mk('ceo', 'super_admin'); await mk('gm', 'general_manager'); await mk('gm2', 'general_manager')
   await mk('hra', 'hr_admin', [A]); await mk('hrm', 'hr_manager', [A]); await mk('hrmB', 'hr_manager', [B]); await mk('om', 'outlet_manager', [], ['O-none'])
 
-  // ---- letters: HR records, GM / CEO opens (maker-checker)
+  // ---- letters: HR records; HR Admin / HR Manager / GM / CEO open (t204u)
   let r = await U.hrm.c.rpc('qr_save_quota', { p: { company_id: A, ref_no: `KDN/${stamp}/1`, approval_date: '2026-09-01', expiry_date: '2027-09-01', sector: 'Services', breakdown: { India: 3, Nepal: 2 } } })
   check('HR Manager records a quota letter', !r.error, err(r)); const QA = r.data
-  r = await U.hrm.c.rpc('qr_open_quota', { p_id: QA, p_ok: true }); check('HR Manager cannot open (confirm) a letter', !!r.error)
-  r = await U.gm.c.rpc('qr_open_quota', { p_id: QA, p_ok: true, p_note: 'Checked against original' }); check('GM opens the letter → ledger approved', !r.error, err(r))
+  r = await U.om.c.rpc('qr_open_quota', { p_id: QA, p_ok: true }); check('Outlet manager cannot open (confirm) a letter', !!r.error)
+  r = await U.hrm.c.rpc('qr_open_quota', { p_id: QA, p_ok: true, p_note: 'Checked against original' }); check('HR Manager opens the letter they recorded → ledger approved (t204u)', !r.error, err(r))
   let t = await tally(A, QA, 'India'); check('ledger: India approved 3, available 3', t.approved === 3 && t.available === 3, JSON.stringify(t))
   r = await U.hrmB.c.rpc('qr_save_quota', { p: { company_id: B, ref_no: `KDN/${stamp}/B`, approval_date: '2026-09-01', breakdown: { Bangladesh: 2 } } })
   const QB = r.data; await U.ceo.c.rpc('qr_open_quota', { p_id: QB, p_ok: true })

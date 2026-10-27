@@ -1,6 +1,6 @@
 import { ClipBadge } from '../components/attach'
 import { useDocCounts } from '../lib/vault'
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../lib/db'
 import { demoOutletIds, setShowDemo, useHideDemo } from '../lib/demo'
@@ -16,6 +16,8 @@ import { BUSINESS_TYPES, NATIONALITIES, STATUSES, type Worker } from '../lib/typ
 import { missingLanguage, primaryLangName, otherLanguagesText } from '../lib/languages'
 import { daysUntil, fmtDate, serviceText } from '../lib/util'
 import { completeness } from '../lib/validate'
+import { PermitCo, KdnText, useLetters } from '../components/permit'
+import { permitCompanyOf } from '../lib/permit'
 import { useConfig } from '../lib/config'
 import { outletCompanyName } from '../lib/companies'
 
@@ -50,6 +52,7 @@ export default function Workers() {
   const gap = sp.get('gap') || ''
   const co = sp.get('co') || ''
   const cos = useConfig().companies.items
+  const letters = useLetters()
   const coOf = (w: Worker) => outletCompanyName(cos, outlets, w.outletId)
   const { canWrite } = useAuth()
   const { byWorker } = useDocCounts()
@@ -59,9 +62,9 @@ export default function Workers() {
     const ws = (loaded ?? []).filter((w) =>
       matchesQuery(w, q, `${outletName(outlets, w.outletId)} ${coOf(w)}`) &&
       (!status || (status === '__leave' ? isOnLeave(w) : status === '__current' ? !['Absconded', 'Resigned', 'Terminated', 'Contract Ended', 'Repatriated'].includes(w.status) : w.status === status)) &&
-      (!co || outlets.find((o) => o.id === w.outletId)?.companyId === co) && (!outlet || w.outletId === outlet) && (!type || w.businessType === type) && (!nat || w.nationality === nat) && (gap !== 'lang' || missingLanguage(w)) && (gap !== 'incomplete' || !completeness(w, outlets).complete))
+      (!co || outlets.find((o) => o.id === w.outletId)?.companyId === co) && (!outlet || w.outletId === outlet) && (!type || w.businessType === type) && (!nat || w.nationality === nat) && (gap !== 'lang' || missingLanguage(w)) && (gap !== 'incomplete' || !completeness(w, outlets).complete) && (gap !== 'permit' || !permitCompanyOf(w, letters, cos)))
     return ws
-  }, [loaded, q, status, co, outlet, type, nat, gap, outlets, cos]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [loaded, q, status, co, outlet, type, nat, gap, outlets, cos, letters]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="page">
@@ -80,7 +83,7 @@ export default function Workers() {
         <SelectFilter label="Outlet" value={outlet} onChange={(v) => set('outlet', v)} options={outlets.filter((o) => !co || o.companyId === co).map((o) => ({ value: o.id, label: o.name }))} />
         <SelectFilter label="Business" value={type} onChange={(v) => set('type', v)} options={[...BUSINESS_TYPES]} />
         <SelectFilter label="Nationality" value={nat} onChange={(v) => set('nat', v)} options={NATIONALITIES} />
-        <SelectFilter label="Data gaps" value={gap} onChange={(v) => set('gap', v)} options={[{ value: 'incomplete', label: 'Incomplete profile (draft)' }, { value: 'lang', label: 'Language missing' }]} />
+        <SelectFilter label="Data gaps" value={gap} onChange={(v) => set('gap', v)} options={[{ value: 'incomplete', label: 'Incomplete profile (draft)' }, { value: 'lang', label: 'Language missing' }, { value: 'permit', label: 'Permit company missing' }]} />
       </Toolbar>
       {!loaded ? <Skeleton rows={8} /> : list.length === 0 ? (
         <Empty icon="users" title="No workers match">{loaded.length === 0 && <Btn kind="primary" icon="plus" onClick={() => nav('/workers/new')}>Add worker</Btn>}</Empty>
@@ -92,7 +95,7 @@ export default function Workers() {
               render: (w) => <span className="dt-person"><Avatar name={w.fullName} photo={w.photo} size={34} /><span><Link to={`/workers/${w.id}`} className="dt-link">{w.fullName}</Link><ClipBadge n={(byWorker.get(w.id) || 0) + (canWrite ? w.documents.filter((d) => d.attachment).length : 0)} /><small>{w.workerNo}{coOf(w) && <span className="dt-co-ph"> · <b className="co-name">{coOf(w)}</b></span>}{!completeness(w, outlets).complete ? ' · Draft' : ''}</small></span></span> },
             { key: 'id', label: 'Worker ID', hide: 'tablet', sort: (w) => w.workerNo, render: (w) => w.workerNo },
             { key: 'status', label: 'Status', sort: (w) => w.status, render: (w) => <Chip tone={statusTone(w.status)}>{w.status}</Chip> },
-            { key: 'outlet', label: 'Company / outlet', hide: 'phone', sort: (w) => `${coOf(w)} ${outletName(outlets, w.outletId)}`, render: (w) => <span className="co-cell"><b>{coOf(w) || '—'}</b><small>{outletName(outlets, w.outletId)}</small></span> },
+            { key: 'outlet', label: 'Company / outlet', hide: 'phone', sort: (w) => `${coOf(w)} ${outletName(outlets, w.outletId)}`, render: (w) => <span className="co-cell"><b>{coOf(w) || '—'}</b><small>{outletName(outlets, w.outletId)}</small><small><PermitCo w={w} prefix="Permit: " /></small></span> },
             { key: 'nat', label: 'Nationality', hide: 'tablet', sort: (w) => w.nationality, render: (w) => w.nationality },
             { key: 'expiry', label: 'Next expiry', hide: 'phone', sort: (w) => nextExpiry(w)?.expiryDate || '9999', render: (w) => <ExpiryChip w={w} s={s} /> },
             { key: 'join', label: 'Service', hide: 'tablet', sort: (w) => w.joinDate, render: (w) => <span className="small">{serviceText(w.joinDate)}</span> },
@@ -108,7 +111,7 @@ export default function Workers() {
             return (
               <>
                 <Details items={[
-                  ['Company', <b className="co-name">{coOf(w) || '—'}</b>], ['Outlet', outletName(outlets, w.outletId)], ['Worker ID', w.workerNo], ['Nationality', w.nationality], ['Job', w.jobCategory || '—'],
+                  ['Company', <b className="co-name">{coOf(w) || '—'}</b>], ['Outlet', outletName(outlets, w.outletId)], ['Permit company', <PermitCo w={w} />], ...(w.quotaId ? [['KDN letter', <KdnText w={w} />] as [string, ReactNode]] : []), ['Worker ID', w.workerNo], ['Nationality', w.nationality], ['Job', w.jobCategory || '—'],
                   ['Business', w.businessType], ['Phone', w.phoneMY], ['Joined', w.joinDate ? `${fmtDate(w.joinDate)} · ${serviceText(w.joinDate)}` : ''],
                   ['Next expiry', nextExpiry(w) ? <ExpiryChip w={w} s={s} /> : 'No expiry dates'],
                   ['Ticket', t.eligible ? <Chip tone="purple">✈ Ticket ×{t.balance}</Chip> : ''],
