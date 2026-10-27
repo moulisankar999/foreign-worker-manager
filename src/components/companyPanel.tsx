@@ -1,14 +1,15 @@
 /* v1.4.2: "Add company" side panel — opened from the approval-letter form, Settings › Companies and the company picker.
  * One call to the server (company_create) saves the company, its details, SSM copies and directors; the new company
  * is handed back so the caller can select it at once. Sections fold so the panel fits one screen. */
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
+import { companyDup } from '../lib/smartForm'
 import { Btn } from './ui'
 import { Actions, IconAction } from './iconAction'
 import { FilePick } from './filePick'
 import { toast } from './toast'
 import { useConfig } from '../lib/config'
 import { useAuth } from '../lib/auth'
-import { DESIGNATIONS, SECTOR_OPTIONS, SSM_DOC_TYPES, createCompany, directorIssue, docTypeLabel, emailIssue, fmtIc, phoneIssue, ssmIssue, uploadStaging, type NewDirector, type NewDoc } from '../lib/companyRecords'
+import { DESIGNATIONS, SECTOR_OPTIONS, SSM_DOC_TYPES, createCompany, directorIssue, ssmTaken, docTypeLabel, emailIssue, fmtIc, phoneIssue, ssmIssue, uploadStaging, type NewDirector, type NewDoc } from '../lib/companyRecords'
 import '../pages/quota/quota.css'
 
 export function Fold({ title, sub, open: open0 = false, children, testId }: { title: ReactNode; sub?: ReactNode; open?: boolean; children: ReactNode; testId?: string }) {
@@ -35,6 +36,11 @@ export function CompanyPanel({ onClose, onCreated }: { onClose: () => void; onCr
   const [openDir, setOpenDir] = useState<number | null>(null)
   const [err, setErr] = useState(''), [busy, setBusy] = useState(false)
   const set = (p: Partial<typeof v>) => setV((c) => ({ ...c, ...p }))
+  // 1.6.0 live duplicate checks: similar name (ignores Sdn Bhd, punctuation, capitals) and the same SSM no.
+  const dupName = companyDup(v.name, undefined, cfg.companies.items)
+  const [dupSsm, setDupSsm] = useState<string | null>(null)
+  useEffect(() => { let on = true; const t = setTimeout(() => { void ssmTaken(v.ssm_new).then((c) => on && setDupSsm(c)).catch(() => {}) }, 350); return () => { on = false; clearTimeout(t) } }, [v.ssm_new])
+  const coName = (id: string) => cfg.companies.items.find((c) => c.id === id)?.name || 'another company'
   const setDir = (i: number, p: Partial<NewDirector>) => setDirs((l) => l.map((d, j) => (j === i ? { ...d, ...p } : d)))
   const addDoc = async (f: File) => {
     try { const path = await uploadStaging('ssm', f); setDocs((l) => [...l, { doc_type: docType, path, name: f.name, mime: f.type, size: f.size, expiry_date: docExp || undefined, title: docTypeLabel(docType) }]); setDocExp('') }
@@ -67,7 +73,8 @@ export function CompanyPanel({ onClose, onCreated }: { onClose: () => void; onCr
         <div className="qr-side-b">
           <Fold title="Company" sub={v.name || 'Name, sector'} open testId="fold-basic">
             <div className="qr-form2">
-              <label className="field full"><span className="qr-lbl">Company name *</span><input autoFocus value={v.name} placeholder="e.g. Seri Rasa Restaurant Sdn Bhd" onChange={(e) => set({ name: e.target.value })} /></label>
+              <label className="field full"><span className="qr-lbl">Company name *</span><input autoFocus value={v.name} placeholder="e.g. Seri Rasa Restaurant Sdn Bhd" onChange={(e) => set({ name: e.target.value })} />
+                {dupName && <small className="fmsg warn" data-testid="co-dup" title="Why you see this: names are compared without “Sdn Bhd”, punctuation and capitals.">⚠️ Looks like <b>{dupName.name}</b> is already here. <a className="fmsg-link" href={`#/companies/${dupName.id}`}>Open it</a></small>}</label>
               <label className="field full"><span className="qr-lbl">Sector</span><input list="co-sectors" value={v.sector} placeholder="Services/Restaurant" onChange={(e) => set({ sector: e.target.value })} />
                 <datalist id="co-sectors">{SECTOR_OPTIONS.map((s) => <option key={s} value={s} />)}</datalist></label>
             </div>
@@ -75,6 +82,7 @@ export function CompanyPanel({ onClose, onCreated }: { onClose: () => void; onCr
           <Fold title="Registration (SSM)" sub={v.ssm_new || v.ssm_old || 'SSM no., incorporation date'}>
             <div className="qr-form2">
               {inp('ssm_new', 'SSM no. (new, 12 digits)', { inputMode: 'numeric', placeholder: '201901012345', maxLength: 14 })}
+              {dupSsm && <small className="fmsg warn full" data-testid="ssm-dup">⚠️ This SSM no. is already saved for <b>{coName(dupSsm)}</b>. <a className="fmsg-link" href={`#/companies/${dupSsm}`}>Open it</a></small>}
               {inp('ssm_old', 'SSM no. (old format)', { placeholder: '1234567-X' })}
               {inp('incorporated_on', 'Incorporation date', { type: 'date' })}
             </div>

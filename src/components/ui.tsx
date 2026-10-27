@@ -105,7 +105,11 @@ export function Field({ def, value, onChange, issue, missing }: { def: FieldDef;
           onChange={(e) => onChange(t === 'number' ? (e.target.value === '' ? undefined : Number(e.target.value)) : e.target.value)}
         />
       )}
-      {issue ? <small className={`fmsg ${issue.level}`} role={issue.level === 'error' ? 'alert' : undefined}>{issue.level === 'error' ? '⛔ ' : '⚠️ '}{issue.msg}</small>
+      {issue ? <small className={`fmsg ${issue.level}`} role={issue.level === 'error' ? 'alert' : undefined} title={issue.why ? `Why you see this: ${issue.why}` : undefined}>
+        {issue.level === 'error' ? '⛔ ' : issue.level === 'tip' ? '✨ ' : '⚠️ '}{issue.msg}
+        {issue.fix && <button type="button" className="fmsg-fix" onClick={() => onChange(issue.fix!.value)}>{issue.fix.label}</button>}
+        {issue.link && <a className="fmsg-link" href={issue.link.href}>{issue.link.label}</a>}
+        {issue.why && <span className="why-i" tabIndex={0} aria-label={`Why you see this: ${issue.why}`}>ⓘ</span>}</small>
         : missing ? <small className="fmsg missing">Required to complete the profile</small> : null}
       {def.hint && <small className="hint">{def.hint}</small>}
     </div>
