@@ -20,6 +20,11 @@ export const ruleFor = (cfg: UserApprovalsConfig, uid: string): HrApprovalRule =
 
 export const outletCompany = (o?: Pick<Outlet, 'companyId'> | null) => o?.companyId || DEFAULT_COMPANY_ID
 export const companyName = (items: Company[], id?: string | null) => (id ? items.find((c) => c.id === id)?.name || id : '')
+/** 1.6.3: the company (display name) a worker belongs to, from his outlet ('' when the outlet or its company is unknown) */
+export const outletCompanyName = (items: Company[], outlets: Pick<Outlet, 'id' | 'companyId'>[], outletId?: string | null) => {
+  const o = outletId ? outlets.find((x) => x.id === outletId) : undefined
+  return o?.companyId ? companyName(items, o.companyId) : ''
+}
 
 /** same rule as SQL scope_ok(): CEO everything; HR/viewer with no scope everything; else his outlets + his companies' outlets */
 export function inScope(role: Role | null, companies: string[], outlets: string[], outletId: string | undefined, all: Outlet[]): boolean {

@@ -25,6 +25,7 @@ A mobile-first web app (PWA) **and Android app** for managing **foreign workers 
 - When v1.1 was installed, the existing **Admin** became **Super Admin** and each **Manager** became **HR Manager**.
 - **Settings → Users** is where you set each person's role and, for outlet managers, their outlet(s).
 - **Every outlet belongs to a company (v1.6.2).** Settings → Companies & Outlets → Add outlet has no default company: choose one, or the form shows "Choose the company this outlet belongs to". The server refuses an outlet with no company or an unknown company (migration 054); a worker's company always comes from their outlet.
+- **The worker's company is shown next to the outlet (v1.6.3).** Workers list (Company / outlet column; on phone in the card's sub-line and first in the opened row), a Company filter, the worker profile header, the edit form (read-only Company that follows the outlet), Birthdays rows, the Settings outlet list and the FW Worker "Me" tab all name the company that owns the worker's outlet. Tests: `tests/ui-163.test.mjs`.
 - These rules are enforced by row-level security in the database (outlet scoping, salary hiding, no direct writes), not just hidden in the app.
 - New sign-ups stay **Waiting** until a Super Admin approves them. At least one active Super Admin must always exist.
 - Offline sync works as before for workers, outlets, jobs, settings and remarks. Requests and the document vault need a connection.

@@ -985,3 +985,13 @@ button.ai-table-h { all: unset; box-sizing: border-box; display: flex; align-ite
 .sw.on > span { transform: translateX(22px); }
 .sw:disabled { opacity: .6; cursor: wait; }
 .sw:focus-visible { outline: 2px solid var(--primary, #2563eb); outline-offset: 2px; }
+
+/* 1.6.3: the worker's company (from his outlet) shown with the outlet */
+.co-cell { display: inline-flex; flex-direction: column; line-height: 1.25; min-width: 0; }
+.co-cell b { font-weight: 600; } .co-cell small { color: var(--muted); }
+.co-name { font-weight: 700; color: var(--text); }
+input.is-fixed { background: var(--soft, #f1f5f9); color: var(--text); font-weight: 600; cursor: default; }
+
+/* 1.6.3: on phone the worker card's sub-line also names the company (the Company / outlet column is hidden there) */
+.dt-co-ph { display: none; }
+@container (max-width: 520px) { .dt-co-ph { display: inline; } }

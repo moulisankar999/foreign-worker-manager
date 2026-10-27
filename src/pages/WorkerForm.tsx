@@ -11,7 +11,8 @@ import { LanguageFields, languageFieldsOut } from '../components/languageFields'
 import { RemitEditor, maskAcct, providerName } from '../components/remittance'
 import { db, saveWorker } from '../lib/db'
 import { useAuth } from '../lib/auth'
-import { inScope } from '../lib/companies'
+import { inScope, companyName, outletCompanyName } from '../lib/companies'
+import { useConfig } from '../lib/config'
 import { useAllWorkers, useJobs, useOutlets, useSettings } from '../lib/hooks'
 import { expiryTip, learnValidity, nameTip, passportDup, personDup, workerNoDup } from '../lib/smartForm'
 import { BUSINESS_TYPES, DOC_SHORT, DOC_STAGES, GENDERS, NATIONALITIES, RELATIONS, RELIGIONS, SKILL_LEVELS, STATUSES, type DocRec, type FamilyRec, type RemitRec, type Worker, type WorkerStatus } from '../lib/types'
@@ -52,6 +53,7 @@ export default function WorkerForm() {
   const nav = useNavigate()
   const s = useSettings()
   const outlets = useOutlets()
+  const cosAll = useConfig().companies.items
   const jobs = useJobs()
   const allWorkers = useAllWorkers() // demo workers too: IDs and passports must be unique everywhere
   const validity = useMemo(() => learnValidity(allWorkers), [allWorkers])
@@ -126,7 +128,8 @@ export default function WorkerForm() {
     { key: 'email', label: 'Email', type: 'email', placeholder: 'optional' },
   ]
   const job: FieldDef[] = [
-    { key: 'outletId', label: 'Company / outlet', type: 'select', required: true, options: outlets.filter((o) => inScope(role, myCompanies, myOutlets, o.id, outlets) || o.id === (v.outletId as string | undefined)).map((o) => ({ value: o.id, label: `${o.name} (${o.type})` })), hint: outlets.length ? 'The company comes from the outlet' : 'Add outlets in Settings first' },
+    { key: 'outletId', label: 'Outlet', type: 'select', required: true, options: outlets.filter((o) => inScope(role, myCompanies, myOutlets, o.id, outlets) || o.id === (v.outletId as string | undefined)).map((o) => ({ value: o.id, label: `${o.name} (${o.type})${o.companyId ? ' — ' + companyName(cosAll, o.companyId) : ''}` })), hint: outlets.length ? undefined : 'Add outlets in Settings first' },
+    { key: '_company', label: 'Company', fixed: outletCompanyName(cosAll, outlets, v.outletId as string | undefined), hint: 'Comes from the outlet (change the outlet to change it)' },
     { key: 'businessType', label: 'Business type', type: 'select', options: [...BUSINESS_TYPES] },
     { key: 'jobCategory', label: 'Job title / category', type: 'select', options: jobOptions, required: true },
     { key: 'skillLevel', label: 'Skill level', type: 'select', options: SKILL_LEVELS },

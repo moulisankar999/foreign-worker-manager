@@ -640,6 +640,7 @@ function MeTab({ t, lang, me, setLang, onEnded, toast }: { t: T; lang: Lang; me:
         <div className="name ell">{me.name}</div>
         <div className="kv">
           <span className="k">{t('workerNo')}</span><span className="v">{me.workerNo || '—'}</span>
+          <span className="k">{t('company')}</span><span className="v" data-testid="me-company"><b>{me.company || '—'}</b></span>
           <span className="k">{t('outlet')}</span><span className="v">{me.outlet || '—'}</span>
           <span className="k">{t('job')}</span><span className="v">{me.job || '—'}</span>
           <span className="k">{t('joined')}</span><span className="v">{fmtDate(me.joinDate, lang)}</span>

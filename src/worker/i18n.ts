@@ -7,7 +7,7 @@ export const LANGS = [
 ] as const
 export type Lang = (typeof LANGS)[number]['code']
 
-const en = {
+const en = { company: 'Company',
   appName: 'FW Worker', signIn: 'Sign in', passport: 'Passport number', pin: '6-digit PIN',
   wrongOrLocked: 'Wrong passport or PIN, or login locked. Ask HR if it keeps failing.', busy: 'Too many tries. Wait a few minutes.',
   offline: 'No internet connection', sessionEnded: 'Please sign in again', error: 'Something went wrong. Try again.',
@@ -42,7 +42,7 @@ const en = {
 export type Key = keyof typeof en
 type Dict = Partial<Record<Key, string>>
 
-const ta: Dict = {
+const ta: Dict = { company: 'நிறுவனம்',
   appName: 'FW Worker', signIn: 'உள்நுழை', passport: 'பாஸ்போர்ட் எண்', pin: '6 இலக்க PIN',
   wrongOrLocked: 'பாஸ்போர்ட் அல்லது PIN தவறு, அல்லது உள்நுழைவு பூட்டப்பட்டது. தொடர்ந்தால் HR-ஐ கேளுங்கள்.', busy: 'அதிக முயற்சிகள். சில நிமிடம் காத்திருங்கள்.',
   offline: 'இணைய இணைப்பு இல்லை', sessionEnded: 'மீண்டும் உள்நுழையுங்கள்', error: 'ஏதோ பிழை. மீண்டும் முயலுங்கள்.',
@@ -74,7 +74,7 @@ const ta: Dict = {
   t_document_copy: 'ஆவண நகல்', updated: 'ஒரு கோரிக்கை புதுப்பிக்கப்பட்டது', tooMany: 'திறந்த கோரிக்கைகள் அதிகம். பதிலுக்கு காத்திருங்கள்.',
   dailyLimit: 'இன்றைய வரம்பு முடிந்தது. நாளை முயலுங்கள்.', badDates: 'சரியான தேதிகளை தேர்வு செய்யுங்கள்', badAmount: 'சரியான தொகையை உள்ளிடுங்கள்',
 }
-const hi: Dict = {
+const hi: Dict = { company: 'कंपनी',
   signIn: 'साइन इन', passport: 'पासपोर्ट नंबर', pin: '6 अंकों का PIN', wrongOrLocked: 'पासपोर्ट या PIN गलत है, या लॉगिन बंद है। बार-बार हो तो HR से पूछें।', busy: 'बहुत कोशिशें। कुछ मिनट रुकें।',
   offline: 'इंटरनेट नहीं है', sessionEnded: 'फिर से साइन इन करें', error: 'कुछ गलत हुआ। फिर कोशिश करें।',
   tabHome: 'होम', tabDocs: 'कागज़', tabReq: 'अनुरोध', tabNew: 'नया', tabMe: 'मैं', hello: 'नमस्ते', workerNo: 'कर्मचारी नं.', outlet: 'आउटलेट', job: 'काम', joined: 'जॉइन', nationality: 'देश',
@@ -91,7 +91,7 @@ const hi: Dict = {
   changePin: 'PIN बदलें', currentPin: 'मौजूदा PIN', newPin: 'नया PIN', repeatPin: 'नया PIN दोबारा', pinChanged: 'PIN बदल गया', pinMismatch: 'दोनों PIN अलग हैं', weakPin: 'PIN बहुत आसान', wrongPin: 'मौजूदा PIN गलत', samePin: 'नया PIN पुराने जैसा है',
   language: 'भाषा', signOut: 'साइन आउट', refresh: 'रीफ़्रेश', pinHelp: 'PIN भूल गए? HR से नया लें।', sending: 'भेज रहे हैं…', sent: 'भेजा ✓', confirmCancel: 'यह अनुरोध रद्द करें?', confirmResign: 'क्या आप सच में इस्तीफ़ा देना चाहते हैं?', yes: 'हाँ', no: 'नहीं',
 }
-const ms: Dict = {
+const ms: Dict = { company: 'Syarikat',
   signIn: 'Log masuk', passport: 'Nombor pasport', pin: 'PIN 6 digit', wrongOrLocked: 'Pasport atau PIN salah, atau log masuk dikunci. Tanya HR jika berterusan.', busy: 'Terlalu banyak cubaan. Tunggu beberapa minit.',
   offline: 'Tiada internet', sessionEnded: 'Sila log masuk semula', error: 'Ada masalah. Cuba lagi.',
   tabHome: 'Utama', tabDocs: 'Dokumen', tabReq: 'Permohonan', tabNew: 'Baru', tabMe: 'Saya', hello: 'Hai', workerNo: 'No. pekerja', outlet: 'Cawangan', job: 'Kerja', joined: 'Mula kerja', nationality: 'Negara',
@@ -109,42 +109,42 @@ const ms: Dict = {
   language: 'Bahasa', signOut: 'Log keluar', refresh: 'Muat semula', pinHelp: 'Lupa PIN? Minta HR yang baru.', sending: 'Menghantar…', sent: 'Dihantar ✓', confirmCancel: 'Batal permohonan ini?', confirmResign: 'Pasti mahu berhenti kerja?', yes: 'Ya', no: 'Tidak',
 }
 // shorter sets: the most visible words; everything else falls back to English
-const te: Dict = { signIn: 'సైన్ ఇన్', passport: 'పాస్‌పోర్ట్ నంబర్', pin: '6 అంకెల PIN', tabHome: 'హోమ్', tabDocs: 'పత్రాలు', tabReq: 'అభ్యర్థనలు', tabNew: 'కొత్తది', tabMe: 'నేను', hello: 'నమస్తే',
+const te: Dict = { company: 'కంపెనీ', signIn: 'సైన్ ఇన్', passport: 'పాస్‌పోర్ట్ నంబర్', pin: '6 అంకెల PIN', tabHome: 'హోమ్', tabDocs: 'పత్రాలు', tabReq: 'అభ్యర్థనలు', tabNew: 'కొత్తది', tabMe: 'నేను', hello: 'నమస్తే',
   basicPay: 'ప్రాథమిక జీతం', loanLeft: 'మిగిలిన అప్పు', openReq: 'తెరిచిన అభ్యర్థనలు', nextExpiry: 'తదుపరి గడువు', daysLeft: '{n} రోజులు మిగిలాయి', expiredAgo: '{n} రోజుల క్రితం గడువు ముగిసింది', notRecorded: 'నమోదు లేదు',
   doc_passport: 'పాస్‌పోర్ట్', doc_permit: 'వర్క్ పర్మిట్ (PLKS)', doc_visa: 'వీసా', doc_fomema: 'FOMEMA వైద్యం', doc_insurance: 'బీమా',
   st_manager_review: 'మేనేజర్ వద్ద', st_hr: 'HR వద్ద', st_returned: 'HR మీ జవాబు కోరుతోంది', st_approved: 'ఆమోదం', st_rejected: 'తిరస్కరణ', st_completed: 'పూర్తి', st_cancelled: 'రద్దు', st_w_hrm: 'HR మేనేజర్ వద్ద', st_w_hra: 'HR అడ్మిన్ వద్ద', st_w_gm: 'జనరల్ మేనేజర్ వద్ద', st_w_ceo: 'CEO వద్ద',
   t_leave: 'సెలవు', t_salary_advance: 'జీతం అడ్వాన్స్', t_loan: 'అప్పు', t_salary_increment: 'జీతం పెంపు', t_resignation: 'రాజీనామా', t_renewal: 'పత్రాల పునరుద్ధరణ', t_passport: 'నా పాస్‌పోర్ట్', t_complaint: 'సమస్య / ఫిర్యాదు',
   next: 'తదుపరి', back: 'వెనుకకు', send: 'పంపు', cancel: 'రద్దు', close: 'మూసివేయి', reason: 'కారణం', from: 'నుండి', to: 'వరకు', amount: 'మొత్తం (RM)', changePin: 'PIN మార్చు', language: 'భాష', signOut: 'సైన్ అవుట్', sent: 'పంపబడింది ✓',
   wrongOrLocked: 'పాస్‌పోర్ట్ లేదా PIN తప్పు, లేదా లాగిన్ లాక్ అయింది. HR ని అడగండి.' }
-const ml: Dict = { signIn: 'സൈൻ ഇൻ', passport: 'പാസ്‌പോർട്ട് നമ്പർ', pin: '6 അക്ക PIN', tabHome: 'ഹോം', tabDocs: 'രേഖകൾ', tabReq: 'അപേക്ഷകൾ', tabNew: 'പുതിയത്', tabMe: 'ഞാൻ', hello: 'നമസ്കാരം',
+const ml: Dict = { company: 'കമ്പനി', signIn: 'സൈൻ ഇൻ', passport: 'പാസ്‌പോർട്ട് നമ്പർ', pin: '6 അക്ക PIN', tabHome: 'ഹോം', tabDocs: 'രേഖകൾ', tabReq: 'അപേക്ഷകൾ', tabNew: 'പുതിയത്', tabMe: 'ഞാൻ', hello: 'നമസ്കാരം',
   basicPay: 'അടിസ്ഥാന ശമ്പളം', loanLeft: 'ബാക്കി വായ്പ', openReq: 'തുറന്ന അപേക്ഷകൾ', nextExpiry: 'അടുത്ത കാലാവധി', daysLeft: '{n} ദിവസം ബാക്കി', expiredAgo: '{n} ദിവസം മുമ്പ് കാലാവധി കഴിഞ്ഞു', notRecorded: 'രേഖപ്പെടുത്തിയിട്ടില്ല',
   doc_passport: 'പാസ്‌പോർട്ട്', doc_permit: 'വർക്ക് പെർമിറ്റ് (PLKS)', doc_visa: 'വിസ', doc_fomema: 'FOMEMA മെഡിക്കൽ', doc_insurance: 'ഇൻഷുറൻസ്',
   st_manager_review: 'മാനേജരുടെ പക്കൽ', st_hr: 'HR-ന്റെ പക്കൽ', st_returned: 'HR നിങ്ങളുടെ മറുപടി ചോദിക്കുന്നു', st_approved: 'അംഗീകരിച്ചു', st_rejected: 'നിരസിച്ചു', st_completed: 'പൂർത്തിയായി', st_cancelled: 'റദ്ദാക്കി', st_w_hrm: 'HR മാനേജരുടെ പക്കൽ', st_w_hra: 'HR അഡ്മിന്റെ പക്കൽ', st_w_gm: 'ജനറൽ മാനേജരുടെ പക്കൽ', st_w_ceo: 'CEO-യുടെ പക്കൽ',
   t_leave: 'അവധി', t_salary_advance: 'ശമ്പള അഡ്വാൻസ്', t_loan: 'വായ്പ', t_salary_increment: 'ശമ്പള വർദ്ധന', t_resignation: 'രാജി', t_renewal: 'രേഖ പുതുക്കൽ', t_passport: 'എന്റെ പാസ്‌പോർട്ട്', t_complaint: 'പ്രശ്നം / പരാതി',
   next: 'അടുത്തത്', back: 'പിന്നോട്ട്', send: 'അയയ്ക്കുക', cancel: 'റദ്ദാക്കുക', close: 'അടയ്ക്കുക', reason: 'കാരണം', from: 'മുതൽ', to: 'വരെ', amount: 'തുക (RM)', changePin: 'PIN മാറ്റുക', language: 'ഭാഷ', signOut: 'സൈൻ ഔട്ട്', sent: 'അയച്ചു ✓',
   wrongOrLocked: 'പാസ്‌പോർട്ട് അല്ലെങ്കിൽ PIN തെറ്റ്, അല്ലെങ്കിൽ ലോഗിൻ ലോക്ക്. HR-നോട് ചോദിക്കുക.' }
-const kn: Dict = { signIn: 'ಸೈನ್ ಇನ್', passport: 'ಪಾಸ್‌ಪೋರ್ಟ್ ಸಂಖ್ಯೆ', pin: '6 ಅಂಕಿಯ PIN', tabHome: 'ಮುಖಪುಟ', tabDocs: 'ದಾಖಲೆ', tabReq: 'ವಿನಂತಿ', tabNew: 'ಹೊಸದು', tabMe: 'ನಾನು', hello: 'ನಮಸ್ಕಾರ',
+const kn: Dict = { company: 'ಕಂಪನಿ', signIn: 'ಸೈನ್ ಇನ್', passport: 'ಪಾಸ್‌ಪೋರ್ಟ್ ಸಂಖ್ಯೆ', pin: '6 ಅಂಕಿಯ PIN', tabHome: 'ಮುಖಪುಟ', tabDocs: 'ದಾಖಲೆ', tabReq: 'ವಿನಂತಿ', tabNew: 'ಹೊಸದು', tabMe: 'ನಾನು', hello: 'ನಮಸ್ಕಾರ',
   basicPay: 'ಮೂಲ ವೇತನ', loanLeft: 'ಉಳಿದ ಸಾಲ', openReq: 'ತೆರೆದ ವಿನಂತಿಗಳು', nextExpiry: 'ಮುಂದಿನ ಅವಧಿ ಮುಕ್ತಾಯ', daysLeft: '{n} ದಿನ ಉಳಿದಿದೆ', expiredAgo: '{n} ದಿನಗಳ ಹಿಂದೆ ಮುಗಿದಿದೆ', notRecorded: 'ದಾಖಲಾಗಿಲ್ಲ',
   doc_passport: 'ಪಾಸ್‌ಪೋರ್ಟ್', doc_permit: 'ಕೆಲಸದ ಪರವಾನಗಿ (PLKS)', doc_visa: 'ವೀಸಾ', doc_fomema: 'FOMEMA ವೈದ್ಯಕೀಯ', doc_insurance: 'ವಿಮೆ',
   st_manager_review: 'ಮ್ಯಾನೇಜರ್ ಬಳಿ', st_hr: 'HR ಬಳಿ', st_returned: 'HR ನಿಮ್ಮ ಉತ್ತರ ಕೇಳುತ್ತಿದೆ', st_approved: 'ಅನುಮೋದನೆ', st_rejected: 'ತಿರಸ್ಕೃತ', st_completed: 'ಮುಗಿದಿದೆ', st_cancelled: 'ರದ್ದು', st_w_hrm: 'HR ಮ್ಯಾನೇಜರ್ ಬಳಿ', st_w_hra: 'HR ಅಡ್ಮಿನ್ ಬಳಿ', st_w_gm: 'ಜನರಲ್ ಮ್ಯಾನೇಜರ್ ಬಳಿ', st_w_ceo: 'CEO ಬಳಿ',
   t_leave: 'ರಜೆ', t_salary_advance: 'ಸಂಬಳ ಮುಂಗಡ', t_loan: 'ಸಾಲ', t_salary_increment: 'ಸಂಬಳ ಏರಿಕೆ', t_resignation: 'ರಾಜೀನಾಮೆ', t_renewal: 'ದಾಖಲೆ ನವೀಕರಣ', t_passport: 'ನನ್ನ ಪಾಸ್‌ಪೋರ್ಟ್', t_complaint: 'ಸಮಸ್ಯೆ / ದೂರು',
   next: 'ಮುಂದೆ', back: 'ಹಿಂದೆ', send: 'ಕಳುಹಿಸು', cancel: 'ರದ್ದು', close: 'ಮುಚ್ಚು', reason: 'ಕಾರಣ', from: 'ಇಂದ', to: 'ವರೆಗೆ', amount: 'ಮೊತ್ತ (RM)', changePin: 'PIN ಬದಲಿಸಿ', language: 'ಭಾಷೆ', signOut: 'ಸೈನ್ ಔಟ್', sent: 'ಕಳುಹಿಸಲಾಗಿದೆ ✓',
   wrongOrLocked: 'ಪಾಸ್‌ಪೋರ್ಟ್ ಅಥವಾ PIN ತಪ್ಪು, ಅಥವಾ ಲಾಗಿನ್ ಲಾಕ್. HR ಕೇಳಿ.' }
-const bn: Dict = { signIn: 'সাইন ইন', passport: 'পাসপোর্ট নম্বর', pin: '৬ অঙ্কের PIN', tabHome: 'হোম', tabDocs: 'কাগজ', tabReq: 'অনুরোধ', tabNew: 'নতুন', tabMe: 'আমি', hello: 'নমস্কার',
+const bn: Dict = { company: 'কোম্পানি', signIn: 'সাইন ইন', passport: 'পাসপোর্ট নম্বর', pin: '৬ অঙ্কের PIN', tabHome: 'হোম', tabDocs: 'কাগজ', tabReq: 'অনুরোধ', tabNew: 'নতুন', tabMe: 'আমি', hello: 'নমস্কার',
   basicPay: 'মূল বেতন', loanLeft: 'বাকি ঋণ', openReq: 'খোলা অনুরোধ', nextExpiry: 'পরবর্তী মেয়াদ শেষ', daysLeft: '{n} দিন বাকি', expiredAgo: '{n} দিন আগে মেয়াদ শেষ', notRecorded: 'রেকর্ড নেই',
   doc_passport: 'পাসপোর্ট', doc_permit: 'ওয়ার্ক পারমিট (PLKS)', doc_visa: 'ভিসা', doc_fomema: 'FOMEMA মেডিকেল', doc_insurance: 'বিমা',
   st_manager_review: 'ম্যানেজারের কাছে', st_hr: 'HR-এর কাছে', st_returned: 'HR আপনার উত্তর চায়', st_approved: 'অনুমোদিত', st_rejected: 'প্রত্যাখ্যাত', st_completed: 'সম্পন্ন', st_cancelled: 'বাতিল', st_w_hrm: 'HR ম্যানেজারের কাছে', st_w_hra: 'HR অ্যাডমিনের কাছে', st_w_gm: 'জেনারেল ম্যানেজারের কাছে', st_w_ceo: 'CEO-র কাছে',
   t_leave: 'ছুটি', t_salary_advance: 'বেতন অগ্রিম', t_loan: 'ঋণ', t_salary_increment: 'বেতন বৃদ্ধি', t_resignation: 'পদত্যাগ', t_renewal: 'কাগজ নবায়ন', t_passport: 'আমার পাসপোর্ট', t_complaint: 'সমস্যা / অভিযোগ',
   next: 'পরবর্তী', back: 'পিছনে', send: 'পাঠান', cancel: 'বাতিল', close: 'বন্ধ', reason: 'কারণ', from: 'থেকে', to: 'পর্যন্ত', amount: 'পরিমাণ (RM)', changePin: 'PIN পরিবর্তন', language: 'ভাষা', signOut: 'সাইন আউট', sent: 'পাঠানো হয়েছে ✓',
   wrongOrLocked: 'পাসপোর্ট বা PIN ভুল, অথবা লগইন লক। HR-কে জিজ্ঞাসা করুন।' }
-const ne: Dict = { signIn: 'साइन इन', passport: 'राहदानी नम्बर', pin: '६ अंकको PIN', tabHome: 'गृह', tabDocs: 'कागजात', tabReq: 'अनुरोध', tabNew: 'नयाँ', tabMe: 'म', hello: 'नमस्ते',
+const ne: Dict = { company: 'कम्पनी', signIn: 'साइन इन', passport: 'राहदानी नम्बर', pin: '६ अंकको PIN', tabHome: 'गृह', tabDocs: 'कागजात', tabReq: 'अनुरोध', tabNew: 'नयाँ', tabMe: 'म', hello: 'नमस्ते',
   basicPay: 'आधारभूत तलब', loanLeft: 'बाँकी ऋण', openReq: 'खुला अनुरोध', nextExpiry: 'अर्को म्याद', daysLeft: '{n} दिन बाँकी', expiredAgo: '{n} दिन अघि म्याद सकियो', notRecorded: 'रेकर्ड छैन',
   doc_passport: 'राहदानी', doc_permit: 'वर्क परमिट (PLKS)', doc_visa: 'भिसा', doc_fomema: 'FOMEMA मेडिकल', doc_insurance: 'बीमा',
   st_manager_review: 'म्यानेजरसँग', st_hr: 'HR सँग', st_returned: 'HR लाई तपाईंको जवाफ चाहियो', st_approved: 'स्वीकृत', st_rejected: 'अस्वीकृत', st_completed: 'सम्पन्न', st_cancelled: 'रद्द', st_w_hrm: 'HR म्यानेजरसँग', st_w_hra: 'HR एडमिनसँग', st_w_gm: 'जनरल म्यानेजरसँग', st_w_ceo: 'CEO सँग',
   t_leave: 'बिदा', t_salary_advance: 'तलब पेस्की', t_loan: 'ऋण', t_salary_increment: 'तलब वृद्धि', t_resignation: 'राजीनामा', t_renewal: 'कागजात नवीकरण', t_passport: 'मेरो राहदानी', t_complaint: 'समस्या / गुनासो',
   next: 'अर्को', back: 'पछाडि', send: 'पठाउनुहोस्', cancel: 'रद्द', close: 'बन्द', reason: 'कारण', from: 'देखि', to: 'सम्म', amount: 'रकम (RM)', changePin: 'PIN बदल्नुहोस्', language: 'भाषा', signOut: 'साइन आउट', sent: 'पठाइयो ✓',
   wrongOrLocked: 'राहदानी वा PIN गलत, वा लगइन बन्द। HR लाई सोध्नुहोस्।' }
-const my: Dict = { signIn: 'ဝင်ရန်', passport: 'နိုင်ငံကူးလက်မှတ် နံပါတ်', pin: 'ဂဏန်း ၆ လုံး PIN', tabHome: 'ပင်မ', tabDocs: 'စာရွက်', tabReq: 'တောင်းဆို', tabNew: 'အသစ်', tabMe: 'ကျွန်ုပ်', hello: 'မင်္ဂလာပါ',
+const my: Dict = { company: 'ကုမ္ပဏီ', signIn: 'ဝင်ရန်', passport: 'နိုင်ငံကူးလက်မှတ် နံပါတ်', pin: 'ဂဏန်း ၆ လုံး PIN', tabHome: 'ပင်မ', tabDocs: 'စာရွက်', tabReq: 'တောင်းဆို', tabNew: 'အသစ်', tabMe: 'ကျွန်ုပ်', hello: 'မင်္ဂလာပါ',
   basicPay: 'အခြေခံလစာ', loanLeft: 'ကျန်ချေး', openReq: 'ဖွင့်ထားသော တောင်းဆိုမှု', nextExpiry: 'နောက်သက်တမ်းကုန်', daysLeft: '{n} ရက် ကျန်', expiredAgo: '{n} ရက်က သက်တမ်းကုန်', notRecorded: 'မှတ်တမ်းမရှိ',
   doc_passport: 'နိုင်ငံကူးလက်မှတ်', doc_permit: 'အလုပ်ပါမစ် (PLKS)', doc_visa: 'ဗီဇာ', doc_fomema: 'FOMEMA ဆေးစစ်', doc_insurance: 'အာမခံ',
   st_manager_review: 'မန်နေဂျာထံ', st_hr: 'HR ထံ', st_returned: 'HR က အဖြေလိုသည်', st_approved: 'ခွင့်ပြု', st_rejected: 'ငြင်းပယ်', st_completed: 'ပြီး', st_cancelled: 'ပယ်ဖျက်', st_w_hrm: 'HR မန်နေဂျာထံ', st_w_hra: 'HR အက်ဒမင်ထံ', st_w_gm: 'အထွေထွေမန်နေဂျာထံ', st_w_ceo: 'CEO ထံ',

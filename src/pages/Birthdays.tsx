@@ -78,7 +78,7 @@ export default function Birthdays() {
                     <div className="bd-l1"><Link to={`/workers/${r.w.id}`} className="dt-link">{r.w.fullName}</Link>
                       <span className={'chip ' + (r.inDays === 0 ? 'chip-pink' : 'chip-gray')}>{when(r)}</span>
                       {r.turning != null && <span className="chip chip-gray" title="Age on this birthday, from the date of birth">Turning {r.turning}</span>}</div>
-                    <small className="muted">{[o?.name, companyName(cos, outletCompany(o)), r.w.phoneMY && fmtPhone(r.w.phoneMY)].filter(Boolean).join(' · ')}</small>
+                    <small className="muted" data-testid="bd-company">{o?.companyId && <><b className="co-name">{companyName(cos, o.companyId)}</b>{' · '}</>}{[o?.name, r.w.phoneMY && fmtPhone(r.w.phoneMY)].filter(Boolean).join(' · ')}</small>
                     {(auto || pers.length > 0) && <div className="bd-wished">
                       {auto && <span className="chip chip-green" title="Sent by the company automatically on the birthday morning">✓ Company wish{auto.read_at ? ' · seen' : ''}</span>}
                       {pers.map((p) => <span key={p.id} className="chip chip-blue" data-testid="bd-wished">✓ {p.mine ? 'You' : p.sender_name || 'Management'}{p.sender_role && !p.mine ? ` · ${ROLE_LABEL[p.sender_role] || p.sender_role}` : ''}{p.read_at ? ' · seen' : ''}</span>)}

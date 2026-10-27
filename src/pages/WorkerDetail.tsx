@@ -18,6 +18,8 @@ import { LogoImg } from '../components/logos'
 import { outletLogo } from '../lib/logos'
 import { allowancesTotal, buildAlerts, currentBasic, currentDocs, docStatus, isExited, leaveBalanceNow, minContractEnd, outletName, outstanding, ticketInfo } from '../lib/calc'
 import { useOutlets, useSettings } from '../lib/hooks'
+import { useConfig } from '../lib/config'
+import { outletCompanyName } from '../lib/companies'
 import { buildICS } from '../lib/ics'
 import { STATUSES, type MemoRec, type WorkerStatus } from '../lib/types'
 import { missingLanguage, otherLanguagesText, primaryLangName } from '../lib/languages'
@@ -31,6 +33,7 @@ export default function WorkerDetail() {
   const w = useLiveQuery(() => db.workers.get(id || ''), [id])
   const s = useSettings()
   const outlets = useOutlets()
+  const cos = useConfig().companies.items
   const nav = useNavigate()
   const [sp, setSp] = useSearchParams()
   const { canWrite, canSeeSalary, isHr } = useAuth()
@@ -85,7 +88,7 @@ export default function WorkerDetail() {
           <div className="grow">
             <h2 className="row gap-s">{w.fullName}<LogoImg path={outletLogo(outlets.find((o) => o.id === w.outletId))} size={28} fallback={false} /></h2>
             <p className="muted">{w.workerNo} · {w.nationality} · {w.jobCategory || '—'} ({w.skillLevel || '—'})</p>
-            <p className="muted">{outletName(outlets, w.outletId)} · {w.businessType || '—'} · {serviceText(w.joinDate, w.exitDate)} service</p>
+            <p className="muted" data-testid="wd-company"><b className="co-name">{outletCompanyName(cos, outlets, w.outletId) || 'No company'}</b> · {outletName(outlets, w.outletId)} · {w.businessType || '—'} · {serviceText(w.joinDate, w.exitDate)} service</p>
             <div className="row gap-s wrap mt-s">
               {canWrite ? <button className="chip-btn" onClick={() => setStatusEdit(true)} aria-label="Change status"><Chip tone={statusTone(w.status)}>{w.status} ▾</Chip></button> : <Chip tone={statusTone(w.status)}>{w.status}</Chip>}
               {consent !== 'signed' && <button className="chip-btn" onClick={() => setTab('passport')}><Chip tone={CONSENT_TONE[consent]}>🛂 {CONSENT_LABEL[consent]}</Chip></button>}

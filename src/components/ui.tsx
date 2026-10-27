@@ -53,7 +53,7 @@ export function Btn({ children, onClick, kind = 'secondary', icon, type = 'butto
 }
 
 export type FieldType = 'text' | 'date' | 'number' | 'select' | 'textarea' | 'checkbox' | 'tel' | 'email' | 'money' | 'phone' | 'upper' | 'datetime-local'
-export interface FieldDef { key: string; label: string; type?: FieldType; options?: string[] | { value: string; label: string }[]; required?: boolean; placeholder?: string; full?: boolean; hint?: string; show?: (v: Record<string, unknown>) => boolean; defaultCc?: string; max?: string; /** 1.6.2: inline message when a required field is left empty */ requiredMsg?: string }
+export interface FieldDef { key: string; label: string; type?: FieldType; options?: string[] | { value: string; label: string }[]; required?: boolean; placeholder?: string; full?: boolean; hint?: string; show?: (v: Record<string, unknown>) => boolean; defaultCc?: string; max?: string; /** 1.6.2: inline message when a required field is left empty */ requiredMsg?: string; /** 1.6.3: read-only value shown instead of an input (e.g. the company derived from the outlet) */ fixed?: string }
 
 function MoneyInput({ id, value, onChange, required, placeholder }: { id: string; value: unknown; onChange: (v: unknown) => void; required?: boolean; placeholder?: string }) {
   const [txt, setTxt] = useState<string | null>(null)
@@ -84,7 +84,9 @@ export function Field({ def, value, onChange, issue, missing }: { def: FieldDef;
         {def.label}
         {def.required && <span className="req"> *</span>}
       </label>
-      {t === 'select' ? (
+      {def.fixed !== undefined ? (
+        <input id={id} name={def.key} type="text" className="is-fixed" readOnly tabIndex={-1} value={def.fixed || '—'} aria-readonly="true" />
+      ) : t === 'select' ? (
         <select id={id} name={def.key} value={String(value ?? '')} onChange={(e) => onChange(e.target.value)} required={def.required}>
           <option value="">— Select —</option>
           {(def.options || []).map((o) => (typeof o === 'string' ? <option key={o} value={o}>{o}</option> : <option key={o.value} value={o.value}>{o.label}</option>))}

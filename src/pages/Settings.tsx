@@ -225,7 +225,7 @@ export default function SettingsPage() {
             search={(o) => `${o.name} ${o.type} ${o.manager || ''} ${o.state || ''} ${companyName(companies, outletCompany(o))}`} searchLabel="Search outlets"
             filters={companies.length > 1 ? [{ key: 'co', label: 'Company', options: companies.map((c) => ({ value: c.id, label: c.name })), match: (o, v) => outletCompany(o) === v }] : undefined}
             columns={[
-              { key: 'name', label: 'Outlet', main: true, sort: (o) => o.name.toLowerCase(), render: (o) => <span className="dt-person"><LogoImg path={outletLogo(o)} size={30} title={o.name} /><span>{o.name}<small>{o.type}</small></span></span> },
+              { key: 'name', label: 'Outlet', main: true, sort: (o) => o.name.toLowerCase(), render: (o) => <span className="dt-person"><LogoImg path={outletLogo(o)} size={30} title={o.name} /><span>{o.name}<small>{o.companyId ? <><b className="co-name">{companyName(companies, o.companyId)}</b> · </> : null}{o.type}</small></span></span> },
               ...(companies.length > 1 ? [{ key: 'co', label: 'Company', hide: 'phone' as const, sort: (o: typeof outlets[number]) => companyName(companies, outletCompany(o)), render: (o: typeof outlets[number]) => companyName(companies, outletCompany(o)) }] : []),
               { key: 'mgr', label: 'Manager', hide: 'tablet', sort: (o) => o.manager || '', render: (o) => o.manager || '—' },
               { key: 'state', label: 'State', hide: 'tablet', sort: (o) => o.state || '', render: (o) => o.state || '—' },
