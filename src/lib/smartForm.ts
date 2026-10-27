@@ -63,8 +63,10 @@ export function workerNoDup(no: unknown, selfId: string | undefined, workers: Wo
   const taken = workers.some((x) => x.id !== selfId && x.workerNo === s)
   if (!taken) return null
   const pre = s.replace(/\d+$/, '') || 'FW'
-  const max = workers.reduce((m, w) => (w.workerNo.startsWith(pre) ? Math.max(m, parseInt(w.workerNo.slice(pre.length)) || 0) : m), 0)
-  return { level: 'error', msg: 'This Worker ID is already used', fix: { label: `Use ${pre}${max + 1}`, value: `${pre}${max + 1}` }, why: 'Every worker needs their own ID.' }
+  const width = (s.match(/\d+$/)?.[0] || '').length // keep zero padding: FBI001 -> FBI014
+  const max = workers.reduce((m, w) => { const n = String(w.workerNo || ''); return n.startsWith(pre) && /^\d+$/.test(n.slice(pre.length)) ? Math.max(m, parseInt(n.slice(pre.length))) : m }, 0)
+  const next = pre + String(max + 1).padStart(width, '0')
+  return { level: 'error', msg: 'This Worker ID is already used', fix: { label: `Use ${next}`, value: next }, why: 'Every worker needs their own ID.' }
 }
 /** tidy a typed full name: extra spaces → one; passport names are written in capitals */
 export function nameTip(name: unknown): Issue | null {

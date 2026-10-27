@@ -12,7 +12,7 @@ import { RemitEditor, maskAcct, providerName } from '../components/remittance'
 import { db, saveWorker } from '../lib/db'
 import { useAuth } from '../lib/auth'
 import { inScope } from '../lib/companies'
-import { useJobs, useOutlets, useSettings, useWorkers } from '../lib/hooks'
+import { useAllWorkers, useJobs, useOutlets, useSettings } from '../lib/hooks'
 import { expiryTip, learnValidity, nameTip, passportDup, personDup, workerNoDup } from '../lib/smartForm'
 import { BUSINESS_TYPES, DOC_SHORT, DOC_STAGES, GENDERS, NATIONALITIES, RELATIONS, RELIGIONS, SKILL_LEVELS, STATUSES, type DocRec, type FamilyRec, type RemitRec, type Worker, type WorkerStatus } from '../lib/types'
 import { languagesSummary } from '../lib/languages'
@@ -53,7 +53,7 @@ export default function WorkerForm() {
   const s = useSettings()
   const outlets = useOutlets()
   const jobs = useJobs()
-  const allWorkers = useWorkers()
+  const allWorkers = useAllWorkers() // demo workers too: IDs and passports must be unique everywhere
   const validity = useMemo(() => learnValidity(allWorkers), [allWorkers])
   const { role, myCompanies, myOutlets, isHr, canSeeSalary } = useAuth()
   const [step, setStep] = useState(0)

@@ -745,7 +745,7 @@ img, video, canvas, svg { max-width: 100%; }
 .ia-text .ia-lbl, .dt-x-act .ia .ia-lbl { display: inline; }
 .dt-act .ia-row { flex-wrap: nowrap; }
 @media (pointer: coarse) { .ia { width: 40px; height: 40px; } .ia-text, .dt-x-act .ia { width: auto; } }
-.tip { position: fixed; z-index: 1000; max-width: min(260px, calc(100vw - 16px)); background: #0f172a; color: #fff; font-size: .78rem; font-weight: 600; line-height: 1.3;
+.tip[role=tooltip] { position: fixed; z-index: 1000; max-width: min(260px, calc(100vw - 16px)); background: #0f172a; color: #fff; font-size: .78rem; font-weight: 600; line-height: 1.3;
   padding: 6px 9px; border-radius: 7px; pointer-events: none; box-shadow: 0 4px 14px rgba(15,23,42,.25); animation: tip-in .12s ease-out; white-space: normal; }
 @keyframes tip-in { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
 
